@@ -6,15 +6,15 @@ describe('scheduleTemplate', () => {
     expect(ROUND_SCHEDULE).toHaveLength(12)
   })
 
-  it('first round is Jun 13 collect / Jun 14 payout / slot 1', () => {
-    expect(ROUND_SCHEDULE[0].collectDate).toBe('2026-06-13')
-    expect(ROUND_SCHEDULE[0].payoutDate).toBe('2026-06-14')
+  it('first round is Jun 12 collect / Jun 13 payout / slot 1', () => {
+    expect(ROUND_SCHEDULE[0].collectDate).toBe('2026-06-12')
+    expect(ROUND_SCHEDULE[0].payoutDate).toBe('2026-06-13')
     expect(ROUND_SCHEDULE[0].recipientSlot).toBe(1)
   })
 
-  it('last round is Nov 14 collect / Nov 15 payout / slot 12', () => {
-    expect(ROUND_SCHEDULE[11].collectDate).toBe('2026-11-14')
-    expect(ROUND_SCHEDULE[11].payoutDate).toBe('2026-11-15')
+  it('last round is Nov 13 collect / Nov 14 payout / slot 12', () => {
+    expect(ROUND_SCHEDULE[11].collectDate).toBe('2026-11-13')
+    expect(ROUND_SCHEDULE[11].payoutDate).toBe('2026-11-14')
     expect(ROUND_SCHEDULE[11].recipientSlot).toBe(12)
   })
 

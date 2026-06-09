@@ -11,15 +11,15 @@ const base = ROUND_SCHEDULE.map(r => ({
 
 describe('getCurrentRound', () => {
   it('returns round 1 on the collection date', () => {
-    expect(getCurrentRound(base, new Date('2026-06-13')).round).toBe(1)
+    expect(getCurrentRound(base, new Date('2026-06-12')).round).toBe(1)
   })
 
   it('returns round 1 on payout date', () => {
-    expect(getCurrentRound(base, new Date('2026-06-14')).round).toBe(1)
+    expect(getCurrentRound(base, new Date('2026-06-13')).round).toBe(1)
   })
 
   it('returns round 2 after round 1 payout date', () => {
-    expect(getCurrentRound(base, new Date('2026-06-15')).round).toBe(2)
+    expect(getCurrentRound(base, new Date('2026-06-14')).round).toBe(2)
   })
 
   it('returns round 12 after all rounds complete', () => {
@@ -44,8 +44,8 @@ describe('getPaidCount', () => {
 
 describe('formatDate', () => {
   it('formats ISO date as readable string', () => {
-    const result = formatDate('2026-06-13')
+    const result = formatDate('2026-06-12')
     expect(result).toContain('Jun')
-    expect(result).toContain('13')
+    expect(result).toContain('12')
   })
 })

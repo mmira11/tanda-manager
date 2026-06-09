@@ -1,3 +1,4 @@
+// src/hooks/useTandaStore.js
 import { useState, useCallback } from 'react'
 import { ROUND_SCHEDULE, SLOT_COUNT } from '../data/scheduleTemplate'
 
@@ -28,10 +29,40 @@ function buildInitialState() {
   }
 }
 
+const DATE_MIGRATION = {
+  '2026-06-13': '2026-06-12', '2026-06-14': '2026-06-13',
+  '2026-06-27': '2026-06-26', '2026-06-28': '2026-06-27',
+  '2026-07-11': '2026-07-10', '2026-07-12': '2026-07-11',
+  '2026-07-25': '2026-07-24', '2026-07-26': '2026-07-25',
+  '2026-08-08': '2026-08-07', '2026-08-09': '2026-08-08',
+  '2026-08-22': '2026-08-21', '2026-08-23': '2026-08-22',
+  '2026-09-05': '2026-09-04', '2026-09-06': '2026-09-05',
+  '2026-09-19': '2026-09-18', '2026-09-20': '2026-09-19',
+  '2026-10-03': '2026-10-02', '2026-10-04': '2026-10-03',
+  '2026-10-17': '2026-10-16', '2026-10-18': '2026-10-17',
+  '2026-10-31': '2026-10-30', '2026-11-01': '2026-10-31',
+  '2026-11-14': '2026-11-13', '2026-11-15': '2026-11-14',
+}
+
+function migrateStore(data) {
+  if (data?.rounds?.[0]?.collectDate !== '2026-06-13') return data
+  return {
+    ...data,
+    rounds: data.rounds.map(r => ({
+      ...r,
+      collectDate: DATE_MIGRATION[r.collectDate] ?? r.collectDate,
+      payoutDate:  DATE_MIGRATION[r.payoutDate]  ?? r.payoutDate,
+    })),
+  }
+}
+
 function loadStore() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : buildInitialState()
+    const data = raw ? JSON.parse(raw) : buildInitialState()
+    const migrated = migrateStore(data)
+    if (migrated !== data) saveStore(migrated)
+    return migrated
   } catch {
     return buildInitialState()
   }

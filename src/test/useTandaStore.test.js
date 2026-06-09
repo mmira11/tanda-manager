@@ -87,4 +87,23 @@ describe('useTandaStore', () => {
     const saved = JSON.parse(localStorage.getItem('tanda_data'))
     expect(saved.participants[0].name).toBe('Edy')
   })
+
+  it('migrates old-schedule dates back by one day on load', () => {
+    const oldData = {
+      config: { initialized: false, organizerName: '', organizerPhone: '', organizerSlot: 11, pin: '' },
+      participants: Array.from({ length: 12 }, (_, i) => ({ slot: i + 1, name: '', phone: '' })),
+      rounds: [
+        { round: 1,  collectDate: '2026-06-13', payoutDate: '2026-06-14', recipientSlot: 1,  payments: {}, payoutSent: false, notes: '' },
+        { round: 2,  collectDate: '2026-06-27', payoutDate: '2026-06-28', recipientSlot: 2,  payments: {}, payoutSent: false, notes: '' },
+        { round: 12, collectDate: '2026-11-14', payoutDate: '2026-11-15', recipientSlot: 12, payments: {}, payoutSent: false, notes: '' },
+      ],
+    }
+    localStorage.setItem('tanda_data', JSON.stringify(oldData))
+    const { result } = renderHook(() => useTandaStore())
+    expect(result.current.store.rounds[0].collectDate).toBe('2026-06-12')
+    expect(result.current.store.rounds[0].payoutDate).toBe('2026-06-13')
+    expect(result.current.store.rounds[1].collectDate).toBe('2026-06-26')
+    expect(result.current.store.rounds[2].collectDate).toBe('2026-11-13')
+    expect(result.current.store.rounds[2].payoutDate).toBe('2026-11-14')
+  })
 })
