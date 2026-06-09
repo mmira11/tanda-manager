@@ -1,7 +1,8 @@
+// src/components/public/CountdownTimer.jsx
 import { useState, useEffect } from 'react'
 import { getCountdownTo } from '../../utils/rounds'
 
-export default function CountdownTimer({ collectDate, isComplete }) {
+export default function CountdownTimer({ collectDate, isComplete, organizerName, organizerPhone, t }) {
   const [time, setTime] = useState(() => getCountdownTo(collectDate))
 
   useEffect(() => {
@@ -14,8 +15,8 @@ export default function CountdownTimer({ collectDate, isComplete }) {
     return (
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 text-center">
         <div className="text-3xl mb-2">🏁</div>
-        <p className="text-lg font-bold text-gold-600">Tanda Complete!</p>
-        <p className="text-sm text-gray-500 mt-1">All 12 rounds finished. Amazing job everyone!</p>
+        <p className="text-lg font-bold text-gold-600">{t.tandaDone}</p>
+        <p className="text-sm text-gray-500 mt-1">{t.allDone}</p>
       </div>
     )
   }
@@ -24,26 +25,29 @@ export default function CountdownTimer({ collectDate, isComplete }) {
     return (
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-gold-200 bg-gold-50 text-center">
         <div className="text-3xl mb-2">🎯</div>
-        <p className="font-bold text-gray-900">Collection day is here!</p>
-        <p className="text-sm text-gray-600 mt-1">Please send $200 via Zelle today.</p>
+        <p className="font-bold text-gray-900">{t.collectionDay}</p>
+        <p className="text-sm text-gray-600 mt-1">
+          {t.sendTo} <strong>{organizerName || 'the organizer'}</strong> {t.viaZelle}
+          {organizerPhone ? ` (${organizerPhone})` : ''} {t.today}
+        </p>
       </div>
     )
   }
 
   const units = [
-    { value: time.days,    label: 'days' },
-    { value: time.hours,   label: 'hours' },
-    { value: time.minutes, label: 'mins' },
+    { value: time.days,    label: t.days },
+    { value: time.hours,   label: t.hours },
+    { value: time.minutes, label: t.mins },
   ]
 
   return (
     <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 text-center">
-        Next collection in
+        {t.nextIn}
       </p>
       <div className="flex items-center justify-center gap-3">
         {units.map(({ value, label }, i) => (
-          <div key={label} className="flex items-center gap-3">
+          <div key={i} className="flex items-center gap-3">
             <div className="text-center min-w-[3rem]">
               <div className="text-3xl font-black text-gray-900 tabular-nums">
                 {String(value).padStart(2, '0')}
