@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { getCurrentRound, getDayName } from '../../utils/rounds'
 import { fetchPublicData } from '../../utils/github'
+import { CONTRIBUTION, SLOT_COUNT } from '../../data/scheduleTemplate'
 import RecipientSpotlight from './RecipientSpotlight'
 import CountdownTimer from './CountdownTimer'
 import PaymentStatusList from './PaymentStatusList'
@@ -52,7 +53,7 @@ const LABELS = {
     viaZelle:      'por Zelle',
     today:         'hoy.',
     tandaDone:     '¡Tanda completa!',
-    allDone:       '¡Las 12 rondas terminaron. ¡Excelente trabajo!',
+    allDone:       'Las 12 rondas terminaron. ¡Excelente trabajo!',
     congrats:      'Felicidades',
     payoutDone:    '¡Pago completado!',
   },
@@ -76,8 +77,8 @@ export default function PublicBoard() {
   }
 
   const data = liveData || store
-  const { participants, rounds } = data
   const t = LABELS[lang]
+  const { participants, rounds } = data
 
   if (!data.config.initialized) {
     return (
@@ -151,8 +152,8 @@ export default function PublicBoard() {
         />
         <p className="text-center text-xs text-gray-400 pb-6">
           {lang === 'en'
-            ? `Send $200 to the organizer every ${collectDayName} · Payout every ${payoutDayName} · 12 rounds total`
-            : `Envía $200 al organizador cada ${collectDayName} · Pago cada ${payoutDayName} · 12 rondas en total`
+            ? `Send $${CONTRIBUTION} to the organizer every ${collectDayName} · Payout every ${payoutDayName} · ${SLOT_COUNT} rounds total`
+            : `Envía $${CONTRIBUTION} al organizador cada ${collectDayName} · Pago cada ${payoutDayName} · ${SLOT_COUNT} rondas en total`
           }
         </p>
       </div>
