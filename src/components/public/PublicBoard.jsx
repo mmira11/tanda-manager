@@ -1,14 +1,85 @@
+// src/components/public/PublicBoard.jsx
+import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound } from '../../utils/rounds'
+import { getCurrentRound, getDayName } from '../../utils/rounds'
+import { fetchPublicData } from '../../utils/github'
 import RecipientSpotlight from './RecipientSpotlight'
 import CountdownTimer from './CountdownTimer'
 import PaymentStatusList from './PaymentStatusList'
 
+const LABELS = {
+  en: {
+    recipient:     "This round's recipient",
+    collection:    'Collection',
+    payout:        'Payout',
+    nextIn:        'Next collection in',
+    days:          'days',
+    hours:         'hours',
+    mins:          'mins',
+    contributions: 'Contributions',
+    pending:       'Pending',
+    paid:          'Paid',
+    whosNext:      "Who's next",
+    round:         'Round',
+    of:            'of',
+    perPerson:     'per person',
+    collectionDay: 'Collection day is here!',
+    sendTo:        'Please send $200 to',
+    viaZelle:      'via Zelle',
+    today:         'today.',
+    tandaDone:     'Tanda Complete!',
+    allDone:       'All 12 rounds finished. Amazing job everyone!',
+    congrats:      'Congratulations',
+    payoutDone:    'Payout complete!',
+  },
+  es: {
+    recipient:     'El turno de esta ronda',
+    collection:    'Cobro',
+    payout:        'Pago',
+    nextIn:        'Próximo cobro en',
+    days:          'días',
+    hours:         'horas',
+    mins:          'mins',
+    contributions: 'Aportaciones',
+    pending:       'Pendiente',
+    paid:          'Pagado',
+    whosNext:      'Quién sigue',
+    round:         'Ronda',
+    of:            'de',
+    perPerson:     'por persona',
+    collectionDay: '¡Día de cobro!',
+    sendTo:        'Por favor envía $200 a',
+    viaZelle:      'por Zelle',
+    today:         'hoy.',
+    tandaDone:     '¡Tanda completa!',
+    allDone:       '¡Las 12 rondas terminaron. ¡Excelente trabajo!',
+    congrats:      'Felicidades',
+    payoutDone:    '¡Pago completado!',
+  },
+}
+
 export default function PublicBoard() {
   const { store } = useStore()
-  const { participants, rounds } = store
+  const [liveData, setLiveData] = useState(null)
+  const [lang, setLang] = useState(() => localStorage.getItem('tanda_lang') || 'en')
 
-  if (!store.config.initialized) {
+  useEffect(() => {
+    fetchPublicData()
+      .then(setLiveData)
+      .catch(() => {})
+  }, [])
+
+  function toggleLang() {
+    const next = lang === 'en' ? 'es' : 'en'
+    localStorage.setItem('tanda_lang', next)
+    setLang(next)
+  }
+
+  const data = liveData || store
+  const { participants, rounds } = data
+  const t = LABELS[lang]
+
+  if (!data.config.initialized) {
     return (
       <div className="min-h-screen bg-gold-50 flex items-center justify-center p-8 text-center">
         <div>
@@ -23,7 +94,10 @@ export default function PublicBoard() {
   const round = getCurrentRound(rounds)
   const recipient = participants.find(p => p.slot === round.recipientSlot)
   const recipientName = recipient?.name || `Slot ${round.recipientSlot}`
-  const isComplete = new Date() > new Date('2026-11-16T00:00:00')
+  const isComplete = new Date() > new Date('2026-11-15T00:00:00')
+  const locale = lang === 'es' ? 'es' : 'en-US'
+  const collectDayName = rounds.length ? getDayName(rounds[0].collectDate, locale) : (lang === 'es' ? 'viernes' : 'Friday')
+  const payoutDayName  = rounds.length ? getDayName(rounds[0].payoutDate,  locale) : (lang === 'es' ? 'sábado' : 'Saturday')
 
   return (
     <div className="min-h-screen bg-gold-50">
@@ -32,13 +106,27 @@ export default function PublicBoard() {
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Tanda 2026</h1>
-            <p className="text-xs text-gray-500">Jun 13 – Nov 15, 2026 · $200/person</p>
+            <p className="text-xs text-gray-500">Jun 12 – Nov 14, 2026 · $200 {t.perPerson}</p>
           </div>
-          <div className="text-right">
-            <div className="text-xs text-gray-400 font-medium">Round</div>
-            <div className="text-2xl font-black text-gold-600 leading-none">
-              {round.round}
-              <span className="text-sm font-medium text-gray-400"> / 12</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={toggleLang}
+              className="flex items-center text-xs font-semibold rounded-full border border-gray-200 overflow-hidden"
+              aria-label="Toggle language"
+            >
+              <span className={`px-2.5 py-1 transition-colors ${lang === 'en' ? 'bg-gold-500 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
+                EN
+              </span>
+              <span className={`px-2.5 py-1 transition-colors ${lang === 'es' ? 'bg-gold-500 text-white' : 'text-gray-400 hover:text-gray-600'}`}>
+                ES
+              </span>
+            </button>
+            <div className="text-right">
+              <div className="text-xs text-gray-400 font-medium">{t.round}</div>
+              <div className="text-2xl font-black text-gold-600 leading-none">
+                {round.round}
+                <span className="text-sm font-medium text-gray-400"> / 12</span>
+              </div>
             </div>
           </div>
         </div>
@@ -46,12 +134,26 @@ export default function PublicBoard() {
 
       {/* Content */}
       <div className="max-w-lg mx-auto p-4 space-y-4">
-        <RecipientSpotlight round={round} recipientName={recipientName} />
-        <CountdownTimer collectDate={round.collectDate} isComplete={isComplete} />
-        <PaymentStatusList participants={participants} payments={round.payments} />
-
+        <RecipientSpotlight round={round} recipientName={recipientName} t={t} />
+        <CountdownTimer
+          collectDate={round.collectDate}
+          isComplete={isComplete}
+          organizerName={data.config.organizerName}
+          organizerPhone={data.config.organizerPhone}
+          t={t}
+        />
+        <PaymentStatusList
+          participants={participants}
+          payments={round.payments}
+          rounds={rounds}
+          currentRoundNum={round.round}
+          t={t}
+        />
         <p className="text-center text-xs text-gray-400 pb-6">
-          Each person contributes $200 · Payout every Saturday · 12 rounds total
+          {lang === 'en'
+            ? `Send $200 to the organizer every ${collectDayName} · Payout every ${payoutDayName} · 12 rounds total`
+            : `Envía $200 al organizador cada ${collectDayName} · Pago cada ${payoutDayName} · 12 rondas en total`
+          }
         </p>
       </div>
     </div>

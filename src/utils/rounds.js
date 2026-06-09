@@ -21,6 +21,10 @@ export function formatDate(iso) {
   })
 }
 
+export function getDayName(iso, locale = 'en-US') {
+  return new Date(iso + 'T12:00:00').toLocaleDateString(locale, { weekday: 'long' })
+}
+
 export function getCountdownTo(isoDate) {
   const diff = new Date(isoDate + 'T00:00:00').getTime() - Date.now()
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, done: true }
