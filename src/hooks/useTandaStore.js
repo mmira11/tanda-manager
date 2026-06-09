@@ -13,6 +13,7 @@ function buildInitialState() {
       pin: '',
       initialized: false,
     },
+    lastModified: 0,
     participants: Array.from({ length: SLOT_COUNT }, (_, i) => ({
       slot: i + 1,
       name: '',
@@ -78,6 +79,7 @@ export function useTandaStore() {
   const update = useCallback((updater) => {
     setStore(prev => {
       const next = updater(prev)
+      next.lastModified = Date.now()
       saveStore(next)
       return next
     })
@@ -121,6 +123,40 @@ export function useTandaStore() {
     }))
   }, [update])
 
+  const addMember = useCallback((name, phone) => {
+    update(prev => {
+      const newSlot = prev.participants.length + 1
+      const lastRound = prev.rounds[prev.rounds.length - 1]
+      const lastCollectMs = new Date(lastRound.collectDate + 'T12:00:00').getTime()
+      const newCollect = new Date(lastCollectMs + 14 * 86400000).toISOString().slice(0, 10)
+      const newPayout  = new Date(lastCollectMs + 15 * 86400000).toISOString().slice(0, 10)
+      return {
+        ...prev,
+        participants: [
+          ...prev.participants,
+          { slot: newSlot, name: name.trim(), phone: phone.trim() },
+        ],
+        rounds: [
+          ...prev.rounds.map(r => ({
+            ...r,
+            payments: { ...r.payments, [newSlot]: false },
+          })),
+          {
+            round: newSlot,
+            collectDate: newCollect,
+            payoutDate:  newPayout,
+            recipientSlot: newSlot,
+            payments: Object.fromEntries(
+              Array.from({ length: newSlot }, (_, i) => [i + 1, false])
+            ),
+            payoutSent: false,
+            notes: '',
+          },
+        ],
+      }
+    })
+  }, [update])
+
   const saveConfig = useCallback((config) => {
     update(prev => ({ ...prev, config: { ...prev.config, ...config } }))
   }, [update])
@@ -131,6 +167,7 @@ export function useTandaStore() {
     try {
       const parsed = JSON.parse(jsonString)
       const migrated = migrateStore(parsed)
+      migrated.lastModified = Date.now()
       saveStore(migrated)
       setStore(migrated)
     } catch {
@@ -150,6 +187,7 @@ export function useTandaStore() {
     togglePayment,
     togglePayout,
     updateRoundNotes,
+    addMember,
     saveConfig,
     exportData,
     importData,

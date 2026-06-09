@@ -125,4 +125,43 @@ describe('useTandaStore', () => {
     expect(result.current.store.rounds[2].collectDate).toBe('2026-11-13')
     expect(result.current.store.rounds[2].payoutDate).toBe('2026-11-14')
   })
+
+  it('initializes lastModified as 0', () => {
+    const { result } = renderHook(() => useTandaStore())
+    expect(result.current.store.lastModified).toBe(0)
+  })
+
+  it('updates lastModified after any mutation', () => {
+    const { result } = renderHook(() => useTandaStore())
+    expect(result.current.store.lastModified).toBe(0)
+    act(() => result.current.updateParticipant(1, { name: 'Edy' }))
+    expect(result.current.store.lastModified).toBeGreaterThan(0)
+  })
+
+  it('addMember adds a 13th participant with correct slot, name, phone', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.addMember('Alice', '5551234567'))
+    expect(result.current.store.participants).toHaveLength(13)
+    const added = result.current.store.participants[12]
+    expect(added.slot).toBe(13)
+    expect(added.name).toBe('Alice')
+    expect(added.phone).toBe('5551234567')
+  })
+
+  it('addMember appends a round 14 days after the last round and patches all existing rounds', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.addMember('Alice', '5551234567'))
+    expect(result.current.store.rounds).toHaveLength(13)
+    const newRound = result.current.store.rounds[12]
+    expect(newRound.round).toBe(13)
+    expect(newRound.collectDate).toBe('2026-11-27') // 14 days after 2026-11-13
+    expect(newRound.payoutDate).toBe('2026-11-28')  // 15 days after 2026-11-13
+    expect(newRound.recipientSlot).toBe(13)
+    expect(Object.keys(newRound.payments)).toHaveLength(13)
+    // all existing rounds now have slot 13 in their payments map
+    result.current.store.rounds.slice(0, 12).forEach(r => {
+      expect(r.payments).toHaveProperty('13')
+      expect(r.payments[13]).toBe(false)
+    })
+  })
 })
