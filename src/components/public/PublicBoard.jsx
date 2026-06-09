@@ -33,7 +33,7 @@ const LABELS = {
     viaZelle:      'via Zelle',
     today:         'today.',
     tandaDone:     'Tanda Complete!',
-    allDone:       'All 12 rounds finished. Amazing job everyone!',
+    allDone:       n => `All ${n} rounds finished. Amazing job everyone!`,
     congrats:         'Congratulations',
     payoutDone:       'Payout complete!',
     contactOrganizer: 'Contact Organizer',
@@ -62,7 +62,7 @@ const LABELS = {
     viaZelle:      'por Zelle',
     today:         'hoy.',
     tandaDone:     '¡Tanda completa!',
-    allDone:       'Las 12 rondas terminaron. ¡Excelente trabajo!',
+    allDone:       n => `Las ${n} rondas terminaron. ¡Excelente trabajo!`,
     congrats:         'Felicidades',
     payoutDone:       '¡Pago completado!',
     contactOrganizer: 'Contactar al organizador',
@@ -90,8 +90,8 @@ export default function PublicBoard() {
   }
 
   const data = liveData || store
-  const t = LABELS[lang]
   const { participants, rounds } = data
+  const t = { ...LABELS[lang], allDone: LABELS[lang].allDone(rounds.length) }
 
   if (!data.config.initialized) {
     return (
