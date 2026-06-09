@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { buildGroupSmsUrl } from '../../utils/messaging'
 
 function ParticipantRow({ participant }) {
   const { updateParticipant } = useStore()
@@ -112,6 +113,38 @@ export default function RosterEditor() {
           </button>
         )}
       </div>
+
+      {(() => {
+        const withPhone = store.participants.filter(p => p.phone?.trim())
+        const orgPhone = store.config?.organizerPhone || ''
+        const body = `Welcome to Tanda 2026! 🎉 Collection is every Friday — please send $200 to ${orgPhone || 'the organizer'} via Zelle on collection day. Looking forward to a great tanda with everyone!`
+        const groupUrl = buildGroupSmsUrl(withPhone, body)
+        return (
+          <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+            <h3 className="font-semibold text-gray-900 mb-1">Group Message</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Open your SMS app with all members pre-loaded and a welcome message ready to send.
+            </p>
+            <a
+              href={groupUrl ?? undefined}
+              onClick={!groupUrl ? e => e.preventDefault() : undefined}
+              className={`flex items-center justify-center gap-2 w-full font-semibold py-2.5 rounded-xl text-sm transition-colors ${
+                groupUrl
+                  ? 'bg-blue-500 hover:bg-blue-600 text-white'
+                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+              }`}
+            >
+              <span>💬</span>
+              Start Group Chat ({withPhone.length})
+            </a>
+            {withPhone.length < 2 && (
+              <p className="text-xs text-gray-400 mt-2 text-center">
+                Add phone numbers to at least 2 members to enable.
+              </p>
+            )}
+          </div>
+        )
+      })()}
 
       <div className="bg-gold-50 border border-gold-200 rounded-2xl p-4 text-sm text-gray-700">
         <strong>Tip:</strong> Phone numbers are used for SMS and WhatsApp reminders only.
