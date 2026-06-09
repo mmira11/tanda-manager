@@ -22,7 +22,7 @@ export default function RecipientSpotlight({ round, recipientName, t, pot, total
           {recipientName || '—'}
         </h2>
         <div className="text-5xl font-black mb-5 drop-shadow-sm">
-          ${pot.toLocaleString()}
+          ${(pot ?? 0).toLocaleString()}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

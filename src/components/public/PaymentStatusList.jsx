@@ -4,7 +4,7 @@ import { getPaidCount } from '../../utils/rounds'
 export default function PaymentStatusList({ participants, payments, rounds, currentRoundNum, t }) {
   const paidCount = getPaidCount(payments)
   const total = participants.length
-  const pct = Math.round((paidCount / total) * 100)
+  const pct = total > 0 ? Math.round((paidCount / total) * 100) : 0
 
   const nextRound = rounds?.find(r => r.round === currentRoundNum + 1)
   const nextRecipient = nextRound
