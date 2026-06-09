@@ -57,12 +57,12 @@
   "rounds": [
     {
       "round": 1,
-      "collectDate": "2026-06-13",
-      "payoutDate": "2026-06-14",
+      "collectDate": "2026-06-12",
+      "payoutDate": "2026-06-13",
       "recipientSlot": 1,
       "payments": {
-        "1": false,
-        "2": false,
+        "1": true,
+        "2": true,
         "3": false,
         "4": false,
         "5": false,
@@ -79,8 +79,8 @@
     },
     {
       "round": 2,
-      "collectDate": "2026-06-27",
-      "payoutDate": "2026-06-28",
+      "collectDate": "2026-06-26",
+      "payoutDate": "2026-06-27",
       "recipientSlot": 2,
       "payments": {
         "1": false,
@@ -101,8 +101,8 @@
     },
     {
       "round": 3,
-      "collectDate": "2026-07-11",
-      "payoutDate": "2026-07-12",
+      "collectDate": "2026-07-10",
+      "payoutDate": "2026-07-11",
       "recipientSlot": 3,
       "payments": {
         "1": false,
@@ -123,8 +123,8 @@
     },
     {
       "round": 4,
-      "collectDate": "2026-07-25",
-      "payoutDate": "2026-07-26",
+      "collectDate": "2026-07-24",
+      "payoutDate": "2026-07-25",
       "recipientSlot": 4,
       "payments": {
         "1": false,
@@ -145,8 +145,8 @@
     },
     {
       "round": 5,
-      "collectDate": "2026-08-08",
-      "payoutDate": "2026-08-09",
+      "collectDate": "2026-08-07",
+      "payoutDate": "2026-08-08",
       "recipientSlot": 5,
       "payments": {
         "1": false,
@@ -167,8 +167,8 @@
     },
     {
       "round": 6,
-      "collectDate": "2026-08-22",
-      "payoutDate": "2026-08-23",
+      "collectDate": "2026-08-21",
+      "payoutDate": "2026-08-22",
       "recipientSlot": 6,
       "payments": {
         "1": false,
@@ -189,8 +189,8 @@
     },
     {
       "round": 7,
-      "collectDate": "2026-09-05",
-      "payoutDate": "2026-09-06",
+      "collectDate": "2026-09-04",
+      "payoutDate": "2026-09-05",
       "recipientSlot": 7,
       "payments": {
         "1": false,
@@ -211,8 +211,8 @@
     },
     {
       "round": 8,
-      "collectDate": "2026-09-19",
-      "payoutDate": "2026-09-20",
+      "collectDate": "2026-09-18",
+      "payoutDate": "2026-09-19",
       "recipientSlot": 8,
       "payments": {
         "1": false,
@@ -233,8 +233,8 @@
     },
     {
       "round": 9,
-      "collectDate": "2026-10-03",
-      "payoutDate": "2026-10-04",
+      "collectDate": "2026-10-02",
+      "payoutDate": "2026-10-03",
       "recipientSlot": 9,
       "payments": {
         "1": false,
@@ -255,8 +255,8 @@
     },
     {
       "round": 10,
-      "collectDate": "2026-10-17",
-      "payoutDate": "2026-10-18",
+      "collectDate": "2026-10-16",
+      "payoutDate": "2026-10-17",
       "recipientSlot": 10,
       "payments": {
         "1": false,
@@ -277,8 +277,8 @@
     },
     {
       "round": 11,
-      "collectDate": "2026-10-31",
-      "payoutDate": "2026-11-01",
+      "collectDate": "2026-10-30",
+      "payoutDate": "2026-10-31",
       "recipientSlot": 11,
       "payments": {
         "1": false,
@@ -299,8 +299,8 @@
     },
     {
       "round": 12,
-      "collectDate": "2026-11-14",
-      "payoutDate": "2026-11-15",
+      "collectDate": "2026-11-13",
+      "payoutDate": "2026-11-14",
       "recipientSlot": 12,
       "payments": {
         "1": false,
