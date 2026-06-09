@@ -36,12 +36,16 @@ export default function RosterEditor() {
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
 
+  function handleFormReset() {
+    setShowAddForm(false)
+    setNewName('')
+    setNewPhone('')
+  }
+
   function handleAddSave() {
     if (!newName.trim()) return
     addMember(newName.trim(), newPhone.trim())
-    setNewName('')
-    setNewPhone('')
-    setShowAddForm(false)
+    handleFormReset()
   }
 
   return (
@@ -92,7 +96,7 @@ export default function RosterEditor() {
                 Save
               </button>
               <button
-                onClick={() => { setShowAddForm(false); setNewName(''); setNewPhone('') }}
+                onClick={handleFormReset}
                 className="flex-1 bg-white border border-gray-200 text-gray-600 font-semibold py-2 rounded-xl text-sm hover:bg-gray-50 transition-colors"
               >
                 Cancel
