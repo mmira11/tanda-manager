@@ -1,10 +1,18 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { loadGitHubToken, saveGitHubToken, publishToGitHub } from '../../utils/github'
 
 export default function DataControls() {
   const { store, exportData, importData, resetData, saveConfig } = useStore()
   const fileRef = useRef(null)
   const [importStatus, setImportStatus] = useState(null)
+  const [githubToken, setGithubToken] = useState(loadGitHubToken)
+  const [publishStatus, setPublishStatus] = useState(null) // null | 'loading' | 'ok' | 'error'
+  const [publishError, setPublishError] = useState('')
+  const [lastPublished, setLastPublished] = useState(
+    () => parseInt(localStorage.getItem('tanda_last_published') || '0')
+  )
+  const hasUnpublishedChanges = store.lastModified > lastPublished
   const [editingPin, setEditingPin] = useState(false)
   const [newPin, setNewPin] = useState('')
   const [newPinConfirm, setNewPinConfirm] = useState('')
@@ -34,6 +42,27 @@ export default function DataControls() {
     }
     reader.readAsText(file)
     e.target.value = ''
+  }
+
+  function handleTokenChange(val) {
+    setGithubToken(val)
+    saveGitHubToken(val)
+  }
+
+  async function handlePublish() {
+    if (!githubToken) return
+    setPublishStatus('loading')
+    setPublishError('')
+    try {
+      await publishToGitHub(githubToken, store)
+      setPublishStatus('ok')
+      const ts = store.lastModified
+      localStorage.setItem('tanda_last_published', String(ts))
+      setLastPublished(ts)
+    } catch (err) {
+      setPublishStatus('error')
+      setPublishError(err.message)
+    }
   }
 
   function handleReset() {
@@ -108,6 +137,43 @@ export default function DataControls() {
           </div>
         ) : (
           <p className="text-sm text-gray-500">PIN is set. Tap "Change PIN" to update it.</p>
+        )}
+      </div>
+
+      {/* Public board sync */}
+      <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+        <h3 className="font-semibold text-gray-900 mb-1">Public Board</h3>
+        <p className="text-xs text-gray-500 mb-3">
+          Publishes current tanda state to the public board. Requires a GitHub personal access token
+          with <strong>repo</strong> scope.
+        </p>
+        <input
+          type="password"
+          className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors mb-3"
+          placeholder="GitHub token (ghp_…)"
+          value={githubToken}
+          onChange={e => handleTokenChange(e.target.value)}
+        />
+        {hasUnpublishedChanges && (
+          <p className="text-xs text-orange-600 font-semibold mb-2 flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-orange-500 inline-block flex-shrink-0" />
+            Unpublished changes
+          </p>
+        )}
+        <button
+          onClick={handlePublish}
+          disabled={!githubToken || publishStatus === 'loading'}
+          className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-3 rounded-xl border border-indigo-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {publishStatus === 'loading' ? 'Publishing…' : '↑ Publish to Public Board'}
+        </button>
+        {publishStatus === 'ok' && (
+          <p className="text-xs text-emerald-600 text-center mt-2 font-medium">
+            Published! Public board will refresh in a few seconds.
+          </p>
+        )}
+        {publishStatus === 'error' && (
+          <p className="text-xs text-red-600 text-center mt-2">{publishError}</p>
         )}
       </div>
 
