@@ -1,10 +1,10 @@
 // src/components/public/PaymentStatusList.jsx
 import { getPaidCount } from '../../utils/rounds'
-import { SLOT_COUNT } from '../../data/scheduleTemplate'
 
 export default function PaymentStatusList({ participants, payments, rounds, currentRoundNum, t }) {
   const paidCount = getPaidCount(payments)
-  const pct = Math.round((paidCount / SLOT_COUNT) * 100)
+  const total = participants.length
+  const pct = Math.round((paidCount / total) * 100)
 
   const nextRound = rounds?.find(r => r.round === currentRoundNum + 1)
   const nextRecipient = nextRound
@@ -16,7 +16,7 @@ export default function PaymentStatusList({ participants, payments, rounds, curr
       <div className="flex items-center justify-between mb-3">
         <h3 className="font-semibold text-gray-900">{t.contributions}</h3>
         <span className="text-sm font-bold text-emerald-600">
-          {paidCount} {t.of} {SLOT_COUNT} ✓
+          {paidCount} {t.of} {total} ✓
         </span>
       </div>
 

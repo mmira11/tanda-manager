@@ -1,8 +1,7 @@
 // src/components/public/RecipientSpotlight.jsx
 import { formatDate } from '../../utils/rounds'
-import { POT } from '../../data/scheduleTemplate'
 
-export default function RecipientSpotlight({ round, recipientName, t }) {
+export default function RecipientSpotlight({ round, recipientName, t, pot, totalRounds }) {
   return (
     <div className="relative overflow-hidden bg-gradient-to-br from-gold-400 via-gold-500 to-gold-600 rounded-3xl p-6 text-white shadow-xl">
       <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -translate-y-12 translate-x-12 pointer-events-none" />
@@ -12,7 +11,7 @@ export default function RecipientSpotlight({ round, recipientName, t }) {
       <div className="relative">
         <div className="flex items-center gap-2 mb-4">
           <span className="bg-white/25 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-            {t.round} {round.round} {t.of} 12
+            {t.round} {round.round} {t.of} {totalRounds}
           </span>
         </div>
 
@@ -23,7 +22,7 @@ export default function RecipientSpotlight({ round, recipientName, t }) {
           {recipientName || '—'}
         </h2>
         <div className="text-5xl font-black mb-5 drop-shadow-sm">
-          ${POT.toLocaleString()}
+          ${pot.toLocaleString()}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

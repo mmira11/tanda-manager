@@ -4,7 +4,7 @@ import { useStore } from '../../context/StoreContext'
 import { getCurrentRound, getDayName } from '../../utils/rounds'
 import { fetchPublicData } from '../../utils/github'
 import { migrateStore } from '../../hooks/useTandaStore'
-import { CONTRIBUTION, SLOT_COUNT } from '../../data/scheduleTemplate'
+import { CONTRIBUTION } from '../../data/scheduleTemplate'
 import RecipientSpotlight from './RecipientSpotlight'
 import CountdownTimer from './CountdownTimer'
 import PaymentStatusList from './PaymentStatusList'
@@ -129,7 +129,7 @@ export default function PublicBoard() {
               <div className="text-xs text-gray-400 font-medium">{t.round}</div>
               <div className="text-2xl font-black text-gold-600 leading-none">
                 {round.round}
-                <span className="text-sm font-medium text-gray-400"> / 12</span>
+                <span className="text-sm font-medium text-gray-400"> / {rounds.length}</span>
               </div>
             </div>
           </div>
@@ -138,7 +138,13 @@ export default function PublicBoard() {
 
       {/* Content */}
       <div className="max-w-lg mx-auto p-4 space-y-4">
-        <RecipientSpotlight round={round} recipientName={recipientName} t={t} />
+        <RecipientSpotlight
+          round={round}
+          recipientName={recipientName}
+          t={t}
+          pot={participants.length * CONTRIBUTION}
+          totalRounds={rounds.length}
+        />
         <CountdownTimer
           collectDate={round.collectDate}
           isComplete={isComplete}
@@ -155,8 +161,8 @@ export default function PublicBoard() {
         />
         <p className="text-center text-xs text-gray-400 pb-6">
           {lang === 'en'
-            ? `Send $${CONTRIBUTION} to the organizer every ${collectDayName} · Payout every ${payoutDayName} · ${SLOT_COUNT} rounds total`
-            : `Envía $${CONTRIBUTION} al organizador cada ${collectDayName} · Pago cada ${payoutDayName} · ${SLOT_COUNT} rondas en total`
+            ? `Send $${CONTRIBUTION} to the organizer every ${collectDayName} · Payout every ${payoutDayName} · ${rounds.length} rounds total`
+            : `Envía $${CONTRIBUTION} al organizador cada ${collectDayName} · Pago cada ${payoutDayName} · ${rounds.length} rondas en total`
           }
         </p>
       </div>
