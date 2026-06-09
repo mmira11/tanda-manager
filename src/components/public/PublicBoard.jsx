@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { getCurrentRound, getDayName } from '../../utils/rounds'
 import { fetchPublicData } from '../../utils/github'
+import { migrateStore } from '../../hooks/useTandaStore'
 import { CONTRIBUTION, SLOT_COUNT } from '../../data/scheduleTemplate'
 import RecipientSpotlight from './RecipientSpotlight'
 import CountdownTimer from './CountdownTimer'
@@ -26,6 +27,7 @@ const LABELS = {
     perPerson:     'per person',
     collectionDay: 'Collection day is here!',
     sendTo:        'Please send $200 to',
+    organizer:     'the organizer',
     viaZelle:      'via Zelle',
     today:         'today.',
     tandaDone:     'Tanda Complete!',
@@ -50,6 +52,7 @@ const LABELS = {
     perPerson:     'por persona',
     collectionDay: '¡Día de cobro!',
     sendTo:        'Por favor envía $200 a',
+    organizer:     'el organizador',
     viaZelle:      'por Zelle',
     today:         'hoy.',
     tandaDone:     '¡Tanda completa!',
@@ -66,7 +69,7 @@ export default function PublicBoard() {
 
   useEffect(() => {
     fetchPublicData()
-      .then(setLiveData)
+      .then(data => setLiveData(migrateStore(data)))
       .catch(() => {})
   }, [])
 

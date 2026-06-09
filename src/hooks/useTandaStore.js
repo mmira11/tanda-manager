@@ -44,7 +44,7 @@ const DATE_MIGRATION = {
   '2026-11-14': '2026-11-13', '2026-11-15': '2026-11-14',
 }
 
-function migrateStore(data) {
+export function migrateStore(data) {
   if (data?.rounds?.[0]?.collectDate !== '2026-06-13') return data
   return {
     ...data,

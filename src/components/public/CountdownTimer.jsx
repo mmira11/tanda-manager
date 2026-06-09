@@ -27,7 +27,7 @@ export default function CountdownTimer({ collectDate, isComplete, organizerName,
         <div className="text-3xl mb-2">🎯</div>
         <p className="font-bold text-gray-900">{t.collectionDay}</p>
         <p className="text-sm text-gray-600 mt-1">
-          {t.sendTo} <strong>{organizerName || 'the organizer'}</strong> {t.viaZelle}
+          {t.sendTo} <strong>{organizerName || t.organizer}</strong> {t.viaZelle}
           {organizerPhone ? ` (${organizerPhone})` : ''} {t.today}
         </p>
       </div>
