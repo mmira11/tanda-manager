@@ -78,8 +78,7 @@ export function useTandaStore() {
 
   const update = useCallback((updater) => {
     setStore(prev => {
-      const next = updater(prev)
-      next.lastModified = Date.now()
+      const next = { ...updater(prev), lastModified: Date.now() }
       saveStore(next)
       return next
     })
@@ -125,6 +124,7 @@ export function useTandaStore() {
 
   const addMember = useCallback((name, phone) => {
     update(prev => {
+      if (!name.trim()) return { ...prev }
       const newSlot = prev.participants.length + 1
       const lastRound = prev.rounds[prev.rounds.length - 1]
       const lastCollectMs = new Date(lastRound.collectDate + 'T12:00:00').getTime()
