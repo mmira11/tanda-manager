@@ -8,6 +8,8 @@ import { CONTRIBUTION } from '../../data/scheduleTemplate'
 import RecipientSpotlight from './RecipientSpotlight'
 import CountdownTimer from './CountdownTimer'
 import PaymentStatusList from './PaymentStatusList'
+import OrganizerCard from './OrganizerCard'
+import RoundSchedule from './RoundSchedule'
 
 const LABELS = {
   en: {
@@ -32,8 +34,12 @@ const LABELS = {
     today:         'today.',
     tandaDone:     'Tanda Complete!',
     allDone:       'All 12 rounds finished. Amazing job everyone!',
-    congrats:      'Congratulations',
-    payoutDone:    'Payout complete!',
+    congrats:         'Congratulations',
+    payoutDone:       'Payout complete!',
+    contactOrganizer: 'Contact Organizer',
+    payViaZelle:      'Pay via Zelle',
+    schedule:         'Round Schedule',
+    completed:        'Completed',
   },
   es: {
     recipient:     'El turno de esta ronda',
@@ -57,8 +63,12 @@ const LABELS = {
     today:         'hoy.',
     tandaDone:     '¡Tanda completa!',
     allDone:       'Las 12 rondas terminaron. ¡Excelente trabajo!',
-    congrats:      'Felicidades',
-    payoutDone:    '¡Pago completado!',
+    congrats:         'Felicidades',
+    payoutDone:       '¡Pago completado!',
+    contactOrganizer: 'Contactar al organizador',
+    payViaZelle:      'Pagar por Zelle',
+    schedule:         'Calendario de rondas',
+    completed:        'Completada',
   },
 }
 
@@ -156,6 +166,17 @@ export default function PublicBoard() {
           participants={participants}
           payments={round.payments}
           rounds={rounds}
+          currentRoundNum={round.round}
+          t={t}
+        />
+        <OrganizerCard
+          organizerName={data.config.organizerName}
+          organizerPhone={data.config.organizerPhone}
+          t={t}
+        />
+        <RoundSchedule
+          rounds={rounds}
+          participants={participants}
           currentRoundNum={round.round}
           t={t}
         />
