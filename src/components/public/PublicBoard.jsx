@@ -182,8 +182,8 @@ export default function PublicBoard() {
         />
         <p className="text-center text-xs text-gray-400 pb-6">
           {lang === 'en'
-            ? `Send $${CONTRIBUTION} to the organizer every ${collectDayName} · Payout every ${payoutDayName} · ${rounds.length} rounds total`
-            : `Envía $${CONTRIBUTION} al organizador cada ${collectDayName} · Pago cada ${payoutDayName} · ${rounds.length} rondas en total`
+            ? `Send $${CONTRIBUTION} to the organizer every other ${collectDayName} · Payout every other ${payoutDayName} · ${rounds.length} rounds total`
+            : `Envía $${CONTRIBUTION} al organizador cada ${collectDayName} de por medio · Pago cada ${payoutDayName} de por medio · ${rounds.length} rondas en total`
           }
         </p>
       </div>
