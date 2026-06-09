@@ -130,8 +130,9 @@ export function useTandaStore() {
   const importData = useCallback((jsonString) => {
     try {
       const parsed = JSON.parse(jsonString)
-      saveStore(parsed)
-      setStore(parsed)
+      const migrated = migrateStore(parsed)
+      saveStore(migrated)
+      setStore(migrated)
     } catch {
       throw new Error('Invalid JSON file')
     }
