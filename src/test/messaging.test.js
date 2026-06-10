@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl } from '../utils/messaging'
+import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody } from '../utils/messaging'
 
 describe('messaging', () => {
   it('buildSmsUrl targets correct number and includes name in body', () => {
@@ -57,5 +57,20 @@ describe('messaging', () => {
     const url = buildGroupSmsUrl(participants, 'Hello group!')
     expect(url).toContain('body=')
     expect(url).toContain('Hello%20group')
+  })
+
+  it('buildReminderBody includes round number, date, and organizer phone', () => {
+    const body = buildReminderBody(3, 'Fri, Jun 12', '(209) 362-0911')
+    expect(body).toContain('Round 3')
+    expect(body).toContain('Fri, Jun 12')
+    expect(body).toContain('209')
+    expect(body).toContain('$200')
+    expect(body).toContain('Zelle')
+  })
+
+  it('buildReminderBody falls back to "the organizer" when phone is empty', () => {
+    const body = buildReminderBody(1, 'Fri, Jun 12', '')
+    expect(body).toContain('the organizer')
+    expect(body).not.toContain('undefined')
   })
 })

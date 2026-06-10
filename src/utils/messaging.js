@@ -34,6 +34,11 @@ export function buildSmsUrl(recipientPhone, recipientName, organizerPhone, colle
   return `sms:${to}?body=${body}`
 }
 
+export function buildReminderBody(roundNum, formattedDate, organizerPhone) {
+  const org = organizerPhone?.trim() || 'the organizer'
+  return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send $200 to ${org} via Zelle. Thank you!`
+}
+
 export function buildWhatsAppUrl(recipientPhone, recipientName, organizerPhone, collectDate) {
   const to = '1' + stripPhone(recipientPhone)
   const orgNum = stripPhone(organizerPhone)
