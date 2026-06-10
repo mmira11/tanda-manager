@@ -52,10 +52,6 @@
     {
       "slot": 12,
       "name": "Tommie"
-    },
-    {
-      "slot": 13,
-      "name": "Sonia"
     }
   ],
   "rounds": [
@@ -76,8 +72,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": "Maria Gonzalez Ibarra - Carolina\nMaria Rojas - Andrea\n"
@@ -99,8 +94,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -122,8 +116,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -145,8 +138,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -168,8 +160,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -191,8 +182,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -214,8 +204,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -237,8 +226,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -260,8 +248,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -283,8 +270,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -306,8 +292,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
@@ -329,31 +314,7 @@
         "9": false,
         "10": false,
         "11": false,
-        "12": false,
-        "13": false
-      },
-      "payoutSent": false,
-      "notes": ""
-    },
-    {
-      "round": 13,
-      "collectDate": "2026-11-27",
-      "payoutDate": "2026-11-28",
-      "recipientSlot": 13,
-      "payments": {
-        "1": false,
-        "2": false,
-        "3": false,
-        "4": false,
-        "5": false,
-        "6": false,
-        "7": false,
-        "8": false,
-        "9": false,
-        "10": false,
-        "11": false,
-        "12": false,
-        "13": false
+        "12": false
       },
       "payoutSent": false,
       "notes": ""
