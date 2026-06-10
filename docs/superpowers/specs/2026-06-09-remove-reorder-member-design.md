@@ -90,5 +90,4 @@ function hasPaymentHistory(store, slot) {
 | File | Change |
 |---|---|
 | `src/hooks/useTandaStore.js` | Add `removeMember` and `reorderMember` actions; expose in return object |
-| `src/context/StoreContext.jsx` | Pass through new actions (if using context pattern) |
 | `src/components/admin/RosterEditor.jsx` | Add `editMode` state, Edit/Done button, update `ParticipantRow` with controls |
