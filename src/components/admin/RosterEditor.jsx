@@ -1,38 +1,110 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { buildGroupSmsUrl } from '../../utils/messaging'
 
-function ParticipantRow({ participant }) {
-  const { updateParticipant } = useStore()
+function hasPaymentHistory(store, slot) {
+  return store.rounds.some(r => r.payments[slot] === true)
+}
+
+function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
+  const { updateParticipant, reorderMember, removeMember } = useStore()
   const [name, setName] = useState(participant.name)
   const [phone, setPhone] = useState(participant.phone)
+  const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => {
+    setName(participant.name)
+    setPhone(participant.phone)
+  }, [participant.name, participant.phone])
+
+  useEffect(() => {
+    if (!editMode) setConfirming(false)
+  }, [editMode])
+
+  const hasHistory = hasPaymentHistory(store, participant.slot)
 
   return (
-    <div className="grid grid-cols-[2rem_1fr_1fr] gap-2 items-center py-2.5 border-b border-gray-50 last:border-0">
-      <span className="w-7 h-7 rounded-full bg-gold-100 text-gold-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-        {participant.slot}
-      </span>
-      <input
-        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gold-400 bg-gray-50 focus:bg-white transition-colors w-full"
-        value={name}
-        placeholder={`Slot ${participant.slot}`}
-        onChange={e => setName(e.target.value)}
-        onBlur={() => updateParticipant(participant.slot, { name: name.trim() })}
-      />
-      <input
-        className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gold-400 bg-gray-50 focus:bg-white transition-colors w-full"
-        value={phone}
-        placeholder="Phone"
-        inputMode="tel"
-        onChange={e => setPhone(e.target.value)}
-        onBlur={() => updateParticipant(participant.slot, { phone: phone.trim() })}
-      />
+    <div className="border-b border-gray-50 last:border-0">
+      <div className={`grid gap-2 items-center py-2.5 ${editMode ? 'grid-cols-[2rem_1fr_1fr_auto]' : 'grid-cols-[2rem_1fr_1fr]'}`}>
+        <span className="w-7 h-7 rounded-full bg-gold-100 text-gold-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+          {participant.slot}
+        </span>
+        <input
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gold-400 bg-gray-50 focus:bg-white transition-colors w-full"
+          value={name}
+          placeholder={`Slot ${participant.slot}`}
+          readOnly={editMode}
+          onChange={e => setName(e.target.value)}
+          onBlur={() => !editMode && updateParticipant(participant.slot, { name: name.trim() })}
+        />
+        <input
+          className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gold-400 bg-gray-50 focus:bg-white transition-colors w-full"
+          value={phone}
+          placeholder="Phone"
+          inputMode="tel"
+          readOnly={editMode}
+          onChange={e => setPhone(e.target.value)}
+          onBlur={() => !editMode && updateParticipant(participant.slot, { phone: phone.trim() })}
+        />
+        {editMode && (
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button
+              onClick={() => reorderMember(participant.slot, 'up')}
+              disabled={isFirst}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-25 disabled:cursor-not-allowed transition-colors text-sm"
+              aria-label="Move up"
+            >
+              ↑
+            </button>
+            <button
+              onClick={() => reorderMember(participant.slot, 'down')}
+              disabled={isLast}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-25 disabled:cursor-not-allowed transition-colors text-sm"
+              aria-label="Move down"
+            >
+              ↓
+            </button>
+            <button
+              onClick={() => setConfirming(true)}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors text-sm"
+              aria-label="Remove member"
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+
+      {confirming && (
+        <div className="mb-3 p-3 border-2 border-red-200 rounded-xl bg-red-50 space-y-2">
+          <p className="text-sm text-gray-700">
+            {hasHistory
+              ? `⚠️ ${participant.name || `Slot ${participant.slot}`} has payment history. Removing them will delete all recorded payments.`
+              : `Remove ${participant.name || `Slot ${participant.slot}`} from the roster? This cannot be undone.`}
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => removeMember(participant.slot)}
+              className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 rounded-xl text-sm transition-colors"
+            >
+              Remove
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="flex-1 bg-white border border-gray-200 text-gray-600 font-semibold py-2 rounded-xl text-sm hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 export default function RosterEditor() {
   const { store, addMember } = useStore()
+  const [editMode, setEditMode] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [newPhone, setNewPhone] = useState('')
@@ -52,9 +124,23 @@ export default function RosterEditor() {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
-        <h3 className="font-semibold text-gray-900 mb-1">Participant Roster</h3>
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-semibold text-gray-900">Participant Roster</h3>
+          <button
+            onClick={() => setEditMode(m => !m)}
+            className={`text-sm font-semibold px-3 py-1 rounded-lg transition-colors ${
+              editMode
+                ? 'bg-gold-500 text-white hover:bg-gold-600'
+                : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {editMode ? 'Done' : 'Edit Roster'}
+          </button>
+        </div>
         <p className="text-xs text-gray-500 mb-4">
-          Edit any name or phone — changes save when you tap outside the field.
+          {editMode
+            ? 'Use ↑↓ to reorder or × to remove a member.'
+            : 'Edit any name or phone — changes save when you tap outside the field.'}
         </p>
         <div className="grid grid-cols-[2rem_1fr_1fr] gap-2 mb-2 px-0.5">
           <span />
@@ -62,12 +148,19 @@ export default function RosterEditor() {
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Phone (Zelle)</span>
         </div>
         <div>
-          {store.participants.map(p => (
-            <ParticipantRow key={p.slot} participant={p} />
+          {store.participants.map((p, i) => (
+            <ParticipantRow
+              key={p.slot}
+              participant={p}
+              editMode={editMode}
+              isFirst={i === 0}
+              isLast={i === store.participants.length - 1}
+              store={store}
+            />
           ))}
         </div>
 
-        {showAddForm ? (
+        {!editMode && (showAddForm ? (
           <div className="mt-4 p-4 border-2 border-gold-200 rounded-xl bg-gold-50 space-y-3">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-gold-100 text-gold-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
@@ -111,7 +204,7 @@ export default function RosterEditor() {
           >
             + Add Member
           </button>
-        )}
+        ))}
       </div>
 
       {(() => {
