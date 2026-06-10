@@ -138,6 +138,42 @@ describe('useTandaStore', () => {
     expect(result.current.store.lastModified).toBeGreaterThan(0)
   })
 
+  it('reorderMember up swaps name and phone with the previous slot', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.updateParticipant(3, { name: 'Carol', phone: '333' }))
+    act(() => result.current.updateParticipant(4, { name: 'Dave', phone: '444' }))
+    act(() => result.current.reorderMember(4, 'up'))
+    expect(result.current.store.participants[2].name).toBe('Dave')
+    expect(result.current.store.participants[2].phone).toBe('444')
+    expect(result.current.store.participants[3].name).toBe('Carol')
+    expect(result.current.store.participants[3].phone).toBe('333')
+    expect(result.current.store.participants[2].slot).toBe(3)
+    expect(result.current.store.participants[3].slot).toBe(4)
+  })
+
+  it('reorderMember down swaps name and phone with the next slot', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.updateParticipant(3, { name: 'Carol', phone: '333' }))
+    act(() => result.current.updateParticipant(4, { name: 'Dave', phone: '444' }))
+    act(() => result.current.reorderMember(3, 'down'))
+    expect(result.current.store.participants[2].name).toBe('Dave')
+    expect(result.current.store.participants[3].name).toBe('Carol')
+  })
+
+  it('reorderMember up on first slot is a no-op', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.updateParticipant(1, { name: 'Alice', phone: '111' }))
+    act(() => result.current.reorderMember(1, 'up'))
+    expect(result.current.store.participants[0].name).toBe('Alice')
+  })
+
+  it('reorderMember down on last slot is a no-op', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.updateParticipant(12, { name: 'Last', phone: '999' }))
+    act(() => result.current.reorderMember(12, 'down'))
+    expect(result.current.store.participants[11].name).toBe('Last')
+  })
+
   it('addMember adds a 13th participant with correct slot, name, phone', () => {
     const { result } = renderHook(() => useTandaStore())
     act(() => result.current.addMember('Alice', '5551234567'))

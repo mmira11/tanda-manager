@@ -157,6 +157,22 @@ export function useTandaStore() {
     })
   }, [update])
 
+  const reorderMember = useCallback((slot, direction) => {
+    update(prev => {
+      const idx = prev.participants.findIndex(p => p.slot === slot)
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+      if (swapIdx < 0 || swapIdx >= prev.participants.length) return prev
+      const a = prev.participants[idx]
+      const b = prev.participants[swapIdx]
+      const participants = prev.participants.map((p, i) => {
+        if (i === idx)     return { ...p, name: b.name, phone: b.phone }
+        if (i === swapIdx) return { ...p, name: a.name, phone: a.phone }
+        return p
+      })
+      return { ...prev, participants }
+    })
+  }, [update])
+
   const saveConfig = useCallback((config) => {
     update(prev => ({ ...prev, config: { ...prev.config, ...config } }))
   }, [update])
@@ -188,6 +204,7 @@ export function useTandaStore() {
     togglePayout,
     updateRoundNotes,
     addMember,
+    reorderMember,
     saveConfig,
     exportData,
     importData,
