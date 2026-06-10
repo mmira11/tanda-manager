@@ -173,6 +173,33 @@ export function useTandaStore() {
     })
   }, [update])
 
+  const removeMember = useCallback((slot) => {
+    update(prev => {
+      const participants = prev.participants
+        .filter(p => p.slot !== slot)
+        .map(p => p.slot > slot ? { ...p, slot: p.slot - 1 } : p)
+
+      const rounds = prev.rounds
+        .filter(r => r.round !== slot)
+        .map(r => {
+          const payments = {}
+          Object.entries(r.payments).forEach(([k, v]) => {
+            const kNum = Number(k)
+            if (kNum === slot) return
+            payments[kNum > slot ? kNum - 1 : kNum] = v
+          })
+          return {
+            ...r,
+            round: r.round > slot ? r.round - 1 : r.round,
+            recipientSlot: r.recipientSlot > slot ? r.recipientSlot - 1 : r.recipientSlot,
+            payments,
+          }
+        })
+
+      return { ...prev, participants, rounds }
+    })
+  }, [update])
+
   const saveConfig = useCallback((config) => {
     update(prev => ({ ...prev, config: { ...prev.config, ...config } }))
   }, [update])
@@ -205,6 +232,7 @@ export function useTandaStore() {
     updateRoundNotes,
     addMember,
     reorderMember,
+    removeMember,
     saveConfig,
     exportData,
     importData,

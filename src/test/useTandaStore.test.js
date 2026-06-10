@@ -174,6 +174,61 @@ describe('useTandaStore', () => {
     expect(result.current.store.participants[11].name).toBe('Last')
   })
 
+  it('removeMember removes the participant at the given slot', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.updateParticipant(3, { name: 'Carol', phone: '333' }))
+    act(() => result.current.removeMember(3))
+    expect(result.current.store.participants).toHaveLength(11)
+    expect(result.current.store.participants.find(p => p.name === 'Carol')).toBeUndefined()
+  })
+
+  it('removeMember renumbers subsequent participant slots', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.updateParticipant(4, { name: 'Dave', phone: '444' }))
+    act(() => result.current.removeMember(3))
+    const dave = result.current.store.participants.find(p => p.name === 'Dave')
+    expect(dave.slot).toBe(3)
+    expect(result.current.store.participants[2].slot).toBe(3)
+  })
+
+  it('removeMember removes the corresponding round', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.removeMember(3))
+    expect(result.current.store.rounds).toHaveLength(11)
+    expect(result.current.store.rounds.find(r => r.round === 3)).toBeDefined()
+    expect(result.current.store.rounds.find(r => r.round === 12)).toBeUndefined()
+  })
+
+  it('removeMember renumbers subsequent round numbers and recipientSlots', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.removeMember(3))
+    const round3 = result.current.store.rounds.find(r => r.round === 3)
+    expect(round3).toBeDefined()
+    expect(round3.recipientSlot).toBe(3)
+    const round11 = result.current.store.rounds.find(r => r.round === 11)
+    expect(round11).toBeDefined()
+    expect(round11.recipientSlot).toBe(11)
+  })
+
+  it('removeMember shifts payment keys in all rounds', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.togglePayment(1, 5))
+    act(() => result.current.removeMember(3))
+    // slot 5 shifted to key 4, so payments[4] is true
+    expect(result.current.store.rounds[0].payments[4]).toBe(true)
+    // payments object has 11 keys (one slot removed from 12)
+    expect(Object.keys(result.current.store.rounds[0].payments)).toHaveLength(11)
+    // key 12 no longer exists
+    expect(result.current.store.rounds[0].payments[12]).toBeUndefined()
+  })
+
+  it('removeMember keeps payment keys for slots before the removed slot', () => {
+    const { result } = renderHook(() => useTandaStore())
+    act(() => result.current.togglePayment(1, 2))
+    act(() => result.current.removeMember(5))
+    expect(result.current.store.rounds[0].payments[2]).toBe(true)
+  })
+
   it('addMember adds a 13th participant with correct slot, name, phone', () => {
     const { result } = renderHook(() => useTandaStore())
     act(() => result.current.addMember('Alice', '5551234567'))
