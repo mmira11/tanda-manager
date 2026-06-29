@@ -96,7 +96,7 @@
         "11": true,
         "12": true
       },
-      "payoutSent": false,
+      "payoutSent": true,
       "notes": ""
     },
     {
@@ -106,13 +106,13 @@
       "recipientSlot": 3,
       "payments": {
         "1": false,
-        "2": false,
-        "3": false,
+        "2": true,
+        "3": true,
         "4": false,
         "5": false,
         "6": false,
         "7": false,
-        "8": false,
+        "8": true,
         "9": false,
         "10": false,
         "11": false,
