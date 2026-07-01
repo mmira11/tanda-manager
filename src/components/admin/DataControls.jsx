@@ -1,18 +1,19 @@
 import { useRef, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
-import { loadGitHubToken, saveGitHubToken, publishToGitHub } from '../../utils/github'
+import { usePublish } from '../../hooks/usePublish'
 
 export default function DataControls() {
   const { store, exportData, importData, resetData, saveConfig } = useStore()
   const fileRef = useRef(null)
   const [importStatus, setImportStatus] = useState(null)
-  const [githubToken, setGithubToken] = useState(loadGitHubToken)
-  const [publishStatus, setPublishStatus] = useState(null) // null | 'loading' | 'ok' | 'error'
-  const [publishError, setPublishError] = useState('')
-  const [lastPublished, setLastPublished] = useState(
-    () => parseInt(localStorage.getItem('tanda_last_published') || '0')
-  )
-  const hasUnpublishedChanges = store.lastModified > lastPublished
+  const {
+    githubToken,
+    updateToken,
+    status: publishStatus,
+    error: publishError,
+    hasUnpublishedChanges,
+    publish,
+  } = usePublish(store)
   const [editingPin, setEditingPin] = useState(false)
   const [newPin, setNewPin] = useState('')
   const [newPinConfirm, setNewPinConfirm] = useState('')
@@ -42,27 +43,6 @@ export default function DataControls() {
     }
     reader.readAsText(file)
     e.target.value = ''
-  }
-
-  function handleTokenChange(val) {
-    setGithubToken(val)
-    saveGitHubToken(val)
-  }
-
-  async function handlePublish() {
-    if (!githubToken) return
-    setPublishStatus('loading')
-    setPublishError('')
-    try {
-      await publishToGitHub(githubToken, store)
-      setPublishStatus('ok')
-      const ts = store.lastModified
-      localStorage.setItem('tanda_last_published', String(ts))
-      setLastPublished(ts)
-    } catch (err) {
-      setPublishStatus('error')
-      setPublishError(err.message)
-    }
   }
 
   function handleReset() {
@@ -152,7 +132,7 @@ export default function DataControls() {
           className="w-full border-2 border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors mb-3"
           placeholder="GitHub token (ghp_…)"
           value={githubToken}
-          onChange={e => handleTokenChange(e.target.value)}
+          onChange={e => updateToken(e.target.value)}
         />
         {hasUnpublishedChanges && (
           <p className="text-xs text-orange-600 font-semibold mb-2 flex items-center gap-1.5">
@@ -161,7 +141,7 @@ export default function DataControls() {
           </p>
         )}
         <button
-          onClick={handlePublish}
+          onClick={publish}
           disabled={!githubToken || publishStatus === 'loading'}
           className="w-full flex items-center justify-center gap-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold py-3 rounded-xl border border-indigo-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
