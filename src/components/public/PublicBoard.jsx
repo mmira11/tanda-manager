@@ -1,7 +1,7 @@
 // src/components/public/PublicBoard.jsx
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound, getDayName, getTandaSpan, formatSpanLabel, isTandaComplete } from '../../utils/rounds'
+import { getCurrentRound, getDayName, getTandaSpan, formatSpanLabel, isTandaComplete, formatRelativeTime } from '../../utils/rounds'
 import { fetchPublicData } from '../../utils/github'
 import { LABELS } from '../../data/labels'
 import { migrateStore } from '../../hooks/useTandaStore'
@@ -16,11 +16,32 @@ export default function PublicBoard() {
   const { store } = useStore()
   const [liveData, setLiveData] = useState(null)
   const [lang, setLang] = useState(() => localStorage.getItem('tanda_lang') || 'en')
+  const [lastFetched, setLastFetched] = useState(null)
 
   useEffect(() => {
-    fetchPublicData()
-      .then(data => setLiveData(migrateStore(data)))
-      .catch(() => {})
+    let cancelled = false
+    function refresh() {
+      fetchPublicData()
+        .then(data => {
+          if (cancelled) return
+          setLiveData(migrateStore(data))
+          setLastFetched(Date.now())
+        })
+        .catch(() => {})
+    }
+    refresh()
+    function onVisibility() {
+      if (!document.hidden) refresh()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    const id = setInterval(() => {
+      if (!document.hidden) refresh()
+    }, 60000)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', onVisibility)
+      clearInterval(id)
+    }
   }, [])
 
   function toggleLang() {
@@ -90,6 +111,11 @@ export default function PublicBoard() {
 
       {/* Content */}
       <div className="max-w-lg mx-auto p-4 space-y-4">
+        {lastFetched && (
+          <p className="text-center text-[11px] text-gray-400 -mb-2">
+            {formatRelativeTime(lastFetched, Date.now(), lang)}
+          </p>
+        )}
         <RecipientSpotlight
           round={round}
           recipientName={recipientName}
