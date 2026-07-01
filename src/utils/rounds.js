@@ -26,7 +26,7 @@ export function getDayName(iso, locale = 'en-US') {
 }
 
 export function getCountdownTo(isoDate) {
-  const diff = new Date(isoDate + 'T00:00:00').getTime() - Date.now()
+  const diff = new Date(isoDate + 'T20:00:00').getTime() - Date.now()
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, done: true }
   return {
     days:    Math.floor(diff / 86400000),

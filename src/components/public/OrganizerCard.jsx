@@ -2,7 +2,6 @@ import { useState } from 'react'
 
 export default function OrganizerCard({ organizerName, organizerPhone, t }) {
   if (!organizerPhone) return null
-  const digits = organizerPhone.replace(/\D/g, '')
   const initial = organizerName ? organizerName[0].toUpperCase() : '?'
   const [copied, setCopied] = useState(false)
 
@@ -22,20 +21,16 @@ export default function OrganizerCard({ organizerName, organizerPhone, t }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-gray-900">{organizerName}</p>
-          <button
-            onClick={handleCopy}
-            className="text-sm text-gray-500 hover:text-gold-600 transition-colors text-left"
-          >
-            {copied ? '✓ Copied!' : organizerPhone}
-          </button>
+          <p className="text-sm text-gray-500">{organizerPhone}</p>
         </div>
       </div>
-      <a
-        href={`zelle://${digits}`}
+      <p className="text-sm text-gray-700 mb-2">{t.zelleInstruction(organizerPhone)}</p>
+      <button
+        onClick={handleCopy}
         className="block w-full text-center bg-gold-500 hover:bg-gold-600 text-white font-semibold py-2.5 rounded-xl transition-colors text-sm"
       >
-        {t.payViaZelle}
-      </a>
+        {copied ? t.copiedConfirm : t.copyNumber}
+      </button>
     </div>
   )
 }
