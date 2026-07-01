@@ -1,8 +1,9 @@
 // src/components/public/PublicBoard.jsx
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound, getDayName } from '../../utils/rounds'
+import { getCurrentRound, getDayName, getTandaSpan, formatSpanLabel, isTandaComplete } from '../../utils/rounds'
 import { fetchPublicData } from '../../utils/github'
+import { LABELS } from '../../data/labels'
 import { migrateStore } from '../../hooks/useTandaStore'
 import { CONTRIBUTION } from '../../data/scheduleTemplate'
 import RecipientSpotlight from './RecipientSpotlight'
@@ -10,71 +11,6 @@ import CountdownTimer from './CountdownTimer'
 import PaymentStatusList from './PaymentStatusList'
 import OrganizerCard from './OrganizerCard'
 import RoundSchedule from './RoundSchedule'
-
-const LABELS = {
-  en: {
-    recipient:     "This round's recipient",
-    collection:    'Collection',
-    payout:        'Payout',
-    nextIn:        'Collection closes in',
-    days:          'days',
-    hours:         'hours',
-    mins:          'mins',
-    contributions: 'Contributions',
-    pending:       'Pending',
-    paid:          'Paid',
-    whosNext:      "Who's next",
-    round:         'Round',
-    of:            'of',
-    perPerson:     'per person',
-    collectionDay: 'Collection day is here!',
-    sendTo:        'Please send $200 to',
-    organizer:     'the organizer',
-    viaZelle:      'via Zelle',
-    today:         'today.',
-    tandaDone:     'Tanda Complete!',
-    allDone:       n => `All ${n} rounds finished. Amazing job everyone!`,
-    congrats:         'Congratulations',
-    payoutDone:       'Payout complete!',
-    contactOrganizer: 'Contact Organizer',
-    zelleInstruction: phone => `Send $200 via Zelle to ${phone}`,
-    copyNumber:       'Copy Number',
-    copiedConfirm:    'Copied!',
-    schedule:         'Round Schedule',
-    completed:        'Completed',
-  },
-  es: {
-    recipient:     'El turno de esta ronda',
-    collection:    'Cobro',
-    payout:        'Pago',
-    nextIn:        'El cobro cierra en',
-    days:          'días',
-    hours:         'horas',
-    mins:          'mins',
-    contributions: 'Aportaciones',
-    pending:       'Pendiente',
-    paid:          'Pagado',
-    whosNext:      'Quién sigue',
-    round:         'Ronda',
-    of:            'de',
-    perPerson:     'por persona',
-    collectionDay: '¡Día de cobro!',
-    sendTo:        'Por favor envía $200 a',
-    organizer:     'el organizador',
-    viaZelle:      'por Zelle',
-    today:         'hoy.',
-    tandaDone:     '¡Tanda completa!',
-    allDone:       n => `Las ${n} rondas terminaron. ¡Excelente trabajo!`,
-    congrats:         'Felicidades',
-    payoutDone:       '¡Pago completado!',
-    contactOrganizer: 'Contactar al organizador',
-    zelleInstruction: phone => `Envía $200 por Zelle al ${phone}`,
-    copyNumber:       'Copia el número',
-    copiedConfirm:    '¡Copiado!',
-    schedule:         'Calendario de rondas',
-    completed:        'Completada',
-  },
-}
 
 export default function PublicBoard() {
   const { store } = useStore()
@@ -96,14 +32,17 @@ export default function PublicBoard() {
   const data = liveData || store
   const { participants, rounds } = data
   const t = { ...LABELS[lang], allDone: LABELS[lang].allDone(rounds.length) }
+  const span = getTandaSpan(rounds)
+  const title = span ? `Tanda ${span.year}` : 'Tanda'
+  const locale = lang === 'es' ? 'es' : 'en-US'
 
   if (!data.config.initialized) {
     return (
       <div className="min-h-screen bg-gold-50 flex items-center justify-center p-8 text-center">
         <div>
           <div className="text-6xl mb-4">💰</div>
-          <h1 className="text-2xl font-bold text-gray-900">Tanda 2026</h1>
-          <p className="text-gray-500 mt-2 text-sm">Check back soon — the organizer is finishing setup.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+          <p className="text-gray-500 mt-2 text-sm">{t.setupMsg}</p>
         </div>
       </div>
     )
@@ -112,8 +51,7 @@ export default function PublicBoard() {
   const round = getCurrentRound(rounds)
   const recipient = participants.find(p => p.slot === round.recipientSlot)
   const recipientName = recipient?.name || `Slot ${round.recipientSlot}`
-  const isComplete = new Date() > new Date('2026-11-15T00:00:00')
-  const locale = lang === 'es' ? 'es' : 'en-US'
+  const isComplete = isTandaComplete(rounds)
   const collectDayName = rounds.length ? getDayName(rounds[0].collectDate, locale) : (lang === 'es' ? 'viernes' : 'Friday')
   const payoutDayName  = rounds.length ? getDayName(rounds[0].payoutDate,  locale) : (lang === 'es' ? 'sábado' : 'Saturday')
 
@@ -123,8 +61,8 @@ export default function PublicBoard() {
       <div className="bg-white border-b border-gray-100 px-4 py-4 shadow-sm">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-lg font-bold text-gray-900">Tanda 2026</h1>
-            <p className="text-xs text-gray-500">Jun 12 – Nov 14, 2026 · $200 {t.perPerson}</p>
+            <h1 className="text-lg font-bold text-gray-900">{title}</h1>
+            <p className="text-xs text-gray-500">{span ? `${formatSpanLabel(span, locale)} · ` : ''}${CONTRIBUTION} {t.perPerson}</p>
           </div>
           <div className="flex items-center gap-3">
             <button
