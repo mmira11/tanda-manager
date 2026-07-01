@@ -27,6 +27,7 @@ export default function DataControls() {
     a.download = `tanda-backup-${new Date().toISOString().slice(0, 10)}.json`
     a.click()
     URL.revokeObjectURL(url)
+    localStorage.setItem('tanda_last_backup', String(Date.now()))
   }
 
   function handleImportFile(e) {

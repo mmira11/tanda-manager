@@ -4,6 +4,7 @@ import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
 import HistoryLog from './HistoryLog'
 import DataControls from './DataControls'
+import PublishBanner from './PublishBanner'
 
 const TABS = [
   { id: 'round',    label: 'This Round', icon: '💰' },
@@ -36,6 +37,7 @@ export default function AdminDashboard() {
 
       {/* Scrollable content with bottom padding for tab bar */}
       <div className="max-w-2xl mx-auto p-4 pb-28">
+        {tab !== 'settings' && <PublishBanner onGoToSettings={() => setTab('settings')} />}
         {tab === 'round'    && <RoundPanel />}
         {tab === 'roster'   && <RosterEditor />}
         {tab === 'history'  && <HistoryLog />}
