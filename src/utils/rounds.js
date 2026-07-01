@@ -35,3 +35,36 @@ export function getCountdownTo(isoDate) {
     done: false,
   }
 }
+
+export function getTandaSpan(rounds) {
+  if (!rounds || rounds.length === 0) return null
+  const start = rounds[0].collectDate
+  const end = rounds[rounds.length - 1].payoutDate
+  return { start, end, year: new Date(end + 'T12:00:00').getFullYear() }
+}
+
+export function formatSpanLabel(span, locale = 'en-US') {
+  if (!span) return ''
+  const fmt = iso =>
+    new Date(iso + 'T12:00:00').toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+  return `${fmt(span.start)} – ${fmt(span.end)}, ${span.year}`
+}
+
+export function isTandaComplete(rounds, now = new Date()) {
+  const span = getTandaSpan(rounds)
+  if (!span) return false
+  return now > new Date(span.end + 'T23:59:59')
+}
+
+export function isPayoutWindow(round, now = new Date()) {
+  const open = new Date(round.collectDate + 'T20:00:00')
+  const close = new Date(round.payoutDate + 'T23:59:59')
+  return now >= open && now <= close
+}
+
+export function formatRelativeTime(thenMs, nowMs, lang = 'en') {
+  if (!thenMs) return ''
+  const mins = Math.floor((nowMs - thenMs) / 60000)
+  if (mins < 1) return lang === 'es' ? 'Actualizado justo ahora' : 'Updated just now'
+  return lang === 'es' ? `Actualizado hace ${mins} min` : `Updated ${mins} min ago`
+}
