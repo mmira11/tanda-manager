@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime } from '../utils/rounds'
+import { getCurrentRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot } from '../utils/rounds'
 import { ROUND_SCHEDULE } from '../data/scheduleTemplate'
 
 const base = ROUND_SCHEDULE.map(r => ({
@@ -114,5 +114,17 @@ describe('formatRelativeTime', () => {
   it('says minutes ago (en/es)', () => {
     expect(formatRelativeTime(now - 5 * 60_000, now, 'en')).toBe('Updated 5 min ago')
     expect(formatRelativeTime(now - 5 * 60_000, now, 'es')).toBe('Actualizado hace 5 min')
+  })
+})
+
+describe('resolveMySlot', () => {
+  const participants = [{ slot: 1, name: 'Ana' }, { slot: 2, name: 'Beto' }]
+  it('returns the slot number when it exists', () => {
+    expect(resolveMySlot('2', participants)).toBe(2)
+  })
+  it('returns null for missing, invalid, or stale slots', () => {
+    expect(resolveMySlot(null, participants)).toBeNull()
+    expect(resolveMySlot('abc', participants)).toBeNull()
+    expect(resolveMySlot('9', participants)).toBeNull()
   })
 })

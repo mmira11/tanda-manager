@@ -1,7 +1,7 @@
 // src/components/public/PaymentStatusList.jsx
 import { getPaidCount } from '../../utils/rounds'
 
-export default function PaymentStatusList({ participants, payments, rounds, currentRoundNum, t }) {
+export default function PaymentStatusList({ participants, payments, rounds, currentRoundNum, t, mySlot }) {
   const paidCount = getPaidCount(payments)
   const total = participants.length
   const pct = total > 0 ? Math.round((paidCount / total) * 100) : 0
@@ -36,7 +36,7 @@ export default function PaymentStatusList({ participants, payments, rounds, curr
             key={p.slot}
             className={`flex items-center gap-2 p-2.5 rounded-xl transition-colors ${
               payments[p.slot] ? 'bg-emerald-50' : 'bg-gray-50'
-            }`}
+            } ${p.slot === mySlot ? 'ring-2 ring-gold-400' : ''}`}
           >
             <span
               className={`text-xs font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 transition-colors ${

@@ -1,7 +1,7 @@
 // src/components/public/PublicBoard.jsx
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound, getDayName, getTandaSpan, formatSpanLabel, isTandaComplete, formatRelativeTime } from '../../utils/rounds'
+import { getCurrentRound, getDayName, getTandaSpan, formatSpanLabel, isTandaComplete, formatRelativeTime, resolveMySlot } from '../../utils/rounds'
 import { fetchPublicData } from '../../utils/github'
 import { LABELS } from '../../data/labels'
 import { migrateStore } from '../../hooks/useTandaStore'
@@ -11,12 +11,15 @@ import CountdownTimer from './CountdownTimer'
 import PaymentStatusList from './PaymentStatusList'
 import OrganizerCard from './OrganizerCard'
 import RoundSchedule from './RoundSchedule'
+import MyViewCard from './MyViewCard'
+import NamePicker from './NamePicker'
 
 export default function PublicBoard() {
   const { store } = useStore()
   const [liveData, setLiveData] = useState(null)
   const [lang, setLang] = useState(() => localStorage.getItem('tanda_lang') || 'en')
   const [lastFetched, setLastFetched] = useState(null)
+  const [mySlotRaw, setMySlotRaw] = useState(() => localStorage.getItem('tanda_my_slot'))
 
   useEffect(() => {
     let cancelled = false
@@ -56,6 +59,23 @@ export default function PublicBoard() {
   const span = getTandaSpan(rounds)
   const title = span ? `Tanda ${span.year}` : 'Tanda'
   const locale = lang === 'es' ? 'es' : 'en-US'
+  const mySlot = resolveMySlot(mySlotRaw, participants)
+
+  useEffect(() => {
+    if (mySlotRaw && mySlot === null) {
+      localStorage.removeItem('tanda_my_slot')
+      setMySlotRaw(null)
+    }
+  }, [mySlotRaw, mySlot])
+
+  function pickName(slot) {
+    localStorage.setItem('tanda_my_slot', String(slot))
+    setMySlotRaw(String(slot))
+  }
+  function clearMySlot() {
+    localStorage.removeItem('tanda_my_slot')
+    setMySlotRaw(null)
+  }
 
   if (!data.config.initialized) {
     return (
@@ -116,6 +136,19 @@ export default function PublicBoard() {
             {formatRelativeTime(lastFetched, Date.now(), lang)}
           </p>
         )}
+        {mySlot ? (
+          <MyViewCard
+            mySlot={mySlot}
+            participants={participants}
+            rounds={rounds}
+            currentRound={round}
+            pot={participants.length * CONTRIBUTION}
+            t={t}
+            onClear={clearMySlot}
+          />
+        ) : (
+          <NamePicker participants={participants} t={t} onPick={pickName} />
+        )}
         <RecipientSpotlight
           round={round}
           recipientName={recipientName}
@@ -136,6 +169,7 @@ export default function PublicBoard() {
           rounds={rounds}
           currentRoundNum={round.round}
           t={t}
+          mySlot={mySlot}
         />
         <OrganizerCard
           organizerName={data.config.organizerName}

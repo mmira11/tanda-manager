@@ -68,3 +68,9 @@ export function formatRelativeTime(thenMs, nowMs, lang = 'en') {
   if (mins < 1) return lang === 'es' ? 'Actualizado justo ahora' : 'Updated just now'
   return lang === 'es' ? `Actualizado hace ${mins} min` : `Updated ${mins} min ago`
 }
+
+export function resolveMySlot(saved, participants) {
+  const n = Number(saved)
+  if (!saved || !Number.isInteger(n)) return null
+  return participants.some(p => p.slot === n) ? n : null
+}
