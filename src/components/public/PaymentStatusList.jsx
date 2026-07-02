@@ -21,11 +21,17 @@ export default function PaymentStatusList({ participants, payments, rounds, curr
       </div>
 
       <div className="mb-1">
-        <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-emerald-400 rounded-full transition-all duration-700"
-            style={{ width: `${pct}%` }}
-          />
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {participants.map((p, i) => (
+            <span
+              key={p.slot}
+              className={`h-3 flex-1 min-w-[14px] rounded-full transition-colors ${
+                payments[p.slot] ? 'bg-emerald-400 dot-pop' : 'bg-gray-200'
+              }`}
+              style={payments[p.slot] ? { animationDelay: `${i * 60}ms` } : undefined}
+              title={p.name || `Slot ${p.slot}`}
+            />
+          ))}
         </div>
         <p className="text-xs text-gray-400 mt-1 text-right">{pct}%</p>
       </div>

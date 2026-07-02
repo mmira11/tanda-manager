@@ -99,7 +99,7 @@ export default function PublicBoard() {
   return (
     <div className="min-h-screen bg-gold-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 py-4 shadow-sm">
+      <div className="bg-gradient-to-r from-white via-gold-50/60 to-white border-b border-gold-100 px-4 py-4 shadow-sm">
         <div className="max-w-lg mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">{title}</h1>
@@ -136,52 +136,64 @@ export default function PublicBoard() {
             {formatRelativeTime(lastFetched, Date.now(), lang)}
           </p>
         )}
-        {mySlot ? (
-          <MyViewCard
-            mySlot={mySlot}
-            participants={participants}
-            rounds={rounds}
-            currentRound={round}
-            pot={participants.length * CONTRIBUTION}
+        <div className="card-in" style={{ animationDelay: '0ms' }}>
+          {mySlot ? (
+            <MyViewCard
+              mySlot={mySlot}
+              participants={participants}
+              rounds={rounds}
+              currentRound={round}
+              pot={participants.length * CONTRIBUTION}
+              t={t}
+              onClear={clearMySlot}
+            />
+          ) : (
+            <NamePicker participants={participants} t={t} onPick={pickName} />
+          )}
+        </div>
+        <div className="card-in" style={{ animationDelay: '70ms' }}>
+          <RecipientSpotlight
+            round={round}
+            recipientName={recipientName}
             t={t}
-            onClear={clearMySlot}
+            pot={participants.length * CONTRIBUTION}
+            totalRounds={rounds.length}
           />
-        ) : (
-          <NamePicker participants={participants} t={t} onPick={pickName} />
-        )}
-        <RecipientSpotlight
-          round={round}
-          recipientName={recipientName}
-          t={t}
-          pot={participants.length * CONTRIBUTION}
-          totalRounds={rounds.length}
-        />
-        <CountdownTimer
-          collectDate={round.collectDate}
-          isComplete={isComplete}
-          organizerName={data.config.organizerName}
-          organizerPhone={data.config.organizerPhone}
-          t={t}
-        />
-        <PaymentStatusList
-          participants={participants}
-          payments={round.payments}
-          rounds={rounds}
-          currentRoundNum={round.round}
-          t={t}
-          mySlot={mySlot}
-        />
-        <OrganizerCard
-          organizerName={data.config.organizerName}
-          organizerPhone={data.config.organizerPhone}
-          t={t}
-        />
-        <RoundSchedule
-          rounds={rounds}
-          participants={participants}
-          currentRoundNum={round.round}
-          t={t}
-        />
+        </div>
+        <div className="card-in" style={{ animationDelay: '140ms' }}>
+          <CountdownTimer
+            collectDate={round.collectDate}
+            isComplete={isComplete}
+            organizerName={data.config.organizerName}
+            organizerPhone={data.config.organizerPhone}
+            t={t}
+          />
+        </div>
+        <div className="card-in" style={{ animationDelay: '210ms' }}>
+          <PaymentStatusList
+            participants={participants}
+            payments={round.payments}
+            rounds={rounds}
+            currentRoundNum={round.round}
+            t={t}
+            mySlot={mySlot}
+          />
+        </div>
+        <div className="card-in" style={{ animationDelay: '280ms' }}>
+          <OrganizerCard
+            organizerName={data.config.organizerName}
+            organizerPhone={data.config.organizerPhone}
+            t={t}
+          />
+        </div>
+        <div className="card-in" style={{ animationDelay: '350ms' }}>
+          <RoundSchedule
+            rounds={rounds}
+            participants={participants}
+            currentRoundNum={round.round}
+            t={t}
+          />
+        </div>
         <p className="text-center text-xs text-gray-400 pb-6">
           {lang === 'en'
             ? `Send $${CONTRIBUTION} to the organizer every other ${collectDayName} · Payout every other ${payoutDayName} · ${rounds.length} rounds total`

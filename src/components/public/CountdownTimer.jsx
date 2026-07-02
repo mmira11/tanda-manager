@@ -39,9 +39,10 @@ export default function CountdownTimer({ collectDate, isComplete, organizerName,
     { value: time.hours,   label: t.hours },
     { value: time.minutes, label: t.mins },
   ]
+  const urgent = time.days === 0
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
+    <div className={`bg-white rounded-2xl shadow-sm p-4 border transition-colors ${urgent ? 'border-gold-300' : 'border-gray-100'}`}>
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 text-center">
         {t.nextIn}
       </p>
@@ -49,7 +50,10 @@ export default function CountdownTimer({ collectDate, isComplete, organizerName,
         {units.map(({ value, label }, i) => (
           <div key={i} className="flex items-center gap-3">
             <div className="text-center min-w-[3rem]">
-              <div className="text-3xl font-black text-gray-900 tabular-nums">
+              <div
+                key={value}
+                className={`text-3xl font-black tabular-nums digit-roll ${urgent ? 'text-gold-600' : 'text-gray-900'}`}
+              >
                 {String(value).padStart(2, '0')}
               </div>
               <div className="text-xs text-gray-400 font-medium mt-0.5">{label}</div>
