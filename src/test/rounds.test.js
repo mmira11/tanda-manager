@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot } from '../utils/rounds'
 import { ROUND_SCHEDULE } from '../data/scheduleTemplate'
 
 const base = ROUND_SCHEDULE.map(r => ({
@@ -9,21 +9,54 @@ const base = ROUND_SCHEDULE.map(r => ({
   notes: '',
 }))
 
+// Dates are anchored to local noon so the assertions describe a local calendar day
+// rather than a UTC instant — a bare new Date('2026-06-14') is UTC midnight, which
+// is the previous day west of Greenwich.
 describe('getCurrentRound', () => {
   it('returns round 1 on the collection date', () => {
-    expect(getCurrentRound(base, new Date('2026-06-12')).round).toBe(1)
+    expect(getCurrentRound(base, new Date('2026-06-12T12:00:00')).round).toBe(1)
   })
 
   it('returns round 1 on payout date', () => {
-    expect(getCurrentRound(base, new Date('2026-06-13')).round).toBe(1)
+    expect(getCurrentRound(base, new Date('2026-06-13T12:00:00')).round).toBe(1)
   })
 
   it('returns round 2 after round 1 payout date', () => {
-    expect(getCurrentRound(base, new Date('2026-06-14')).round).toBe(2)
+    expect(getCurrentRound(base, new Date('2026-06-14T12:00:00')).round).toBe(2)
   })
 
   it('returns round 12 after all rounds complete', () => {
-    expect(getCurrentRound(base, new Date('2026-12-01')).round).toBe(12)
+    expect(getCurrentRound(base, new Date('2026-12-01T12:00:00')).round).toBe(12)
+  })
+
+  it('stays on round 6 through its own payout day', () => {
+    expect(getCurrentRound(base, new Date('2026-08-22T09:00:00')).round).toBe(6)
+    expect(getCurrentRound(base, new Date('2026-08-22T23:00:00')).round).toBe(6)
+  })
+
+  it('advances to round 7 the day after round 6 pays out', () => {
+    expect(getCurrentRound(base, new Date('2026-08-23T09:00:00')).round).toBe(7)
+  })
+})
+
+describe('clampRound', () => {
+  it('passes through a round that exists', () => {
+    expect(clampRound(5, base)).toBe(5)
+  })
+
+  it('falls back to the current round when the number is out of range', () => {
+    const current = getCurrentRound(base).round
+    expect(clampRound(99, base)).toBe(current)
+    expect(clampRound(0, base)).toBe(current)
+  })
+
+  it('falls back to the current round for a non-number', () => {
+    expect(clampRound(undefined, base)).toBe(getCurrentRound(base).round)
+  })
+
+  it('returns null rather than throwing when there are no rounds', () => {
+    expect(clampRound(1, [])).toBeNull()
+    expect(clampRound(1, undefined)).toBeNull()
   })
 })
 

@@ -1,12 +1,15 @@
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound, getPaidCount, formatDate, getDayName } from '../../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName } from '../../utils/rounds'
 import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
 import PaymentRow from './PaymentRow'
 
-export default function RoundPanel() {
+export default function RoundPanel({ selectedRound, onSelectRound }) {
   const { store, togglePayout, updateRoundNotes } = useStore()
   const { participants, rounds } = store
-  const round = getCurrentRound(rounds)
+  const currentRound = getCurrentRound(rounds)
+  const round = rounds.find(r => r.round === clampRound(selectedRound, rounds))
+  const isCurrent = round.round === currentRound.round
+  const isPast = round.round < currentRound.round
   const paidCount = getPaidCount(round.payments)
   const total = participants.length
   const recipient = participants.find(p => p.slot === round.recipientSlot)
@@ -24,14 +27,52 @@ export default function RoundPanel() {
     reminderUrl = buildGroupSmsUrl(unpaidWithPhone, body)
   }
 
+  const firstRound = rounds[0].round
+  const lastRound = rounds[rounds.length - 1].round
+
   return (
     <div className="space-y-4">
+      {!isCurrent && (
+        <div className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5">
+          <span className="text-lg flex-shrink-0">{isPast ? '🕓' : '📅'}</span>
+          <p className="text-sm text-amber-800 font-medium flex-1">
+            {isPast
+              ? `Editing a past round — paid out ${formatDate(round.payoutDate)}`
+              : `Editing an upcoming round — pays out ${formatDate(round.payoutDate)}`}
+          </p>
+          <button
+            onClick={() => onSelectRound(currentRound.round)}
+            className="text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg transition-colors flex-shrink-0"
+          >
+            Back to current
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
         <div className="flex items-start justify-between mb-4">
           <div>
-            <span className="text-xs font-semibold text-gold-600 uppercase tracking-wider">
-              Round {round.round} of 12
-            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => onSelectRound(round.round - 1)}
+                disabled={round.round === firstRound}
+                aria-label="Previous round"
+                className="w-6 h-6 rounded-full flex items-center justify-center text-gold-600 hover:bg-gold-50 disabled:text-gray-300 disabled:hover:bg-transparent transition-colors"
+              >
+                ‹
+              </button>
+              <span className="text-xs font-semibold text-gold-600 uppercase tracking-wider">
+                Round {round.round} of {rounds.length}
+              </span>
+              <button
+                onClick={() => onSelectRound(round.round + 1)}
+                disabled={round.round === lastRound}
+                aria-label="Next round"
+                className="w-6 h-6 rounded-full flex items-center justify-center text-gold-600 hover:bg-gold-50 disabled:text-gray-300 disabled:hover:bg-transparent transition-colors"
+              >
+                ›
+              </button>
+            </div>
             <h2 className="text-xl font-bold text-gray-900 mt-0.5">
               {recipientName} receives
             </h2>
@@ -66,7 +107,7 @@ export default function RoundPanel() {
           </p>
         </div>
 
-        {!allPaid && (
+        {isCurrent && !allPaid && (
           <a
             href={reminderUrl ?? undefined}
             onClick={!reminderUrl ? e => e.preventDefault() : undefined}
@@ -109,6 +150,7 @@ export default function RoundPanel() {
         </div>
       </div>
 
+      {isCurrent && (
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-3">Reminders</h3>
         <div className="space-y-2">
@@ -166,6 +208,7 @@ export default function RoundPanel() {
           })}
         </div>
       </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-2">Round Notes</h3>
