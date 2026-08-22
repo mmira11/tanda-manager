@@ -2,11 +2,16 @@ export function getCurrentRound(rounds, today = new Date()) {
   const d = new Date(today)
   d.setHours(0, 0, 0, 0)
   const active = rounds.find(r => {
-    const p = new Date(r.payoutDate)
+    const p = new Date(r.payoutDate + 'T12:00:00')
     p.setHours(0, 0, 0, 0)
     return p >= d
   })
   return active || rounds[rounds.length - 1]
+}
+
+export function clampRound(n, rounds) {
+  if (!rounds || rounds.length === 0) return null
+  return rounds.some(r => r.round === n) ? n : getCurrentRound(rounds).round
 }
 
 export function getPaidCount(payments) {

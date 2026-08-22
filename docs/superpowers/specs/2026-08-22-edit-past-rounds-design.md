@@ -5,16 +5,37 @@
 
 ## Problem
 
-There is no way to correct a round after it has passed.
+Rounds 5 (Sergio, payout 2026-08-08) and 6 (Carolina, payout 2026-08-22) both paid
+out, but neither payout was ever marked. The public board shows both without their ✓.
+Two separate defects combine to make this unfixable through the UI.
+
+### Defect 1 — rounds roll over a day early (root cause)
+
+`getCurrentRound` parses payout dates with a bare `new Date(r.payoutDate)`. A
+date-only ISO string parses as **UTC** midnight, which in the organizer's `America/Los_Angeles`
+timezone is 17:00 the *previous* day; the following `setHours(0, 0, 0, 0)` then snaps
+it to that previous day. Every payout date is therefore compared one day early, and
+the "current" round advances a day before it should.
+
+Observed on 2026-08-22 — Round 6's own payout day — the board already highlights
+Round 7 as current. Round 6 was never the current round on the day it mattered, and
+Round 5 met the same fate on 2026-08-08. That is *why* the payouts went unmarked: the
+"This Round" tab was never showing the round the organizer was trying to close out.
+
+Every other date helper in `rounds.js` anchors to local noon (`formatDate`,
+`getDayName`, `getTandaSpan`, `isTandaComplete`, `isPayoutWindow` all use
+`iso + 'T12:00:00'`). `getCurrentRound` is the sole exception.
+
+### Defect 2 — no way back to a past round
 
 `RoundPanel.jsx` hardcodes `getCurrentRound(rounds)`, so the admin "This Round" tab
-only ever renders the round whose `payoutDate >= today`. As of 2026-08-22 that is
-Round 6. Rounds 1–5 appear only in `HistoryLog.jsx`, which renders a read-only
-`✓ Paid Out / Pending` badge with no control attached.
+only ever renders the current round. Past rounds appear only in `HistoryLog.jsx`,
+which renders a read-only `✓ Paid Out / Pending` badge with no control attached. Once
+a round rolls past, it is permanently uneditable.
 
-Concretely: Round 5 (collect 2026-08-07, payout 2026-08-08) paid out, but the payout
-was never marked. The organizer has no path in the UI to record it, and members
-looking at the public board see Round 5 without its ✓.
+Fixing Defect 1 alone would prevent recurrence but would not repair rounds 5 and 6.
+Fixing Defect 2 alone would leave the organizer manually correcting every round in
+arrears, forever. Both are in scope. (Confirmed with Miguel 2026-08-22.)
 
 ## Goal
 
@@ -46,6 +67,22 @@ Rejected alternatives:
   "the same panel, a different round."
 
 ## Changes
+
+### 0. `utils/rounds.js` — fix `getCurrentRound` date parsing
+
+Change `new Date(r.payoutDate)` to `new Date(r.payoutDate + 'T12:00:00')`, matching
+the convention every other helper in the file already uses. Verified: with the fix,
+Round 6 remains current through 2026-08-22 and rolls to Round 7 on 2026-08-23.
+
+This breaks exactly one existing test — `'returns round 2 after round 1 payout date'`
+in `test/rounds.test.js`, which passes `new Date('2026-06-14')`. That input carries
+the *same* UTC off-by-one, so the test and the bug were agreeing with each other.
+Anchoring the test's input dates to local noon (`'2026-06-14T12:00:00'`) makes all
+four cases pass. Add a regression case asserting Round 6 is current on 2026-08-22.
+
+**Visible side effect:** the public board's gold current-round highlight will move
+from Round 7 back to Round 6 once deployed. That is the correct behavior, but it is a
+change everyone will see.
 
 ### 1. `utils/rounds.js` — new helper
 
@@ -118,12 +155,17 @@ AdminDashboard [selectedRound]
 
 ## Testing
 
-- **Unit:** `clampRound` cases in `test/rounds.test.js`.
+- **Unit:** `clampRound` cases, corrected `getCurrentRound` inputs, and a regression
+  case pinning Round 6 as current on 2026-08-22 — all in `test/rounds.test.js`.
 - **Existing coverage:** the three mutators are already covered by
   `test/useTandaStore.test.js` and are unchanged.
-- **Manual, in the dev server:** navigate to Round 5, mark payout sent, confirm the
-  Reminders card is absent, confirm the amber bar appears, confirm the publish banner
-  lights up, confirm History shows Round 5 as ✓ Paid Out.
+- **Manual, in the dev server:** confirm the panel opens on Round 6 (not 7); step back
+  to Round 5; mark both payouts sent; confirm the Reminders card is absent off-current;
+  confirm the amber bar appears; confirm the publish banner lights up; confirm History
+  shows both as ✓ Paid Out.
+
+The real acceptance test is the public board: rounds 5 and 6 each showing a ✓ in
+`RoundSchedule`, and the gold highlight sitting on Round 6.
 
 Manual verification is blocked until `index.html` and `vite.config.js` are restored;
 they are deleted in the working tree and `npm run dev` cannot boot without them.

@@ -1,7 +1,7 @@
 import { useStore } from '../../context/StoreContext'
 import { getCurrentRound, getPaidCount, formatDate } from '../../utils/rounds'
 
-export default function HistoryLog() {
+export default function HistoryLog({ onEditRound }) {
   const { store } = useStore()
   const { rounds, participants } = store
   const currentRound = getCurrentRound(rounds)
@@ -36,13 +36,21 @@ export default function HistoryLog() {
                 </span>
                 <h4 className="font-bold text-gray-900">{recipientName}</h4>
               </div>
-              <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                round.payoutSent
-                  ? 'bg-emerald-100 text-emerald-700'
-                  : 'bg-amber-100 text-amber-700'
-              }`}>
-                {round.payoutSent ? '✓ Paid Out' : 'Pending'}
-              </span>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                  round.payoutSent
+                    ? 'bg-emerald-100 text-emerald-700'
+                    : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {round.payoutSent ? '✓ Paid Out' : 'Pending'}
+                </span>
+                <button
+                  onClick={() => onEditRound(round.round)}
+                  className="text-xs font-semibold text-gold-600 hover:text-gold-700 border border-gold-200 hover:bg-gold-50 px-2 py-1 rounded-lg transition-colors"
+                >
+                  Edit
+                </button>
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
               <span>Collected: <strong className="text-gray-900">{formatDate(round.collectDate)}</strong></span>

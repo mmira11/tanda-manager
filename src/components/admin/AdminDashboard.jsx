@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { getCurrentRound } from '../../utils/rounds'
 import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
 import HistoryLog from './HistoryLog'
@@ -16,6 +17,12 @@ const TABS = [
 export default function AdminDashboard() {
   const { store } = useStore()
   const [tab, setTab] = useState('round')
+  const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
+
+  const editRound = (roundNum) => {
+    setSelectedRound(roundNum)
+    setTab('round')
+  }
 
   return (
     <div className="min-h-screen bg-gold-50">
@@ -38,9 +45,9 @@ export default function AdminDashboard() {
       {/* Scrollable content with bottom padding for tab bar */}
       <div className="max-w-2xl mx-auto p-4 pb-28">
         {tab !== 'settings' && <PublishBanner onGoToSettings={() => setTab('settings')} />}
-        {tab === 'round'    && <RoundPanel />}
+        {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} />}
         {tab === 'roster'   && <RosterEditor />}
-        {tab === 'history'  && <HistoryLog />}
+        {tab === 'history'  && <HistoryLog onEditRound={editRound} />}
         {tab === 'settings' && <DataControls />}
       </div>
 
