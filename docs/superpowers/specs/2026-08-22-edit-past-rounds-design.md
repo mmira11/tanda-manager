@@ -9,7 +9,7 @@ Rounds 5 (Sergio, payout 2026-08-08) and 6 (Carolina, payout 2026-08-22) both pa
 out, but neither payout was ever marked. The public board shows both without their ✓.
 Two separate defects combine to make this unfixable through the UI.
 
-### Defect 1 — rounds roll over a day early (root cause)
+### Defect 1 — rounds roll over a day early
 
 `getCurrentRound` parses payout dates with a bare `new Date(r.payoutDate)`. A
 date-only ISO string parses as **UTC** midnight, which in the organizer's `America/Los_Angeles`
@@ -17,10 +17,20 @@ timezone is 17:00 the *previous* day; the following `setHours(0, 0, 0, 0)` then 
 it to that previous day. Every payout date is therefore compared one day early, and
 the "current" round advances a day before it should.
 
-Observed on 2026-08-22 — Round 6's own payout day — the board already highlights
-Round 7 as current. Round 6 was never the current round on the day it mattered, and
-Round 5 met the same fate on 2026-08-08. That is *why* the payouts went unmarked: the
-"This Round" tab was never showing the round the organizer was trying to close out.
+Demonstrated directly: given the real schedule, on 2026-08-22 the old code returns
+Round 7 while the corrected code returns Round 6. Covered by a regression test.
+
+**Correction (2026-08-26).** An earlier revision of this spec claimed this defect was
+the *root cause* of rounds 5 and 6 going unmarked, citing a screenshot of the public
+board showing Round 7 as current. That inference was wrong: the screenshot was taken
+on 2026-08-26, by which date Round 7 is correctly current whether or not the bug is
+present. The screenshot was never evidence of this defect.
+
+What holds: the off-by-one is real, and on a round's own payout day it does advance
+the panel early — which would have shortened the window on 2026-08-08 and 2026-08-22.
+What does not hold: any claim that this is demonstrably why those two payouts went
+unmarked. Defect 2 alone is sufficient to explain it, and is the reason they cannot be
+corrected today.
 
 Every other date helper in `rounds.js` anchors to local noon (`formatDate`,
 `getDayName`, `getTandaSpan`, `isTandaComplete`, `isPayoutWindow` all use
@@ -175,3 +185,16 @@ they are deleted in the working tree and `npm run dev` cannot boot without them.
 GitHub Pages repo — branches get no preview URL. Preview locally via `npm run dev`.
 Deploy is a manual `npm run deploy` from `main` after merge, then verify the served
 asset hash against the local build.
+
+**Deploy hazard, hit on 2026-08-26.** `tanda-data.json` lives at the root of the
+`gh-pages` branch, written there directly by `publishToGitHub`. It is not a build
+artifact. `vite build` empties `dist/` before writing, and `gh-pages -d dist` replaces
+the branch contents wholesale — so a deploy published a `dist/` without the data file
+and removed it from the branch, 404ing `fetchPublicData` and blanking the public board
+for roughly two minutes. Recovered byte-for-byte from commit `448485a`.
+
+Mitigation: `deploy` is now `gh-pages -d dist --add`, which adds files instead of
+replacing branch contents, so a deploy can no longer delete published data. Tradeoff:
+superseded asset bundles are never pruned and accumulate on `gh-pages`. That is
+invisible to users and cheaper than the failure it prevents, but the branch will need
+an occasional manual sweep.
