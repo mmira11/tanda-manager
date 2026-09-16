@@ -215,8 +215,8 @@
       "payoutDate": "2026-09-19",
       "recipientSlot": 8,
       "payments": {
-        "1": false,
-        "2": false,
+        "1": true,
+        "2": true,
         "3": true,
         "4": false,
         "5": false,
