@@ -243,11 +243,11 @@
         "4": false,
         "5": false,
         "6": true,
-        "7": false,
+        "7": true,
         "8": true,
         "9": true,
         "10": true,
-        "11": false,
+        "11": true,
         "12": true
       },
       "payoutSent": false,
