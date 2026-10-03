@@ -237,9 +237,9 @@
       "payoutDate": "2026-10-03",
       "recipientSlot": 9,
       "payments": {
-        "1": false,
-        "2": false,
-        "3": false,
+        "1": true,
+        "2": true,
+        "3": true,
         "4": true,
         "5": true,
         "6": true,
@@ -250,7 +250,7 @@
         "11": true,
         "12": true
       },
-      "payoutSent": false,
+      "payoutSent": true,
       "notes": ""
     },
     {
