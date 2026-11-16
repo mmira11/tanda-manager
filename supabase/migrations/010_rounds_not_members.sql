@@ -106,7 +106,7 @@ begin
       ) order by m.slot), '[]'::jsonb)
       from public.payments p
       join public.members m on m.id = p.member_id
-      where p.round_id = v_round.id and m.removed_at is null
+      where p.round_id = v_round.id and m.cycle_id = v_cycle.id and m.removed_at is null
     ),
     'rounds', (
       select coalesce(jsonb_agg(jsonb_build_object(

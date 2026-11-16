@@ -391,6 +391,17 @@ function assertRoundsNotMembers(database) {
   if (board.current_round?.round_number !== 1) throw new Error(`${database}: expected round 1, got ${JSON.stringify(board.current_round)}`)
   const names = board.progress.map(p => p.display_first_name).join(',')
   if (names !== 'Ana') throw new Error(`${database}: round 1 progress should list only Ana, got ${names}`)
+
+  // A stray payment row linking another cycle's member to this round must not leak their name.
+  psqlText(database, `
+    insert into public.payments (round_id, member_id, amount)
+    select r.id, (select id from public.members where access_token = 'member-token-maria1'), 10
+    from public.rounds r join public.cycles c on c.id = r.cycle_id
+    where c.name = 'Uneven Demo' and r.round_number = 1;
+  `)
+  const scoped = JSON.parse(psqlText(database, `select get_member_board('uneven-token-ana-0001');`).trim().split('\n').pop())
+  const scopedNames = scoped.progress.map(p => p.display_first_name).join(',')
+  if (scopedNames !== 'Ana') throw new Error(`${database}: progress leaked another cycle's member: ${scopedNames}`)
   console.log(`${database}: an uneven import is accepted and progress counts only the round's payment rows`)
 }
 
