@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { buildRounds, formatDate } from '../../utils/rounds'
-import { formatMoney } from '../../utils/money'
+import { formatMoney, isWholeCents } from '../../utils/money'
 
 const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors'
 const emptyMember = () => ({ name: '', phone: '' })
@@ -12,13 +12,13 @@ export function validateCycleForm(f) {
   if (!f.name.trim()) errors.name = 'Name is required'
   if (!f.startDate) errors.startDate = 'Start date is required'
   if (!Number.isInteger(f.intervalDays) || f.intervalDays < 1) errors.intervalDays = 'Whole number of days, 1 or more'
-  if (!(f.contribution > 0)) errors.contribution = 'Must be more than 0'
+  if (!isWholeCents(f.contribution)) errors.contribution = 'Enter a positive amount in dollars and cents'
   if (f.members.length < 2) errors.members = 'Add at least 2 members'
   else if (f.members.some(m => !m.name.trim())) errors.members = 'Every member needs a first name'
   return errors
 }
 
-export default function CreateCycleForm({ onImport }) {
+export default function CreateCycleForm({ onImport, onCancel }) {
   const { createCycle } = useStore()
   const [form, setForm] = useState({
     name: '', startDate: '', intervalDays: '14', contribution: '',
@@ -147,6 +147,11 @@ export default function CreateCycleForm({ onImport }) {
         {onImport && (
           <button type="button" onClick={onImport} className="w-full text-sm font-semibold text-gold-700">
             Import a backup instead
+          </button>
+        )}
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="w-full text-sm font-semibold text-gray-500">
+            Cancel
           </button>
         )}
       </form>

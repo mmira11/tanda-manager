@@ -242,8 +242,12 @@ begin
 end;
 $$;
 
--- Anon (no login) may only execute the member RPC, not read tables
+-- Anon (no login) may only execute the member RPC, not read tables.
+-- Default privileges stop future tables and functions from being granted automatically.
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke execute on functions from anon, authenticated, PUBLIC;
 revoke all on all tables in schema public from anon, authenticated;
+revoke execute on all functions in schema public from PUBLIC, anon;
 grant usage on schema public to anon, authenticated;
 grant execute on function public.get_member_board(text) to anon, authenticated;
 grant execute on function public.is_admin() to authenticated;

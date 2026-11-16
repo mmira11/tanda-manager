@@ -51,7 +51,6 @@ function readArgs(argv) {
 async function main() {
   const { file, contribution, name } = readArgs(process.argv.slice(2))
   loadEnvFile(resolve(process.cwd(), '.env.local'))
-  loadEnvFile(resolve(process.cwd(), '.env'))
 
   const raw = readFileSync(resolve(file), 'utf8')
   const plan = buildImportPlan(raw, {

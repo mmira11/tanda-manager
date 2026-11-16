@@ -13,7 +13,7 @@ const TABS = [
   { id: 'settings', label: 'Settings',   icon: '⚙️' },
 ]
 
-export default function AdminDashboard({ email }) {
+export default function AdminDashboard({ email, onNewCycle }) {
   const { store, cycles, selectCycle, error, clearError } = useStore()
   const [tab, setTab] = useState('round')
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
@@ -47,6 +47,15 @@ export default function AdminDashboard({ email }) {
                 ))}
               </select>
             )}
+            {onNewCycle && (
+              <button
+                type="button"
+                onClick={onNewCycle}
+                className="text-xs text-gold-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-50"
+              >
+                New cycle
+              </button>
+            )}
             <a
               href={import.meta.env.BASE_URL || '/'}
               className="text-xs text-gold-600 font-semibold bg-gold-50 px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-100 transition-colors"
@@ -70,8 +79,8 @@ export default function AdminDashboard({ email }) {
             <button onClick={clearError} className="text-xs font-semibold text-red-700">Dismiss</button>
           </div>
         )}
-        {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} />}
-        {tab === 'roster'   && <RosterEditor />}
+        {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} readOnly={store.config.status === 'archived'} />}
+        {tab === 'roster'   && <RosterEditor readOnly={store.config.status === 'archived'} />}
         {tab === 'history'  && <HistoryLog onEditRound={editRound} />}
         {tab === 'settings' && <DataControls email={email} />}
       </div>

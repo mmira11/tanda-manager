@@ -8,7 +8,7 @@ function hasPaymentHistory(store, slot) {
   return store.rounds.some(r => r.payments[slot] === true)
 }
 
-function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
+function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnly }) {
   const { updateParticipant, reorderMember, removeMember, regenerateLink } = useStore()
   const [name, setName] = useState(participant.name)
   const [phone, setPhone] = useState(participant.phone)
@@ -52,18 +52,18 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gold-400 bg-gray-50 focus:bg-white transition-colors w-full"
           value={name}
           placeholder={`Slot ${participant.slot}`}
-          readOnly={editMode}
+          readOnly={readOnly || editMode}
           onChange={e => setName(e.target.value)}
-          onBlur={() => !editMode && updateParticipant(participant.slot, { name: name.trim() })}
+          onBlur={() => !readOnly && !editMode && updateParticipant(participant.slot, { name: name.trim() })}
         />
         <input
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-gold-400 bg-gray-50 focus:bg-white transition-colors w-full"
           value={phone}
           placeholder="Phone"
           inputMode="tel"
-          readOnly={editMode}
+          readOnly={readOnly || editMode}
           onChange={e => setPhone(e.target.value)}
-          onBlur={() => !editMode && updateParticipant(participant.slot, { phone: phone.trim() })}
+          onBlur={() => !readOnly && !editMode && updateParticipant(participant.slot, { phone: phone.trim() })}
         />
         {editMode && (
           <div className="flex items-center gap-1 flex-shrink-0">
@@ -103,13 +103,15 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
           >
             {copied ? 'Copied' : 'Copy personal link'}
           </button>
-          <button
-            type="button"
-            onClick={regenerate}
-            className="text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50"
-          >
-            Regenerate link
-          </button>
+          {!readOnly && (
+            <button
+              type="button"
+              onClick={regenerate}
+              className="text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50"
+            >
+              Regenerate link
+            </button>
+          )}
         </div>
       )}
 
@@ -140,7 +142,7 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
   )
 }
 
-export default function RosterEditor() {
+export default function RosterEditor({ readOnly = false }) {
   const { store, addMember } = useStore()
   const [editMode, setEditMode] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
@@ -164,16 +166,18 @@ export default function RosterEditor() {
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <div className="flex items-center justify-between mb-1">
           <h3 className="font-semibold text-gray-900">Participant Roster</h3>
-          <button
-            onClick={() => setEditMode(m => !m)}
-            className={`text-sm font-semibold px-3 py-1 rounded-lg transition-colors ${
-              editMode
-                ? 'bg-gold-500 text-white hover:bg-gold-600'
-                : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {editMode ? 'Done' : 'Edit Roster'}
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setEditMode(m => !m)}
+              className={`text-sm font-semibold px-3 py-1 rounded-lg transition-colors ${
+                editMode
+                  ? 'bg-gold-500 text-white hover:bg-gold-600'
+                  : 'border border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {editMode ? 'Done' : 'Edit Roster'}
+            </button>
+          )}
         </div>
         <p className="text-xs text-gray-500 mb-4">
           {editMode
@@ -190,15 +194,16 @@ export default function RosterEditor() {
             <ParticipantRow
               key={p.slot}
               participant={p}
-              editMode={editMode}
+              editMode={editMode && !readOnly}
               isFirst={i === 0}
               isLast={i === store.participants.length - 1}
               store={store}
+              readOnly={readOnly}
             />
           ))}
         </div>
 
-        {!editMode && (showAddForm ? (
+        {!readOnly && !editMode && (showAddForm ? (
           <div className="mt-4 p-4 border-2 border-gold-200 rounded-xl bg-gold-50 space-y-3">
             <div className="flex items-center gap-2">
               <span className="w-7 h-7 rounded-full bg-gold-100 text-gold-700 text-xs font-bold flex items-center justify-center flex-shrink-0">

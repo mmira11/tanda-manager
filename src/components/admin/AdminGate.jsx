@@ -1,5 +1,5 @@
 // src/components/admin/AdminGate.jsx — Supabase session + is_admin() in front of every admin screen.
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { StoreProvider, useStore } from '../../context/StoreContext'
 import AdminDashboard from './AdminDashboard'
@@ -90,8 +90,20 @@ function NotAdmin({ email }) {
 function AdminHome({ email }) {
   const { store, loading, error, reload } = useStore()
   const [importing, setImporting] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const cycleId = store?.config?.cycleId
+  const cycleBeforeCreate = useRef(null)
+
+  useEffect(() => {
+    if (creating && cycleId && cycleId !== cycleBeforeCreate.current) setCreating(false)
+  }, [creating, cycleId])
+
+  useEffect(() => {
+    if (importing && store && !creating) setImporting(false)
+  }, [importing, store, creating])
+
   if (loading) return <Screen><p className="text-gray-500">Loading…</p></Screen>
-  if (!store && error) {
+  if (!store && error && !creating) {
     return (
       <Screen>
         <p className="text-red-600 text-sm">{error}</p>
@@ -99,7 +111,7 @@ function AdminHome({ email }) {
       </Screen>
     )
   }
-  if (!store && importing) {
+  if (importing && (!store || creating)) {
     return (
       <div className="min-h-screen bg-gold-50 p-4">
         <div className="max-w-lg mx-auto">
@@ -108,8 +120,23 @@ function AdminHome({ email }) {
       </div>
     )
   }
-  if (!store) return <CreateCycleForm onImport={() => setImporting(true)} />
-  return <AdminDashboard email={email} />
+  if (!store || creating) {
+    return (
+      <CreateCycleForm
+        onImport={() => setImporting(true)}
+        onCancel={creating ? () => setCreating(false) : undefined}
+      />
+    )
+  }
+  return (
+    <AdminDashboard
+      email={email}
+      onNewCycle={() => {
+        cycleBeforeCreate.current = cycleId
+        setCreating(true)
+      }}
+    />
+  )
 }
 
 export default function AdminGate() {

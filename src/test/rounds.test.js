@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
 
 // The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
 const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
@@ -125,13 +125,25 @@ describe('isTandaComplete', () => {
   })
 })
 
+describe('getCountdownTo', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('hits zero at 6 PM local on collection day', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-07-10T17:30:00'))
+    expect(getCountdownTo('2026-07-10')).toMatchObject({ done: false, hours: 0, minutes: 30 })
+    vi.setSystemTime(new Date('2026-07-10T18:00:00'))
+    expect(getCountdownTo('2026-07-10').done).toBe(true)
+  })
+})
+
 describe('isPayoutWindow', () => {
   const round = { collectDate: '2026-07-10', payoutDate: '2026-07-11' }
-  it('is false before collection closes (8pm collect day)', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-10T19:59:00'))).toBe(false)
+  it('is false before collection closes (6pm collect day)', () => {
+    expect(isPayoutWindow(round, new Date('2026-07-10T17:59:00'))).toBe(false)
   })
   it('is true after collection close through payout day', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-10T20:00:01'))).toBe(true)
+    expect(isPayoutWindow(round, new Date('2026-07-10T18:00:01'))).toBe(true)
     expect(isPayoutWindow(round, new Date('2026-07-11T23:00:00'))).toBe(true)
   })
   it('is false after payout day ends', () => {

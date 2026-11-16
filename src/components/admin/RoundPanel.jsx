@@ -6,7 +6,7 @@ import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSms
 import PaymentRow from './PaymentRow'
 
 // Notes save when the field loses focus, so typing doesn't write to the database per keystroke.
-function RoundNotes({ notes, onSave }) {
+function RoundNotes({ notes, onSave, readOnly }) {
   const [draft, setDraft] = useState(notes)
   useEffect(() => setDraft(notes), [notes])
   return (
@@ -15,13 +15,14 @@ function RoundNotes({ notes, onSave }) {
       rows={3}
       placeholder="Add any notes for this round..."
       value={draft}
+      readOnly={readOnly}
       onChange={e => setDraft(e.target.value)}
-      onBlur={() => draft !== notes && onSave(draft)}
+      onBlur={() => !readOnly && draft !== notes && onSave(draft)}
     />
   )
 }
 
-export default function RoundPanel({ selectedRound, onSelectRound }) {
+export default function RoundPanel({ selectedRound, onSelectRound, readOnly = false }) {
   const { store, togglePayout, updateRoundNotes } = useStore()
   const { participants, rounds } = store
   const currentRound = getCurrentRound(rounds)
@@ -143,7 +144,8 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
 
         <button
           onClick={() => togglePayout(round.round)}
-          className={`w-full py-3 rounded-xl font-semibold transition-colors text-sm ${
+          disabled={readOnly}
+          className={`w-full py-3 rounded-xl font-semibold transition-colors text-sm disabled:opacity-60 ${
             round.payoutSent
               ? 'bg-emerald-500 text-white hover:bg-emerald-600'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
@@ -165,6 +167,7 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
               roundNum={round.round}
               paid={round.payments[p.slot]}
               collectDate={round.collectDate}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -232,7 +235,7 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
 
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-2">Round Notes</h3>
-        <RoundNotes key={round.round} notes={round.notes} onSave={notes => updateRoundNotes(round.round, notes)} />
+        <RoundNotes key={round.round} notes={round.notes} readOnly={readOnly} onSave={notes => updateRoundNotes(round.round, notes)} />
       </div>
     </div>
   )

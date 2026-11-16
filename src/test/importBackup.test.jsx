@@ -4,17 +4,18 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { render, screen, renderHook, waitFor, act } from '@testing-library/react'
+import { render, screen, renderHook, waitFor, act, fireEvent } from '@testing-library/react'
 import {
   buildImportPlan,
   formatImportSummary,
   inspectBackup,
   writeImport,
 } from '../utils/importBackup'
-import { installFakeSupabase, seedCycle } from './fakeSupabase'
+import { installFakeSupabase, seedCycle, adminSession } from './fakeSupabase'
 import { useCycleStore } from '../hooks/useCycleStore'
 import { StoreProvider, useStore } from '../context/StoreContext'
 import AdminDashboard from '../components/admin/AdminDashboard'
+import AdminGate from '../components/admin/AdminGate'
 
 vi.mock('../lib/supabase', async () => (await import('./fakeSupabase')).mockModule())
 
@@ -83,8 +84,10 @@ describe('buildImportPlan', () => {
     expect(() => buildImportPlan(bad, { contribution: 40 })).toThrow(/not on the roster/)
   })
 
-  it('requires a contribution instead of assuming one', () => {
-    expect(() => buildImportPlan(backup())).toThrow(/Contribution is required/)
+  it('requires a contribution in whole cents', () => {
+    expect(() => buildImportPlan(backup())).toThrow(/whole cents/)
+    expect(() => buildImportPlan(backup(), { contribution: 87.555 })).toThrow(/whole cents/)
+    expect(buildImportPlan(backup(), { contribution: 10.5, now: '2026-01-01T00:00:00.000Z', token: sequentialTokens() }).cycle.contribution).toBe(10.5)
   })
 
   it('inspects counts without names or phones', () => {
@@ -144,13 +147,45 @@ describe('useCycleStore import and cycle switch', () => {
     expect(hook.result.current.store.config.name).toBe('Current')
   })
 
-  it('shows an archived cycle when none is active', async () => {
-    const db = seedCycle({ names: ['Ada', 'Bea'], name: 'Finished' })
+  it('shows an archived cycle and still offers New cycle', async () => {
+    const db = seedCycle({ names: ['Ada', 'Bea'], name: 'Finished', contribution: 40 })
     db.cycles[0].status = 'archived'
-    installFakeSupabase({ db })
-    const hook = renderHook(() => useCycleStore())
-    await waitFor(() => expect(hook.result.current.loading).toBe(false))
-    expect(hook.result.current.store.config).toMatchObject({ name: 'Finished', status: 'archived' })
+    installFakeSupabase({ session: adminSession, isAdmin: true, db })
+    render(<AdminGate />)
+
+    expect(await screen.findByText('Admin · Finished')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
+    await userEvent.setup().click(screen.getByText('This Round'))
+    expect(screen.getAllByRole('button', { name: 'Pending' })[0]).toBeDisabled()
+  })
+})
+
+describe('import then create', () => {
+  it('imports an archived cycle and then creates an active one', async () => {
+    const fake = installFakeSupabase({ session: adminSession, isAdmin: true })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+
+    await user.click(await screen.findByText('Import a backup instead'))
+    const file = new File([JSON.stringify(backup())], 'tanda-backup.json', { type: 'application/json' })
+    await user.upload(screen.getByLabelText('Backup file'), file)
+    await user.type(screen.getByLabelText('Contribution per person'), '40')
+    await user.click(screen.getByText('Import as archived cycle'))
+
+    expect(await screen.findByText('Admin · Tanda 2025')).toBeTruthy()
+    expect(fake.tables.cycles.map(c => c.status)).toEqual(['archived'])
+
+    await user.click(screen.getByRole('button', { name: 'New cycle' }))
+    await user.type(screen.getByLabelText('Cycle name'), 'Next Tanda')
+    fireEvent.change(screen.getByLabelText('First collection date'), { target: { value: '2027-04-02' } })
+    await user.type(screen.getByLabelText('Contribution per person ($)'), '40')
+    await user.type(screen.getByLabelText('Member 1 first name'), 'Ada')
+    await user.type(screen.getByLabelText('Member 2 first name'), 'Bea')
+    await user.click(screen.getByText('Create cycle'))
+
+    expect(await screen.findByText('Admin · Next Tanda')).toBeTruthy()
+    expect(fake.tables.cycles.map(c => c.status).sort()).toEqual(['active', 'archived'])
+    expect(screen.getByText('Round 1 of 2')).toBeTruthy()
   })
 })
 

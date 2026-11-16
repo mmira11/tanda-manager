@@ -1,7 +1,7 @@
 import { buildSmsUrl, buildWhatsAppUrl } from '../../utils/messaging'
 import { useStore } from '../../context/StoreContext'
 
-export default function PaymentRow({ participant, roundNum, paid, collectDate }) {
+export default function PaymentRow({ participant, roundNum, paid, collectDate, readOnly = false }) {
   const { store, togglePayment } = useStore()
   const { slot, name, phone } = participant
   const displayName = name || `Slot ${slot}`
@@ -21,7 +21,8 @@ export default function PaymentRow({ participant, roundNum, paid, collectDate })
 
       <button
         onClick={() => togglePayment(roundNum, slot)}
-        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex-shrink-0 ${
+        disabled={readOnly}
+        className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition-colors flex-shrink-0 disabled:opacity-60 ${
           paid
             ? 'bg-emerald-500 text-white hover:bg-emerald-600'
             : 'bg-gray-200 text-gray-600 hover:bg-gray-300'

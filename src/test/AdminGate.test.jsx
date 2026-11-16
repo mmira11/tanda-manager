@@ -55,7 +55,7 @@ describe('first run: create a cycle', () => {
 
     expect(screen.getByText('Name is required')).toBeTruthy()
     expect(screen.getByText('Start date is required')).toBeTruthy()
-    expect(screen.getByText('Must be more than 0')).toBeTruthy()
+    expect(screen.getByText('Enter a positive amount in dollars and cents')).toBeTruthy()
     expect(fake.tables.cycles).toHaveLength(0)
   })
 

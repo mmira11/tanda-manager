@@ -1,6 +1,8 @@
 // Maps an old localStorage / Settings JSON export into one archived cycle.
 // PIN and any GitHub token are ignored. Callers must log counts only — never names or phones.
 
+import { isWholeCents } from './money.js'
+
 export class ImportError extends Error {
   constructor(message) {
     super(message)
@@ -132,7 +134,7 @@ export function buildImportPlan(raw, options = {}) {
   const parsed = parseBackup(raw)
   const { config, participants, rounds, startDate } = parsed
   const contribution = Number(options.contribution ?? config.contribution)
-  if (!(contribution > 0)) fail('Contribution is required')
+  if (!isWholeCents(contribution)) fail('Contribution must be a positive amount in whole cents')
 
   const intervalDays = Number.isInteger(options.intervalDays) && options.intervalDays > 0
     ? options.intervalDays

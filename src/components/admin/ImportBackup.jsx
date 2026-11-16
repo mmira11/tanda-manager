@@ -23,7 +23,12 @@ export default function ImportBackup({ onCancel }) {
     setRaw('')
     if (!file) return
     try {
-      const text = await file.text()
+      const text = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => reject(reader.error)
+        reader.readAsText(file)
+      })
       const info = inspectBackup(text)
       setRaw(text)
       setPreview(info)

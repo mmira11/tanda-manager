@@ -32,7 +32,7 @@ Append inside the `describe('messaging', ...)` block in `src/test/messaging.test
 
 ```js
   it('buildReminderBody includes round number, date, and organizer phone', () => {
-    const body = buildReminderBody(3, 'Fri, Jun 12', '(209) 362-0911')
+    const body = buildReminderBody(3, 'Fri, Jun 12', '(555) 010-0002')
     expect(body).toContain('Round 3')
     expect(body).toContain('Fri, Jun 12')
     expect(body).toContain('209')

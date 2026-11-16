@@ -31,7 +31,7 @@ export function getDayName(iso, locale = 'en-US') {
 }
 
 export function getCountdownTo(isoDate) {
-  const diff = new Date(isoDate + 'T20:00:00').getTime() - Date.now()
+  const diff = new Date(isoDate + 'T18:00:00').getTime() - Date.now()
   if (diff <= 0) return { days: 0, hours: 0, minutes: 0, done: true }
   return {
     days:    Math.floor(diff / 86400000),
@@ -72,7 +72,7 @@ export function historyRounds(rounds, { status, today = new Date() } = {}) {
 }
 
 export function isPayoutWindow(round, now = new Date()) {
-  const open = new Date(round.collectDate + 'T20:00:00')
+  const open = new Date(round.collectDate + 'T18:00:00')
   const close = new Date(round.payoutDate + 'T23:59:59')
   return now >= open && now <= close
 }

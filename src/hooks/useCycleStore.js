@@ -274,6 +274,10 @@ export function useCycleStore() {
   // form: { name, startDate, intervalDays, contribution, organizerName, organizerPhone,
   //         members: [{ name, phone }] in payout order }. Throws on failure.
   const createCycle = useCallback(async (form) => {
+    const existingActive = check(await supabase.from('cycles').select('id').eq('status', 'active').limit(1))
+    if (existingActive.length > 0) {
+      throw new Error('An active cycle already exists. Archive it before starting another.')
+    }
     const [cycle] = check(await supabase.from('cycles').insert({
       name: form.name.trim(),
       start_date: form.startDate,
@@ -307,7 +311,7 @@ export function useCycleStore() {
       await supabase.from('cycles').delete().eq('id', cycle.id)
       throw e
     }
-    await load()
+    await load(cycle.id)
   }, [load])
 
   return {
