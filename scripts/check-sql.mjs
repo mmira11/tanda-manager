@@ -34,24 +34,34 @@ create or replace function auth.uid() returns uuid language sql stable as $$ sel
 `
 
 function psqlArgs(database, tuplesOnly) {
-  const args = ['-v', 'ON_ERROR_STOP=1', '-d', database]
+  const args = ['-v', 'ON_ERROR_STOP=1']
   if (tuplesOnly) args.push('-tA')
   if (adminUrl) {
+    // Pass host and port as flags. A bare -d name after a URI makes psql
+    // ignore the URI and dial the local Unix socket.
     const url = new URL(adminUrl)
-    url.pathname = `/${database}`
-    return { cmd: 'psql', args: [url.toString(), ...args] }
+    args.push(
+      '--host', url.hostname,
+      '--port', url.port || '5432',
+      '--username', decodeURIComponent(url.username || 'postgres'),
+      '--dbname', database,
+    )
+    const env = { ...process.env }
+    if (url.password) env.PGPASSWORD = decodeURIComponent(url.password)
+    return { cmd: 'psql', args, env }
   }
-  return { cmd: 'sudo', args: ['-u', 'postgres', 'psql', ...args] }
+  args.push('--dbname', database)
+  return { cmd: 'sudo', args: ['-u', 'postgres', 'psql', ...args], env: process.env }
 }
 
 function psql(database, file) {
-  const { cmd, args } = psqlArgs(database, false)
-  execFileSync(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'], input: readFileSync(file) })
+  const { cmd, args, env } = psqlArgs(database, false)
+  execFileSync(cmd, args, { stdio: ['pipe', 'inherit', 'inherit'], input: readFileSync(file), env })
 }
 
 function psqlText(database, sql) {
-  const { cmd, args } = psqlArgs(database, true)
-  return execFileSync(cmd, args, { encoding: 'utf8', input: sql })
+  const { cmd, args, env } = psqlArgs(database, true)
+  return execFileSync(cmd, args, { encoding: 'utf8', input: sql, env })
 }
 
 function recreate(name) {
