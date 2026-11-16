@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { useLang } from '../../context/LangContext'
 import { formatMoney } from '../../utils/money'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo, formatCollectionCountdown } from '../../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo, formatCollectionCountdown, inRound } from '../../utils/rounds'
 import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
 import PaymentRow from './PaymentRow'
 
@@ -42,7 +42,9 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
   const isCurrent = round.round === currentRound.round
   const isPast = round.round < currentRound.round
   const paidCount = getPaidCount(round.payments)
-  const total = participants.length
+  // N9: this round's payers come from its payment rows, not the whole roster.
+  const payers = inRound(round, participants)
+  const total = payers.length
   const recipient = round.needsRecipient ? null : participants.find(p => p.slot === round.recipientSlot)
   const recipientName = recipient?.name || (round.needsRecipient ? 'Needs a recipient' : `Slot ${round.recipientSlot}`)
 
@@ -51,7 +53,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
   const contribution = store.config.contribution
   const timeZone = store.config.timezone
   const pot = formatMoney(contribution * total)
-  const unpaidWithPhone = participants.filter(p => !round.payments[p.slot] && p.phone?.trim())
+  const unpaidWithPhone = payers.filter(p => !round.payments[p.slot] && p.phone?.trim())
 
   let reminderUrl = null
   if (unpaidWithPhone.length === 1) {
@@ -187,7 +189,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-3">Collection Status</h3>
         <div className="space-y-2">
-          {participants.map(p => (
+          {payers.map(p => (
             <PaymentRow
               key={p.slot}
               participant={p}
@@ -204,7 +206,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-3">Reminders</h3>
         <div className="space-y-2">
-          {participants.map(p => {
+          {payers.map(p => {
             const isPaid = round.payments[p.slot]
             const displayName = p.name || `Slot ${p.slot}`
             const sms12 = p.phone ? buildTimedReminderSmsUrl(p.phone, displayName, orgPhone, '12pm', contribution) : null

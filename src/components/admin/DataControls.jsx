@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { supabase } from '../../lib/supabase'
-import { formatDate } from '../../utils/rounds'
+import { formatDate, getCurrentRound, inRound } from '../../utils/rounds'
 import { useLang } from '../../context/LangContext'
 import { formatMoney } from '../../utils/money'
 import ImportBackup from './ImportBackup'
@@ -54,7 +54,7 @@ export default function DataControls({ email }) {
           {row('First collection', formatDate(config.startDate, locale))}
           {row('Days between rounds', config.intervalDays)}
           {row('Contribution', `${formatMoney(config.contribution)} per person`)}
-          {row('Pot', `${formatMoney(config.contribution * participants.length)} per round`)}
+          {row('Pot this round', formatMoney(config.contribution * inRound(getCurrentRound(store.rounds), participants).length))}
         </div>
       </div>
 
