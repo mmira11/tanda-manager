@@ -239,6 +239,39 @@ function assertAtomicImport(database) {
   console.log(`${database}: import_cycle is atomic: happy path archived, halfway failure left nothing`)
 }
 
+// N7: revoked links and links for cycles archived 30+ days ago return "not found".
+// Fake cycles in 2097, fake tokens. Runs after assertArchiveLock, which created the
+// active Familia Demo cycle with member-token-maria1 and member-token-rosa01.
+function assertLinkRevokeExpiry(database) {
+  const board = token => psqlText(database, `select get_member_board('${token}') is not null;`).trim()
+  const notFound = token => {
+    const error = psqlFails(database, `select get_member_board('${token}');`)
+    if (!/not found/.test(error)) throw new Error(`${database}: ${token} failed for the wrong reason: ${error}`)
+  }
+
+  if (board('member-token-maria1') !== 't') throw new Error(`${database}: active link stopped working`)
+  psqlText(database, `update public.members set token_revoked_at = now() where access_token = 'member-token-rosa01';`)
+  notFound('member-token-rosa01')
+  if (board('member-token-maria1') !== 't') throw new Error(`${database}: revoking Rosa broke Maria's link`)
+  psqlText(database, `update public.members set token_revoked_at = null, access_token = 'member-token-rosa02' where access_token = 'member-token-rosa01';`)
+  if (board('member-token-rosa02') !== 't') throw new Error(`${database}: regenerated link does not work`)
+
+  psqlText(database, `
+    insert into public.cycles (id, name, start_date, contribution, status, archived_at) values
+      ('dddddddd-0000-0000-0000-000000000001', 'Recent Archive', '2097-01-01', 10, 'archived', now() - interval '29 days'),
+      ('dddddddd-0000-0000-0000-000000000002', 'Old Archive',    '2097-02-01', 10, 'archived', now() - interval '31 days'),
+      ('dddddddd-0000-0000-0000-000000000003', 'Undated Archive','2097-03-01', 10, 'archived', null);
+    insert into public.members (cycle_id, slot, display_first_name, access_token) values
+      ('dddddddd-0000-0000-0000-000000000001', 1, 'Lia', 'expiry-token-recent1'),
+      ('dddddddd-0000-0000-0000-000000000002', 1, 'Noe', 'expiry-token-old0001'),
+      ('dddddddd-0000-0000-0000-000000000003', 1, 'Ivo', 'expiry-token-undated');
+  `)
+  if (board('expiry-token-recent1') !== 't') throw new Error(`${database}: link expired before 30 days`)
+  notFound('expiry-token-old0001')
+  notFound('expiry-token-undated')
+  console.log(`${database}: member links revoke, regenerate, and expire 30 days after archive`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -248,6 +281,7 @@ applyFile(fresh, join(root, 'supabase', 'schema.sql'))
 applyMigrations(fresh)
 assertArchiveLock(fresh)
 assertAtomicImport(fresh)
+assertLinkRevokeExpiry(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -257,6 +291,7 @@ applyFile(legacy, oldSchema)
 applyMigrations(legacy, { skip: ['002_review_fixes.sql'] })
 assertArchiveLock(legacy)
 assertAtomicImport(legacy)
+assertLinkRevokeExpiry(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
