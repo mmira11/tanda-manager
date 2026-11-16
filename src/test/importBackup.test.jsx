@@ -51,6 +51,20 @@ function backup(overrides = {}) {
   }
 }
 
+describe('buildImportPlan schedule checks (N11)', () => {
+  it('refuses a backup whose payout comes before its collection date', () => {
+    const bad = backup()
+    bad.rounds[1].payoutDate = '2025-03-20'
+    expect(() => buildImportPlan(bad, { contribution: 40 })).toThrow(/Round 2 pays out before it collects/)
+  })
+  it('refuses a backup whose rounds are out of date order', () => {
+    const bad = backup()
+    bad.rounds[1].collectDate = '2025-03-07'
+    bad.rounds[1].payoutDate = '2025-03-08'
+    expect(() => buildImportPlan(bad, { contribution: 40 })).toThrow(/Round 2 collects on or before round 1/)
+  })
+})
+
 describe('buildImportPlan', () => {
   it('maps the old export into an archived cycle and drops pin and github token', () => {
     const plan = buildImportPlan(backup(), { contribution: 40, now: '2026-01-01T00:00:00.000Z' })

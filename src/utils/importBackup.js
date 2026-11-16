@@ -2,6 +2,7 @@
 // PIN and any GitHub token are ignored. Callers must log counts only — never names or phones.
 
 import { isWholeCents } from './money.js'
+import { validateSchedule } from './rounds.js'
 
 export class ImportError extends Error {
   constructor(message) {
@@ -93,6 +94,8 @@ function parseBackup(raw) {
 
   participants.sort((a, b) => a.slot - b.slot)
   rounds.sort((a, b) => a.round - b.round)
+  const scheduleError = validateSchedule(rounds)
+  if (scheduleError) fail(scheduleError)
 
   const config = data.config && typeof data.config === 'object' && !Array.isArray(data.config) ? data.config : {}
   let intervalDays = null

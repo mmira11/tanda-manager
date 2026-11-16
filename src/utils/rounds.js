@@ -143,6 +143,28 @@ export function addDays(iso, days) {
   return d.toISOString().slice(0, 10)
 }
 
+// Mirrors migration 009. rounds: [{ round, collectDate, payoutDate }] ('YYYY-MM-DD').
+// Returns an error message, or null when payout ≥ collect and collect dates rise with round.
+export function validateSchedule(rounds) {
+  const ordered = [...rounds].sort((a, b) => a.round - b.round)
+  for (const [i, r] of ordered.entries()) {
+    if (r.payoutDate < r.collectDate) return `Round ${r.round} pays out before it collects`
+    const prev = ordered[i - 1]
+    if (prev && r.collectDate <= prev.collectDate) return `Round ${r.round} collects on or before round ${prev.round}`
+  }
+  return null
+}
+
+export function isValidTimeZone(timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone.includes('/')) return false
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone })
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Round N collects on start + (N-1) × interval and pays out the next day.
 export function buildRounds(startDate, intervalDays, count) {
   return Array.from({ length: count }, (_, i) => {
