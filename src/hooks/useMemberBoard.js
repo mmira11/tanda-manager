@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { BOARD_CHANNEL } from '../lib/boardSync'
 
 const POLL_MS = 10000
 
@@ -47,17 +46,11 @@ export function useMemberBoard(token) {
     }
     document.addEventListener('visibilitychange', onVisible)
 
-    let channel
-    if (typeof supabase.channel === 'function') {
-      channel = supabase.channel(BOARD_CHANNEL)
-      channel.on?.('broadcast', { event: 'changed' }, () => { load() })
-      channel.subscribe?.()
-    }
-
+    // No Realtime channel (N8): the old public broadcast channel let anyone send or listen.
+    // Polling every 10 s plus a refetch when the tab regains focus keeps the page current.
     return () => {
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVisible)
-      if (channel) supabase.removeChannel?.(channel)
     }
   }, [load])
 

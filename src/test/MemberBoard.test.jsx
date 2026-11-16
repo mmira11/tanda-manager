@@ -116,6 +116,22 @@ describe('member board', () => {
     expect(screen.queryByText('5550100199')).toBeNull()
   })
 
+  it('never opens a Realtime channel and refetches when the tab regains focus (N8)', async () => {
+    supabase.rpc
+      .mockResolvedValueOnce({ data: board({ paid: false }), error: null })
+      .mockResolvedValue({ data: board({ paid: true }), error: null })
+    renderBoard()
+    expect(await screen.findByText('Pending')).toBeTruthy()
+
+    await act(async () => {
+      document.dispatchEvent(new Event('visibilitychange'))
+      await Promise.resolve()
+    })
+
+    expect(await screen.findByText('Paid! ✅')).toBeTruthy()
+    expect(supabase.channel).not.toHaveBeenCalled()
+  })
+
   it('says the tanda is complete for an archived cycle', async () => {
     supabase.rpc.mockResolvedValue({ data: board({ status: 'archived', paid: true }), error: null })
     renderBoard()
