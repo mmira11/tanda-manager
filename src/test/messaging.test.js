@@ -3,7 +3,7 @@ import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody } fr
 
 describe('messaging', () => {
   it('buildSmsUrl targets correct number and includes name in body', () => {
-    const url = buildSmsUrl('(510) 230-1571', 'Edy', '(209) 362-0911')
+    const url = buildSmsUrl('(510) 230-1571', 'Edy', '(209) 362-0911', '2026-06-12', 200)
     expect(url).toMatch(/^sms:5102301571/)
     expect(url).toContain('Edy')
     expect(url).toContain('2093620911')
@@ -60,7 +60,7 @@ describe('messaging', () => {
   })
 
   it('buildReminderBody includes round number, date, and organizer phone', () => {
-    const body = buildReminderBody(3, 'Fri, Jun 12', '(209) 362-0911')
+    const body = buildReminderBody(3, 'Fri, Jun 12', '(209) 362-0911', 200)
     expect(body).toContain('Round 3')
     expect(body).toContain('Fri, Jun 12')
     expect(body).toContain('209')
@@ -69,8 +69,14 @@ describe('messaging', () => {
   })
 
   it('buildReminderBody falls back to "the organizer" when phone is empty', () => {
-    const body = buildReminderBody(1, 'Fri, Jun 12', '')
+    const body = buildReminderBody(1, 'Fri, Jun 12', '', 200)
     expect(body).toContain('the organizer')
     expect(body).not.toContain('undefined')
+  })
+
+  it('uses the cycle contribution instead of a fixed amount', () => {
+    expect(buildReminderBody(1, 'Fri, Jun 12', '5550000000', 150)).toContain('$150')
+    expect(decodeURIComponent(buildWhatsAppUrl('5550000001', 'Ana', '5550000000', '2026-06-12', 87.5)))
+      .toContain('$87.50')
   })
 })

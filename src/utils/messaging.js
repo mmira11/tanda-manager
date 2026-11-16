@@ -1,3 +1,5 @@
+import { formatMoney } from './money'
+
 function stripPhone(phone) {
   return phone.replace(/\D/g, '')
 }
@@ -31,45 +33,45 @@ function getCollectDayName(collectDate) {
   return new Date(collectDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-export function buildSmsUrl(recipientPhone, recipientName, organizerPhone, collectDate) {
+export function buildSmsUrl(recipientPhone, recipientName, organizerPhone, collectDate, amount) {
   const to = stripPhone(recipientPhone)
   const orgNum = stripPhone(organizerPhone)
   const day = getCollectDayName(collectDate)
   const body = encodeURIComponent(
-    `Hi ${recipientName}, friendly reminder that Tanda collection is this ${day}. Please send $200 to ${orgNum} via Zelle. Thank you!`
+    `Hi ${recipientName}, friendly reminder that Tanda collection is this ${day}. Please send ${formatMoney(amount)} to ${orgNum} via Zelle. Thank you!`
   )
   return `sms:${to}?body=${body}`
 }
 
-export function buildReminderBody(roundNum, formattedDate, organizerPhone) {
+export function buildReminderBody(roundNum, formattedDate, organizerPhone, amount) {
   const org = organizerPhone?.trim() || 'the organizer'
-  return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send $200 to ${org} via Zelle. Thank you!`
+  return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send ${formatMoney(amount)} to ${org} via Zelle. Thank you!`
 }
 
-export function buildWhatsAppUrl(recipientPhone, recipientName, organizerPhone, collectDate) {
+export function buildWhatsAppUrl(recipientPhone, recipientName, organizerPhone, collectDate, amount) {
   const to = '1' + stripPhone(recipientPhone)
   const orgNum = stripPhone(organizerPhone)
   const day = getCollectDayName(collectDate)
   const body = encodeURIComponent(
-    `Hi ${recipientName}, friendly reminder that Tanda collection is this ${day}. Please send $200 to ${orgNum} via Zelle. Thank you!`
+    `Hi ${recipientName}, friendly reminder that Tanda collection is this ${day}. Please send ${formatMoney(amount)} to ${orgNum} via Zelle. Thank you!`
   )
   return `https://wa.me/${to}?text=${body}`
 }
 
-function timedReminderBody(name, orgPhone, type) {
+function timedReminderBody(name, orgPhone, type, amount) {
   const org = formatPhoneDisplay(orgPhone)
   if (type === '12pm') {
-    return `Hi ${name}, friendly reminder that Tanda collection closes TODAY at 8 PM. Please send $200 via Zelle to ${org} before the cutoff. Gracias! 🙏`
+    return `Hi ${name}, friendly reminder that Tanda collection closes TODAY at 8 PM. Please send ${formatMoney(amount)} via Zelle to ${org} before the cutoff. Gracias! 🙏`
   }
-  return `Hi ${name}, last call — Tanda collection closes in 1 hour at 8 PM tonight. Please send $200 via Zelle to ${org} now. Gracias! 🙏`
+  return `Hi ${name}, last call — Tanda collection closes in 1 hour at 8 PM tonight. Please send ${formatMoney(amount)} via Zelle to ${org} now. Gracias! 🙏`
 }
 
-export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organizerPhone, type) {
+export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organizerPhone, type, amount) {
   const to = stripPhone(recipientPhone)
-  return `sms:${to}?body=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type))}`
+  return `sms:${to}?body=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type, amount))}`
 }
 
-export function buildTimedReminderWhatsAppUrl(recipientPhone, recipientName, organizerPhone, type) {
+export function buildTimedReminderWhatsAppUrl(recipientPhone, recipientName, organizerPhone, type, amount) {
   const to = '1' + stripPhone(recipientPhone)
-  return `https://wa.me/${to}?text=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type))}`
+  return `https://wa.me/${to}?text=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type, amount))}`
 }

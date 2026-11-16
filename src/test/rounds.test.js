@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot } from '../utils/rounds'
-import { ROUND_SCHEDULE } from '../data/scheduleTemplate'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot, addDays, buildRounds } from '../utils/rounds'
+
+// The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
+const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
+  round: r.roundNumber, collectDate: r.collectDate, payoutDate: r.payoutDate, recipientSlot: r.roundNumber,
+}))
 
 const base = ROUND_SCHEDULE.map(r => ({
   ...r,
@@ -147,6 +151,22 @@ describe('formatRelativeTime', () => {
   it('says minutes ago (en/es)', () => {
     expect(formatRelativeTime(now - 5 * 60_000, now, 'en')).toBe('Updated 5 min ago')
     expect(formatRelativeTime(now - 5 * 60_000, now, 'es')).toBe('Actualizado hace 5 min')
+  })
+})
+
+describe('addDays / buildRounds', () => {
+  it('adds calendar days across month and DST boundaries', () => {
+    expect(addDays('2026-10-30', 3)).toBe('2026-11-02')
+    expect(addDays('2026-03-07', 1)).toBe('2026-03-08')
+  })
+  it('reproduces the 2026 schedule from start date and interval', () => {
+    expect(ROUND_SCHEDULE[0]).toMatchObject({ collectDate: '2026-06-12', payoutDate: '2026-06-13' })
+    expect(ROUND_SCHEDULE[11]).toMatchObject({ collectDate: '2026-11-13', payoutDate: '2026-11-14' })
+  })
+  it('builds one round per member at any interval', () => {
+    const rounds = buildRounds('2027-01-08', 7, 5)
+    expect(rounds.map(r => r.collectDate)).toEqual(['2027-01-08', '2027-01-15', '2027-01-22', '2027-01-29', '2027-02-05'])
+    expect(rounds[4]).toEqual({ roundNumber: 5, collectDate: '2027-02-05', payoutDate: '2027-02-06' })
   })
 })
 

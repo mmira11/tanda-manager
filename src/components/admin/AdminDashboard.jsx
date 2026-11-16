@@ -5,7 +5,6 @@ import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
 import HistoryLog from './HistoryLog'
 import DataControls from './DataControls'
-import PublishBanner from './PublishBanner'
 
 const TABS = [
   { id: 'round',    label: 'This Round', icon: '💰' },
@@ -14,8 +13,8 @@ const TABS = [
   { id: 'settings', label: 'Settings',   icon: '⚙️' },
 ]
 
-export default function AdminDashboard() {
-  const { store } = useStore()
+export default function AdminDashboard({ email }) {
+  const { store, error, clearError } = useStore()
   const [tab, setTab] = useState('round')
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
 
@@ -31,7 +30,7 @@ export default function AdminDashboard() {
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Tanda Manager</h1>
-            <p className="text-xs text-gray-500">Admin · {store.config.organizerName}</p>
+            <p className="text-xs text-gray-500">Admin · {store.config.name}</p>
           </div>
           <a
             href="/tanda-manager/"
@@ -44,11 +43,16 @@ export default function AdminDashboard() {
 
       {/* Scrollable content with bottom padding for tab bar */}
       <div className="max-w-2xl mx-auto p-4 pb-28">
-        {tab !== 'settings' && <PublishBanner onGoToSettings={() => setTab('settings')} />}
+        {error && (
+          <div role="alert" className="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+            <p className="text-sm text-red-700 flex-1">Couldn't save: {error}</p>
+            <button onClick={clearError} className="text-xs font-semibold text-red-700">Dismiss</button>
+          </div>
+        )}
         {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} />}
         {tab === 'roster'   && <RosterEditor />}
         {tab === 'history'  && <HistoryLog onEditRound={editRound} />}
-        {tab === 'settings' && <DataControls />}
+        {tab === 'settings' && <DataControls email={email} />}
       </div>
 
       {/* Fixed bottom tab bar */}

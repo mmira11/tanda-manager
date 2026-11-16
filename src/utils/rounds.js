@@ -79,3 +79,18 @@ export function resolveMySlot(saved, participants) {
   if (!saved || !Number.isInteger(n)) return null
   return participants.some(p => p.slot === n) ? n : null
 }
+
+// Calendar-day math on 'YYYY-MM-DD' strings, done in UTC so DST never shifts the date.
+export function addDays(iso, days) {
+  const d = new Date(iso + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// Round N collects on start + (N-1) × interval and pays out the next day.
+export function buildRounds(startDate, intervalDays, count) {
+  return Array.from({ length: count }, (_, i) => {
+    const collectDate = addDays(startDate, i * intervalDays)
+    return { roundNumber: i + 1, collectDate, payoutDate: addDays(collectDate, 1) }
+  })
+}

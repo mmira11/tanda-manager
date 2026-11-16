@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { buildGroupSmsUrl } from '../../utils/messaging'
+import { formatMoney } from '../../utils/money'
 
 function hasPaymentHistory(store, slot) {
   return store.rounds.some(r => r.payments[slot] === true)
@@ -210,7 +211,7 @@ export default function RosterEditor() {
       {(() => {
         const withPhone = store.participants.filter(p => p.phone?.trim())
         const orgPhone = store.config?.organizerPhone || ''
-        const body = `Welcome to Tanda 2026! 🎉 Collection is every Friday — please send $200 to ${orgPhone || 'the organizer'} via Zelle on collection day. Looking forward to a great tanda with everyone!`
+        const body = `Welcome to ${store.config.name}! 🎉 Collection is every ${store.config.intervalDays} days — please send ${formatMoney(store.config.contribution)} to ${orgPhone || 'the organizer'} via Zelle on collection day. Looking forward to a great tanda with everyone!`
         const groupUrl = buildGroupSmsUrl(withPhone, body)
         return (
           <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
@@ -241,7 +242,7 @@ export default function RosterEditor() {
 
       <div className="bg-gold-50 border border-gold-200 rounded-2xl p-4 text-sm text-gray-700">
         <strong>Tip:</strong> Phone numbers are used for SMS and WhatsApp reminders only.
-        They're stored on this device and never shared.
+        They're stored in the tanda database, visible only to signed-in admins, and never shown to members.
       </div>
     </div>
   )

@@ -5,8 +5,9 @@ export default function PaymentRow({ participant, roundNum, paid, collectDate })
   const { store, togglePayment } = useStore()
   const { slot, name, phone } = participant
   const displayName = name || `Slot ${slot}`
-  const smsUrl = phone ? buildSmsUrl(phone, displayName, store.config.organizerPhone, collectDate) : null
-  const waUrl  = phone ? buildWhatsAppUrl(phone, displayName, store.config.organizerPhone, collectDate) : null
+  const { organizerPhone, contribution } = store.config
+  const smsUrl = phone ? buildSmsUrl(phone, displayName, organizerPhone, collectDate, contribution) : null
+  const waUrl  = phone ? buildWhatsAppUrl(phone, displayName, organizerPhone, collectDate, contribution) : null
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl transition-colors ${paid ? 'bg-emerald-50' : 'bg-gray-50'}`}>

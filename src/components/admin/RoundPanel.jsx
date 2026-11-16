@@ -1,7 +1,25 @@
+import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { formatMoney } from '../../utils/money'
 import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName } from '../../utils/rounds'
 import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
 import PaymentRow from './PaymentRow'
+
+// Notes save when the field loses focus, so typing doesn't write to the database per keystroke.
+function RoundNotes({ notes, onSave }) {
+  const [draft, setDraft] = useState(notes)
+  useEffect(() => setDraft(notes), [notes])
+  return (
+    <textarea
+      className="w-full border-2 border-gray-100 rounded-xl p-3 text-sm resize-none focus:outline-none focus:border-gold-400 bg-gray-50 transition-colors"
+      rows={3}
+      placeholder="Add any notes for this round..."
+      value={draft}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={() => draft !== notes && onSave(draft)}
+    />
+  )
+}
 
 export default function RoundPanel({ selectedRound, onSelectRound }) {
   const { store, togglePayout, updateRoundNotes } = useStore()
@@ -17,13 +35,15 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
 
   const allPaid = paidCount === total
   const orgPhone = store.config?.organizerPhone || ''
+  const contribution = store.config.contribution
+  const pot = formatMoney(contribution * total)
   const unpaidWithPhone = participants.filter(p => !round.payments[p.slot] && p.phone?.trim())
 
   let reminderUrl = null
   if (unpaidWithPhone.length === 1) {
-    reminderUrl = buildSmsUrl(unpaidWithPhone[0].phone, unpaidWithPhone[0].name, orgPhone, round.collectDate)
+    reminderUrl = buildSmsUrl(unpaidWithPhone[0].phone, unpaidWithPhone[0].name, orgPhone, round.collectDate, contribution)
   } else if (unpaidWithPhone.length >= 2) {
-    const body = buildReminderBody(round.round, formatDate(round.collectDate), orgPhone)
+    const body = buildReminderBody(round.round, formatDate(round.collectDate), orgPhone, contribution)
     reminderUrl = buildGroupSmsUrl(unpaidWithPhone, body)
   }
 
@@ -77,7 +97,7 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
               {recipientName} receives
             </h2>
           </div>
-          <div className="text-2xl font-black text-gold-600">$2,400</div>
+          <div className="text-2xl font-black text-gold-600">{pot}</div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">
@@ -103,7 +123,7 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
             />
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            ${paidCount * 200} collected · ${(total - paidCount) * 200} remaining
+            {formatMoney(paidCount * contribution)} collected · {formatMoney((total - paidCount) * contribution)} remaining
           </p>
         </div>
 
@@ -130,7 +150,7 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
           }`}
         >
           {round.payoutSent
-            ? `✓ $2,400 Sent to ${recipientName}`
+            ? `✓ ${pot} Sent to ${recipientName}`
             : `Mark Payout Sent to ${recipientName}`}
         </button>
       </div>
@@ -157,10 +177,10 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
           {participants.map(p => {
             const isPaid = round.payments[p.slot]
             const displayName = p.name || `Slot ${p.slot}`
-            const sms12 = p.phone ? buildTimedReminderSmsUrl(p.phone, displayName, orgPhone, '12pm') : null
-            const wa12  = p.phone ? buildTimedReminderWhatsAppUrl(p.phone, displayName, orgPhone, '12pm') : null
-            const sms8  = p.phone ? buildTimedReminderSmsUrl(p.phone, displayName, orgPhone, '8pm') : null
-            const wa8   = p.phone ? buildTimedReminderWhatsAppUrl(p.phone, displayName, orgPhone, '8pm') : null
+            const sms12 = p.phone ? buildTimedReminderSmsUrl(p.phone, displayName, orgPhone, '12pm', contribution) : null
+            const wa12  = p.phone ? buildTimedReminderWhatsAppUrl(p.phone, displayName, orgPhone, '12pm', contribution) : null
+            const sms8  = p.phone ? buildTimedReminderSmsUrl(p.phone, displayName, orgPhone, '8pm', contribution) : null
+            const wa8   = p.phone ? buildTimedReminderWhatsAppUrl(p.phone, displayName, orgPhone, '8pm', contribution) : null
             return (
               <div key={p.slot} className={`flex items-start gap-3 p-3 rounded-xl ${isPaid ? 'bg-emerald-50' : 'bg-gray-50'}`}>
                 <span className="w-7 h-7 rounded-full bg-gold-100 text-gold-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -212,13 +232,7 @@ export default function RoundPanel({ selectedRound, onSelectRound }) {
 
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-2">Round Notes</h3>
-        <textarea
-          className="w-full border-2 border-gray-100 rounded-xl p-3 text-sm resize-none focus:outline-none focus:border-gold-400 bg-gray-50 transition-colors"
-          rows={3}
-          placeholder="Add any notes for this round..."
-          value={round.notes}
-          onChange={e => updateRoundNotes(round.round, e.target.value)}
-        />
+        <RoundNotes key={round.round} notes={round.notes} onSave={notes => updateRoundNotes(round.round, notes)} />
       </div>
     </div>
   )

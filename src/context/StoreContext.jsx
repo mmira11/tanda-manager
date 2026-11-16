@@ -1,10 +1,10 @@
 import { createContext, useContext } from 'react'
-import { useTandaStore } from '../hooks/useTandaStore'
+import { useCycleStore } from '../hooks/useCycleStore'
 
 const StoreContext = createContext(null)
 
 export function StoreProvider({ children }) {
-  const store = useTandaStore()
+  const store = useCycleStore()
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>
 }
 
