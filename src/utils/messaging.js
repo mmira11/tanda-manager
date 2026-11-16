@@ -61,9 +61,9 @@ export function buildWhatsAppUrl(recipientPhone, recipientName, organizerPhone, 
 function timedReminderBody(name, orgPhone, type, amount) {
   const org = formatPhoneDisplay(orgPhone)
   if (type === '12pm') {
-    return `Hi ${name}, friendly reminder that Tanda collection closes TODAY at 8 PM. Please send ${formatMoney(amount)} via Zelle to ${org} before the cutoff. Gracias! 🙏`
+    return `Hi ${name}, friendly reminder that Tanda collection closes TODAY at 6 PM. Please send ${formatMoney(amount)} via Zelle to ${org} before the cutoff. Gracias! 🙏`
   }
-  return `Hi ${name}, last call — Tanda collection closes in 1 hour at 8 PM tonight. Please send ${formatMoney(amount)} via Zelle to ${org} now. Gracias! 🙏`
+  return `Hi ${name}, last call — Tanda collection closes at 6 PM tonight. Please send ${formatMoney(amount)} via Zelle to ${org} now. Gracias! 🙏`
 }
 
 export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organizerPhone, type, amount) {

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { getCountdownTo } from '../../utils/rounds'
 
-export default function CountdownTimer({ collectDate, isComplete, organizerName, organizerPhone, t }) {
+export default function CountdownTimer({ collectDate, isComplete, organizerName, organizerPhone, amountLabel, t }) {
   const [time, setTime] = useState(() => getCountdownTo(collectDate))
 
   useEffect(() => {
@@ -27,7 +27,8 @@ export default function CountdownTimer({ collectDate, isComplete, organizerName,
         <div className="text-3xl mb-2">🎯</div>
         <p className="font-bold text-gray-900">{t.collectionDay}</p>
         <p className="text-sm text-gray-600 mt-1">
-          {t.sendTo} <strong>{organizerName || t.organizer}</strong> {t.viaZelle}
+          {typeof t.sendTo === 'function' ? t.sendTo(amountLabel || '') : t.sendTo}{' '}
+          <strong>{organizerName || t.organizer}</strong> {t.viaZelle}
           {organizerPhone ? ` (${organizerPhone})` : ''} {t.today}
         </p>
       </div>

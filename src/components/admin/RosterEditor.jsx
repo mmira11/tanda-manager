@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { memberLink } from '../../utils/memberLink'
 import { buildGroupSmsUrl } from '../../utils/messaging'
 import { formatMoney } from '../../utils/money'
 
@@ -8,10 +9,11 @@ function hasPaymentHistory(store, slot) {
 }
 
 function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
-  const { updateParticipant, reorderMember, removeMember } = useStore()
+  const { updateParticipant, reorderMember, removeMember, regenerateLink } = useStore()
   const [name, setName] = useState(participant.name)
   const [phone, setPhone] = useState(participant.phone)
   const [confirming, setConfirming] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     setName(participant.name)
@@ -23,6 +25,22 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
   }, [editMode])
 
   const hasHistory = hasPaymentHistory(store, participant.slot)
+
+  async function copyLink() {
+    const url = memberLink(participant.accessToken)
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+    } catch {
+      window.prompt('Copy this personal link', url)
+    }
+  }
+
+  function regenerate() {
+    if (!window.confirm('Replace this personal link? The old link will stop working.')) return
+    setCopied(false)
+    regenerateLink(participant.slot)
+  }
 
   return (
     <div className="border-b border-gray-50 last:border-0">
@@ -75,6 +93,25 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store }) {
           </div>
         )}
       </div>
+
+      {!editMode && participant.accessToken && (
+        <div className="flex gap-2 pb-2 pl-9">
+          <button
+            type="button"
+            onClick={copyLink}
+            className="text-xs font-semibold text-gold-700 border border-gold-200 rounded-lg px-2 py-1 hover:bg-gold-50"
+          >
+            {copied ? 'Copied' : 'Copy personal link'}
+          </button>
+          <button
+            type="button"
+            onClick={regenerate}
+            className="text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50"
+          >
+            Regenerate link
+          </button>
+        </div>
+      )}
 
       {confirming && (
         <div className="mb-3 p-3 border-2 border-red-200 rounded-xl bg-red-50 space-y-2">

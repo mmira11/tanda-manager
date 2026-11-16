@@ -3,6 +3,7 @@ import { useStore } from '../../context/StoreContext'
 import { supabase } from '../../lib/supabase'
 import { formatDate } from '../../utils/rounds'
 import { formatMoney } from '../../utils/money'
+import ImportBackup from './ImportBackup'
 
 const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors'
 
@@ -73,6 +74,8 @@ export default function DataControls({ email }) {
           {saved && !dirty && <p className="text-xs text-emerald-600 text-center font-medium">Saved</p>}
         </div>
       </div>
+
+      <ImportBackup />
 
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-1">Export</h3>

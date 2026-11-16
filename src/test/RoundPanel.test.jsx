@@ -16,7 +16,7 @@ function Loaded() {
 // 2026-08-22 is round 6's own payout day — the day the round could not be marked.
 const PAYOUT_DAY_R6 = new Date('2026-08-22T09:00:00')
 
-const NAMES = ['Ana', 'Beto', 'Cata', 'Dani', 'Eli', 'Fer', 'Gabi', 'Hugo', 'Ivan', 'Jimena', 'Karla', 'Luis']
+const NAMES = ['Ada', 'Bea', 'Cal', 'Dee', 'Eve', 'Fay', 'Gus', 'Hal', 'Ian', 'Jan', 'Kay', 'Lee']
 
 let fake
 
@@ -58,6 +58,8 @@ describe('round selection', () => {
   it('hides Reminders and Remind Unpaid on a past round', async () => {
     const user = await setup()
     expect(screen.getByText('Reminders')).toBeTruthy()
+    expect(screen.getAllByText('6 PM').length).toBeGreaterThan(0)
+    expect(screen.queryByText('8 PM')).toBeNull()
     expect(screen.getByText(/Remind Unpaid/)).toBeTruthy()
 
     await user.click(screen.getByLabelText('Previous round'))
@@ -92,9 +94,9 @@ describe('marking a past payout', () => {
   it('marks round 5 payout sent and saves it to the rounds table', async () => {
     const user = await setup()
     await user.click(screen.getByLabelText('Previous round'))
-    await user.click(screen.getByText(/Mark Payout Sent to Eli/))
+    await user.click(screen.getByText(/Mark Payout Sent to Eve/))
 
-    expect(screen.getByText(/\$2,400 Sent to Eli/)).toBeTruthy()
+    expect(screen.getByText(/\$2,400 Sent to Eve/)).toBeTruthy()
     await waitFor(() => expect(savedRound(5).payout_sent).toBe(true))
     expect(savedRound(5).payout_sent_at).toBeTruthy()
   })
@@ -102,7 +104,7 @@ describe('marking a past payout', () => {
   it('leaves other rounds untouched', async () => {
     const user = await setup()
     await user.click(screen.getByLabelText('Previous round'))
-    await user.click(screen.getByText(/Mark Payout Sent to Eli/))
+    await user.click(screen.getByText(/Mark Payout Sent to Eve/))
 
     await waitFor(() => expect(savedRound(5).payout_sent).toBe(true))
     expect(savedRound(6).payout_sent).toBe(false)
@@ -113,7 +115,7 @@ describe('marking a past payout', () => {
     const user = await setup()
     await user.click(screen.getByLabelText('Previous round'))
     const collection = screen.getByText('Collection Status').closest('div')
-    const anaRow = within(collection).getByText('Ana').closest('div')
+    const anaRow = within(collection).getByText('Ada').closest('div')
 
     await user.click(within(anaRow).getByText('Pending'))
 
@@ -126,7 +128,7 @@ describe('marking someone paid', () => {
   it('writes paid_at and source=manual right away, with no publish step', async () => {
     const user = await setup()
     const collection = screen.getByText('Collection Status').closest('div')
-    const betoRow = within(collection).getByText('Beto').closest('div')
+    const betoRow = within(collection).getByText('Bea').closest('div')
 
     await user.click(within(betoRow).getByText('Pending'))
 
@@ -138,7 +140,7 @@ describe('marking someone paid', () => {
   it('unmarking clears paid_at and source', async () => {
     const user = await setup()
     const collection = screen.getByText('Collection Status').closest('div')
-    const betoRow = () => within(collection).getByText('Beto').closest('div')
+    const betoRow = () => within(collection).getByText('Bea').closest('div')
 
     await user.click(within(betoRow()).getByText('Pending'))
     await waitFor(() => expect(savedPayment(6, 2).paid_at).not.toBeNull())

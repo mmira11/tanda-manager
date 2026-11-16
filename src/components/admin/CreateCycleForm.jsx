@@ -18,7 +18,7 @@ export function validateCycleForm(f) {
   return errors
 }
 
-export default function CreateCycleForm() {
+export default function CreateCycleForm({ onImport }) {
   const { createCycle } = useStore()
   const [form, setForm] = useState({
     name: '', startDate: '', intervalDays: '14', contribution: '',
@@ -144,6 +144,11 @@ export default function CreateCycleForm() {
           className="w-full bg-gold-500 hover:bg-gold-600 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-50">
           {saving ? 'Creating…' : 'Create cycle'}
         </button>
+        {onImport && (
+          <button type="button" onClick={onImport} className="w-full text-sm font-semibold text-gold-700">
+            Import a backup instead
+          </button>
+        )}
       </form>
     </div>
   )

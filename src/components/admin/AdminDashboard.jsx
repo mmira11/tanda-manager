@@ -14,7 +14,7 @@ const TABS = [
 ]
 
 export default function AdminDashboard({ email }) {
-  const { store, error, clearError } = useStore()
+  const { store, cycles, selectCycle, error, clearError } = useStore()
   const [tab, setTab] = useState('round')
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
 
@@ -32,17 +32,38 @@ export default function AdminDashboard({ email }) {
             <h1 className="text-lg font-bold text-gray-900">Tanda Manager</h1>
             <p className="text-xs text-gray-500">Admin · {store.config.name}</p>
           </div>
-          <a
-            href="/tanda-manager/"
-            className="text-xs text-gold-600 font-semibold bg-gold-50 px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-100 transition-colors"
-          >
-            Public Board ↗
-          </a>
+          <div className="flex items-center gap-2">
+            {cycles.length > 0 && (
+              <select
+                aria-label="Cycle"
+                value={store.config.cycleId}
+                onChange={e => selectCycle(e.target.value)}
+                className="text-xs border border-gray-200 rounded-full px-2 py-1.5 bg-white max-w-[11rem]"
+              >
+                {cycles.map(cycle => (
+                  <option key={cycle.id} value={cycle.id}>
+                    {cycle.name} · {cycle.status}
+                  </option>
+                ))}
+              </select>
+            )}
+            <a
+              href={import.meta.env.BASE_URL || '/'}
+              className="text-xs text-gold-600 font-semibold bg-gold-50 px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-100 transition-colors"
+            >
+              Home
+            </a>
+          </div>
         </div>
       </div>
 
       {/* Scrollable content with bottom padding for tab bar */}
       <div className="max-w-2xl mx-auto p-4 pb-28">
+        {store.config.status === 'archived' && (
+          <div className="mb-4 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700">
+            Archived cycle. History lists every round, including the last one.
+          </div>
+        )}
         {error && (
           <div role="alert" className="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
             <p className="text-sm text-red-700 flex-1">Couldn't save: {error}</p>

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot, addDays, buildRounds } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
 
 // The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
 const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
@@ -167,6 +167,28 @@ describe('addDays / buildRounds', () => {
     const rounds = buildRounds('2027-01-08', 7, 5)
     expect(rounds.map(r => r.collectDate)).toEqual(['2027-01-08', '2027-01-15', '2027-01-22', '2027-01-29', '2027-02-05'])
     expect(rounds[4]).toEqual({ roundNumber: 5, collectDate: '2027-02-05', payoutDate: '2027-02-06' })
+  })
+})
+
+describe('historyRounds', () => {
+  const rounds = [
+    { round: 1, collectDate: '2026-01-02', payoutDate: '2026-01-03' },
+    { round: 2, collectDate: '2026-01-16', payoutDate: '2026-01-17' },
+  ]
+
+  it('hides the round that is still current', () => {
+    expect(historyRounds(rounds, { status: 'active', today: new Date('2026-01-17T12:00:00') }).map(r => r.round))
+      .toEqual([1])
+  })
+
+  it('includes the final round once the tanda is complete', () => {
+    expect(historyRounds(rounds, { status: 'active', today: new Date('2026-01-18T00:00:01') }).map(r => r.round))
+      .toEqual([2, 1])
+  })
+
+  it('lists every round of an archived cycle, including the last one', () => {
+    expect(historyRounds(rounds, { status: 'archived', today: new Date('2026-01-10T12:00:00') }).map(r => r.round))
+      .toEqual([2, 1])
   })
 })
 

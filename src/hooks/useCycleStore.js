@@ -4,7 +4,9 @@
 //     payoutDate, recipientSlot, payments: { [slot]: bool }, payoutSent, notes }] }
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
+import { notifyBoardChanged } from '../lib/boardSync'
 import { addDays, buildRounds } from '../utils/rounds'
+import { buildImportPlan, newAccessToken, writeImport } from '../utils/importBackup'
 
 function check({ data, error }) {
   if (error) throw error
@@ -22,9 +24,11 @@ export function toStore(cycle, members, rounds, payments) {
       contribution: Number(cycle.contribution),
       organizerName: cycle.organizer_display_name || '',
       organizerPhone: cycle.zelle_destination || '',
+      status: cycle.status,
     },
     participants: members.map(m => ({
       id: m.id, slot: m.slot, name: m.display_first_name, phone: m.phone || '',
+      accessToken: m.access_token || '',
     })),
     rounds: rounds.map(r => ({
       id: r.id,
@@ -43,23 +47,46 @@ export function toStore(cycle, members, rounds, payments) {
   }
 }
 
+function pickCycle(cycles, preferredId) {
+  if (preferredId) {
+    const chosen = cycles.find(cycle => cycle.id === preferredId)
+    if (chosen) return chosen
+  }
+  return cycles.find(cycle => cycle.status === 'active') || cycles[0] || null
+}
+
 export function useCycleStore() {
   const [store, setStore] = useState(null)
+  const [cycles, setCycles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const storeRef = useRef(null)
+  const selectedIdRef = useRef(null)
+  const requestRef = useRef(0)
   storeRef.current = store
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (preferredId) => {
+    const request = ++requestRef.current
     try {
-      const cycles = check(await supabase.from('cycles').select('*').eq('status', 'active').limit(1))
-      if (cycles.length === 0) {
+      const cycleRows = check(await supabase.from('cycles').select('id, name, status, start_date, contribution'))
+      if (request !== requestRef.current) return
+      const sorted = [...cycleRows].sort((a, b) => (a.start_date < b.start_date ? 1 : a.start_date > b.start_date ? -1 : 0))
+      setCycles(sorted)
+      const cycleSummary = pickCycle(sorted, preferredId ?? selectedIdRef.current)
+      if (!cycleSummary) {
+        selectedIdRef.current = null
         setStore(null)
         return
       }
-      const cycle = cycles[0]
+      selectedIdRef.current = cycleSummary.id
+      const cycle = check(await supabase.from('cycles').select('*').eq('id', cycleSummary.id).limit(1))[0]
+      if (!cycle) {
+        selectedIdRef.current = null
+        setStore(null)
+        return
+      }
       const [members, rounds] = await Promise.all([
-        supabase.from('members').select('id, slot, display_first_name, phone')
+        supabase.from('members').select('id, slot, display_first_name, phone, access_token')
           .eq('cycle_id', cycle.id).order('slot').then(check),
         supabase.from('rounds').select('*')
           .eq('cycle_id', cycle.id).order('round_number').then(check),
@@ -68,11 +95,13 @@ export function useCycleStore() {
         ? check(await supabase.from('payments').select('round_id, member_id, paid_at')
             .in('round_id', rounds.map(r => r.id)))
         : []
+      if (request !== requestRef.current) return
       setStore(toStore(cycle, members, rounds, payments))
     } catch (e) {
+      if (request !== requestRef.current) return
       setError(e.message || String(e))
     } finally {
-      setLoading(false)
+      if (request === requestRef.current) setLoading(false)
     }
   }, [])
 
@@ -102,13 +131,16 @@ export function useCycleStore() {
     const paid = !round.payments[slot]
     return run(
       patchRound(roundNum, r => ({ ...r, payments: { ...r.payments, [slot]: paid } })),
-      async () => check(await supabase.from('payments').upsert({
-        round_id: round.id,
-        member_id: member.id,
-        amount: s.config.contribution,
-        paid_at: paid ? new Date().toISOString() : null,
-        source: paid ? 'manual' : null,
-      }, { onConflict: 'round_id,member_id' }))
+      async () => {
+        check(await supabase.from('payments').upsert({
+          round_id: round.id,
+          member_id: member.id,
+          amount: s.config.contribution,
+          paid_at: paid ? new Date().toISOString() : null,
+          source: paid ? 'manual' : null,
+        }, { onConflict: 'round_id,member_id' }))
+        notifyBoardChanged()
+      }
     )
   }, [run])
 
@@ -219,6 +251,26 @@ export function useCycleStore() {
 
   const exportData = useCallback(() => JSON.stringify(storeRef.current, null, 2), [])
 
+  const selectCycle = useCallback((id) => {
+    selectedIdRef.current = id
+    return load(id)
+  }, [load])
+
+  const importBackup = useCallback(async (raw, options) => {
+    const summary = await writeImport(supabase, buildImportPlan(raw, options))
+    await load(summary.cycleId)
+    return summary
+  }, [load])
+
+  const regenerateLink = useCallback((slot) => {
+    const member = storeRef.current.participants.find(p => p.slot === slot)
+    const accessToken = newAccessToken()
+    return run(
+      s => ({ ...s, participants: s.participants.map(p => (p.slot === slot ? { ...p, accessToken } : p)) }),
+      async () => check(await supabase.from('members').update({ access_token: accessToken }).eq('id', member.id)),
+    )
+  }, [run])
+
   // form: { name, startDate, intervalDays, contribution, organizerName, organizerPhone,
   //         members: [{ name, phone }] in payout order }. Throws on failure.
   const createCycle = useCallback(async (form) => {
@@ -260,10 +312,14 @@ export function useCycleStore() {
 
   return {
     store,
+    cycles,
     loading,
     error,
     clearError: () => setError(''),
     reload: load,
+    selectCycle,
+    importBackup,
+    regenerateLink,
     createCycle,
     togglePayment,
     togglePayout,

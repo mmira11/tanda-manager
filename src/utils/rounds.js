@@ -61,6 +61,16 @@ export function isTandaComplete(rounds, now = new Date()) {
   return now > new Date(span.end + 'T23:59:59')
 }
 
+// Past rounds, newest first. A finished tanda (archived, or past its last payout day)
+// includes the final round — History used to drop it because that round was still "current".
+export function historyRounds(rounds, { status, today = new Date() } = {}) {
+  if (!rounds?.length) return []
+  const ordered = [...rounds].sort((a, b) => a.round - b.round)
+  if (status === 'archived' || isTandaComplete(ordered, today)) return ordered.reverse()
+  const current = getCurrentRound(ordered, today)
+  return ordered.filter(r => r.round < current.round).reverse()
+}
+
 export function isPayoutWindow(round, now = new Date()) {
   const open = new Date(round.collectDate + 'T20:00:00')
   const close = new Date(round.payoutDate + 'T23:59:59')

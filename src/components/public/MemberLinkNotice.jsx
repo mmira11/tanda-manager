@@ -1,5 +1,6 @@
-// src/components/public/MemberLinkNotice.jsx — placeholder at "/" until the /m/:token member page exists.
+// Landing page. The old public roster lived here; members now open /m/:token.
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LABELS } from '../../data/labels'
 
 export default function MemberLinkNotice() {
@@ -26,6 +27,12 @@ export default function MemberLinkNotice() {
         <div className="text-5xl mb-3">💰</div>
         <h1 className="text-2xl font-bold text-gray-900">{t.useLinkTitle}</h1>
         <p className="text-gray-500 mt-2 text-sm">{t.useLinkBody}</p>
+        <Link
+          to="/admin"
+          className="mt-6 inline-block w-full bg-gold-500 hover:bg-gold-600 text-white font-semibold py-3 rounded-xl transition-colors"
+        >
+          {t.organizerSignIn}
+        </Link>
       </div>
     </div>
   )

@@ -1,12 +1,11 @@
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound, getPaidCount, formatDate } from '../../utils/rounds'
+import { historyRounds, getPaidCount, formatDate } from '../../utils/rounds'
 import { formatMoney } from '../../utils/money'
 
 export default function HistoryLog({ onEditRound }) {
   const { store } = useStore()
   const { rounds, participants } = store
-  const currentRound = getCurrentRound(rounds)
-  const past = rounds.filter(r => r.round < currentRound.round).reverse()
+  const past = historyRounds(rounds, { status: store.config.status })
 
   if (past.length === 0) {
     return (

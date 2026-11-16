@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { StoreProvider, useStore } from '../../context/StoreContext'
 import AdminDashboard from './AdminDashboard'
 import CreateCycleForm from './CreateCycleForm'
+import ImportBackup from './ImportBackup'
 
 function Screen({ children }) {
   return (
@@ -88,6 +89,7 @@ function NotAdmin({ email }) {
 
 function AdminHome({ email }) {
   const { store, loading, error, reload } = useStore()
+  const [importing, setImporting] = useState(false)
   if (loading) return <Screen><p className="text-gray-500">Loading…</p></Screen>
   if (!store && error) {
     return (
@@ -97,7 +99,16 @@ function AdminHome({ email }) {
       </Screen>
     )
   }
-  if (!store) return <CreateCycleForm />
+  if (!store && importing) {
+    return (
+      <div className="min-h-screen bg-gold-50 p-4">
+        <div className="max-w-lg mx-auto">
+          <ImportBackup onCancel={() => setImporting(false)} />
+        </div>
+      </div>
+    )
+  }
+  if (!store) return <CreateCycleForm onImport={() => setImporting(true)} />
   return <AdminDashboard email={email} />
 }
 

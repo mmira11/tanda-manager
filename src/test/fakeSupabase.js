@@ -16,10 +16,16 @@ const DEFAULTS = {
   members: { phone: null, language_pref: 'en' },
   rounds: { payout_sent: false, payout_sent_at: null, notes: '' },
   payments: { paid_at: null, source: null },
+  reminder_settings: { timezone: 'America/Los_Angeles', enabled: false },
+  reminder_templates: {},
 }
 
 export function installFakeSupabase({ session = null, isAdmin = false, db = {}, failOn = null } = {}) {
-  const tables = { cycles: [], members: [], rounds: [], payments: [], ...structuredClone(db) }
+  const tables = {
+    cycles: [], members: [], rounds: [], payments: [],
+    reminder_settings: [], reminder_templates: [],
+    ...structuredClone(db),
+  }
   let nextId = 1000
   const listeners = []
   const state = { session }
@@ -27,7 +33,9 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
   function cascade(table, removed) {
     const ids = removed.map(r => r.id)
     if (table === 'cycles') {
-      for (const t of ['members', 'rounds']) cascade(t, take(t, r => ids.includes(r.cycle_id)))
+      for (const t of ['members', 'rounds', 'reminder_settings', 'reminder_templates']) {
+        cascade(t, take(t, r => ids.includes(r.cycle_id)))
+      }
     }
     if (table === 'rounds') take('payments', p => ids.includes(p.round_id))
     if (table === 'members') take('payments', p => ids.includes(p.member_id))
@@ -56,7 +64,7 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
         return { data: rows, error: null }
       }
       if (op === 'insert') {
-        const rows = payload.map(r => ({ id: `${table}-${nextId++}`, ...DEFAULTS[table], ...r }))
+        const rows = payload.map(r => ({ id: `${table}-${nextId++}`, ...(DEFAULTS[table] || {}), ...r }))
         tables[table].push(...rows)
         return { data: rows.map(r => ({ ...r })), error: null }
       }
@@ -64,7 +72,7 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
         const rows = payload.map(r => {
           const existing = tables[table].find(x => conflictKeys.every(k => x[k] === r[k]))
           if (existing) return Object.assign(existing, r)
-          const row = { id: `${table}-${nextId++}`, ...DEFAULTS[table], ...r }
+          const row = { id: `${table}-${nextId++}`, ...(DEFAULTS[table] || {}), ...r }
           tables[table].push(row)
           return row
         })
@@ -136,7 +144,8 @@ export function seedCycle({
     status: 'active', organizer_display_name: 'Org', zelle_destination: '5550000000',
   }
   const members = names.map((n, i) => ({
-    id: `member-${i + 1}`, cycle_id: cycle.id, slot: i + 1, display_first_name: n, phone: `555000000${i % 10}`,
+    id: `member-${i + 1}`, cycle_id: cycle.id, slot: i + 1, display_first_name: n,
+    phone: `555010000${i % 10}`, access_token: `test-token-${i + 1}`,
   }))
   const rounds = buildRounds(startDate, intervalDays, names.length).map((r, i) => ({
     id: `round-${i + 1}`, cycle_id: cycle.id, round_number: r.roundNumber, collect_date: r.collectDate,
