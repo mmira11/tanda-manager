@@ -224,69 +224,26 @@ export async function writeImport(supabase, plan) {
   const existing = resultOf(await supabase.from('cycles').select('id').eq('start_date', plan.cycle.start_date))
   if (existing.length > 0) fail('A cycle with this start date already exists')
 
-  let cycleId = null
-  try {
-    // Child rows are inserted while the cycle is still a draft. The archived-cycle
-    // write lock (see migration 003) rejects member/round/payment writes once
-    // status is archived, so the flip happens only after those inserts succeed.
-    const [cycle] = resultOf(await supabase.from('cycles').insert({
-      ...plan.cycle,
-      status: 'draft',
-      archived_at: null,
-    }).select())
-    cycleId = cycle.id
-    const members = resultOf(await supabase.from('members').insert(
-      plan.members.map(member => ({ ...member, cycle_id: cycle.id })),
-    ).select())
-    const memberBySlot = Object.fromEntries(members.map(member => [member.slot, member]))
-    const rounds = resultOf(await supabase.from('rounds').insert(
-      plan.rounds.map(round => ({
-        cycle_id: cycle.id,
-        round_number: round.round_number,
-        collect_date: round.collect_date,
-        payout_date: round.payout_date,
-        recipient_member_id: memberBySlot[round.recipientSlot].id,
-        payout_sent: round.payout_sent,
-        payout_sent_at: round.payout_sent_at,
-        notes: round.notes,
-      })),
-    ).select())
-    const roundByNumber = Object.fromEntries(rounds.map(round => [round.round_number, round]))
-    const payments = plan.payments.map(payment => ({
-      round_id: roundByNumber[payment.roundNumber].id,
-      member_id: memberBySlot[payment.slot].id,
-      amount: payment.amount,
-      paid_at: payment.paid_at,
-      source: payment.source,
-    }))
-    if (payments.length !== members.length * rounds.length) fail('Payment rows must equal members × rounds')
-    resultOf(await supabase.from('payments').insert(payments))
-    resultOf(await supabase.from('reminder_settings').insert({
-      cycle_id: cycle.id,
-      timezone: 'America/Los_Angeles',
-      thursday_all_at: '09:00',
-      friday_noon_at: '12:00',
-      friday_evening_at: '18:00',
-      enabled: false,
-    }))
-    resultOf(await supabase.from('reminder_templates').insert(
-      REMINDER_BODIES.map(([kind, lang, body]) => ({ cycle_id: cycle.id, kind, lang, body })),
-    ))
-    resultOf(await supabase.from('cycles').update({
-      status: 'archived',
-      archived_at: plan.cycle.archived_at,
-    }).eq('id', cycle.id))
-    return {
-      cycleId: cycle.id,
-      members: members.length,
-      rounds: rounds.length,
-      payments: payments.length,
-      paid: payments.filter(payment => payment.paid_at).length,
-    }
-  } catch (error) {
-    if (cycleId) await supabase.from('cycles').delete().eq('id', cycleId)
-    if (error instanceof ImportError) throw error
+  // One RPC, one transaction (migration 006): if any row fails, nothing is saved.
+  const { data, error } = await supabase.rpc('import_cycle', {
+    p_plan: {
+      cycle: plan.cycle,
+      members: plan.members,
+      rounds: plan.rounds,
+      payments: plan.payments,
+      reminder_templates: REMINDER_BODIES.map(([kind, lang, body]) => ({ kind, lang, body })),
+    },
+  })
+  if (error) {
+    if (/start date already exists/i.test(error.message || '')) fail('A cycle with this start date already exists')
     throw new ImportError('Import failed. Nothing was saved.')
+  }
+  return {
+    cycleId: data.cycle_id,
+    members: data.members,
+    rounds: data.rounds,
+    payments: data.payments,
+    paid: data.paid,
   }
 }
 

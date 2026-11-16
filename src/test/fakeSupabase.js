@@ -110,12 +110,53 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
     return builder
   }
 
+  // Mirrors public.import_cycle (migration 006): all rows or none.
+  async function importCycle(plan) {
+    const snapshot = structuredClone(tables)
+    const run = query => query.then(r => { if (r.error) throw new Error(r.error.message); return r.data })
+    try {
+      if (tables.cycles.some(c => c.start_date === plan.cycle.start_date)) {
+        throw new Error('A cycle with this start date already exists')
+      }
+      const [cycle] = await run(from('cycles').insert({ ...plan.cycle, status: 'draft', archived_at: null }).select())
+      const members = await run(from('members').insert(plan.members.map(m => ({ ...m, cycle_id: cycle.id }))).select())
+      const memberBySlot = Object.fromEntries(members.map(m => [m.slot, m]))
+      const rounds = await run(from('rounds').insert(plan.rounds.map(({ recipientSlot, ...r }) => {
+        if (!memberBySlot[recipientSlot]) throw new Error('null value in column "recipient_member_id"')
+        return { ...r, cycle_id: cycle.id, recipient_member_id: memberBySlot[recipientSlot].id }
+      })).select())
+      const roundByNumber = Object.fromEntries(rounds.map(r => [r.round_number, r]))
+      await run(from('payments').insert(plan.payments.map(p => {
+        if (!roundByNumber[p.roundNumber] || !memberBySlot[p.slot]) throw new Error('null value in column "member_id"')
+        return {
+          round_id: roundByNumber[p.roundNumber].id, member_id: memberBySlot[p.slot].id,
+          amount: p.amount, paid_at: p.paid_at, source: p.source,
+        }
+      })))
+      await run(from('reminder_settings').insert({ cycle_id: cycle.id }))
+      await run(from('reminder_templates').insert((plan.reminder_templates || []).map(t => ({ ...t, cycle_id: cycle.id }))))
+      await run(from('cycles').update({ status: 'archived', archived_at: plan.cycle.archived_at }).eq('id', cycle.id))
+      return {
+        data: {
+          cycle_id: cycle.id, members: members.length, rounds: rounds.length,
+          payments: plan.payments.length, paid: plan.payments.filter(p => p.paid_at).length,
+        },
+        error: null,
+      }
+    } catch (e) {
+      for (const key of Object.keys(snapshot)) tables[key] = snapshot[key]
+      return { data: null, error: { message: e.message } }
+    }
+  }
+
   current = {
     tables,
     from: vi.fn(from),
-    rpc: vi.fn(async name => (name === 'is_admin'
-      ? { data: isAdmin, error: null }
-      : { data: null, error: { message: `unknown rpc ${name}` } })),
+    rpc: vi.fn(async (name, args) => {
+      if (name === 'is_admin') return { data: isAdmin, error: null }
+      if (name === 'import_cycle') return importCycle(args.p_plan)
+      return { data: null, error: { message: `unknown rpc ${name}` } }
+    }),
     auth: {
       getSession: vi.fn(async () => ({ data: { session: state.session }, error: null })),
       onAuthStateChange: vi.fn(cb => {

@@ -151,6 +151,94 @@ function assertArchiveLock(database) {
   console.log(`${database}: 6 archive policies, member board keeps Zelle, rounds, and the same grants`)
 }
 
+// Runs SQL that must fail. Returns psql's error text; throws if it succeeded.
+function psqlFails(database, sql) {
+  const { cmd, args, env } = psqlArgs(database, true)
+  try {
+    execFileSync(cmd, args, { encoding: 'utf8', input: sql, env, stdio: ['pipe', 'pipe', 'pipe'] })
+  } catch (error) {
+    return String(error.stderr || error.message)
+  }
+  throw new Error(`${database}: expected this SQL to fail:\n${sql}`)
+}
+
+// Fake data only. Two members, two rounds, four payments (three paid).
+function importPlan({ name, dates, tokenPrefix, badPaymentSlot = null }) {
+  const [collect1, payout1, collect2, payout2] = dates
+  return {
+    cycle: {
+      name, start_date: collect1, interval_days: 14, contribution: 50, timezone: 'America/Los_Angeles',
+      organizer_display_name: 'Org Demo', zelle_destination: '5550100100', archived_at: '2098-12-01T00:00:00Z',
+    },
+    members: [
+      { slot: 1, display_first_name: 'Ana', phone: '5550100111', language_pref: 'en', access_token: `${tokenPrefix}-ana-0001` },
+      { slot: 2, display_first_name: 'Beto', phone: '5550100112', language_pref: 'es', access_token: `${tokenPrefix}-beto-001` },
+    ],
+    rounds: [
+      { round_number: 1, collect_date: collect1, payout_date: payout1, recipientSlot: 1, payout_sent: true, payout_sent_at: `${payout1}T12:00:00Z`, notes: '' },
+      { round_number: 2, collect_date: collect2, payout_date: payout2, recipientSlot: 2, payout_sent: false, payout_sent_at: null, notes: '' },
+    ],
+    payments: [
+      { roundNumber: 1, slot: 1, amount: 50, paid_at: `${collect1}T18:00:00Z`, source: 'manual' },
+      { roundNumber: 1, slot: 2, amount: 50, paid_at: `${collect1}T18:00:00Z`, source: 'manual' },
+      { roundNumber: 2, slot: 1, amount: 50, paid_at: `${collect2}T18:00:00Z`, source: 'manual' },
+      // With badPaymentSlot set, this row points at a member that does not exist. The cycle,
+      // members, and rounds are already written when the payments insert fails.
+      { roundNumber: 2, slot: badPaymentSlot ?? 2, amount: 50, paid_at: null, source: null },
+    ],
+    reminder_templates: [
+      { kind: 'friday_noon', lang: 'en', body: 'Hi {{firstName}}, collection is today.' },
+      { kind: 'friday_noon', lang: 'es', body: 'Hola {{firstName}}, el cobro es hoy.' },
+    ],
+  }
+}
+
+const callImport = plan => `select public.import_cycle($plan$${JSON.stringify(plan)}$plan$::jsonb);`
+
+function assertAtomicImport(database) {
+  const grants = psqlText(database, `
+    select has_function_privilege('anon', 'public.import_cycle(jsonb)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.import_cycle(jsonb)', 'execute')::text;
+  `).trim()
+  if (grants !== 'falsetrue') {
+    throw new Error(`${database}: import_cycle should run for authenticated only, got ${grants}`)
+  }
+
+  const good = importPlan({
+    name: 'Atomic Demo', dates: ['2098-01-02', '2098-01-03', '2098-01-16', '2098-01-17'], tokenPrefix: 'import-token',
+  })
+  const summary = JSON.parse(psqlText(database, callImport(good)).trim().split('\n').filter(Boolean).pop())
+  if (summary.members !== 2 || summary.rounds !== 2 || summary.payments !== 4 || summary.paid !== 3) {
+    throw new Error(`${database}: import summary was ${JSON.stringify(summary)}`)
+  }
+  const status = psqlText(database, `select status from public.cycles where start_date = '2098-01-02';`).trim()
+  if (status !== 'archived') throw new Error(`${database}: imported cycle status is ${status}`)
+
+  const duplicate = psqlFails(database, callImport(good))
+  if (!duplicate.includes('start date already exists')) {
+    throw new Error(`${database}: second import with the same start date did not fail cleanly: ${duplicate}`)
+  }
+
+  const halfway = importPlan({
+    name: 'Halfway Demo', dates: ['2098-05-01', '2098-05-02', '2098-05-15', '2098-05-16'],
+    tokenPrefix: 'halfway-token', badPaymentSlot: 9,
+  })
+  const failure = psqlFails(database, callImport(halfway))
+  if (!/null value in column "member_id"/.test(failure)) {
+    throw new Error(`${database}: halfway import failed for the wrong reason: ${failure}`)
+  }
+  const left = psqlText(database, `
+    select (select count(*) from public.cycles where start_date = '2098-05-01' or name = 'Halfway Demo')
+      || ',' || (select count(*) from public.members where access_token like 'halfway-token-%')
+      || ',' || (select count(*) from public.rounds where collect_date in ('2098-05-01', '2098-05-15'))
+      || ',' || (select count(*) from public.cycles where status = 'draft');
+  `).trim()
+  if (left !== '0,0,0,0') {
+    throw new Error(`${database}: halfway import left rows behind (cycles,members,rounds,drafts = ${left})`)
+  }
+  console.log(`${database}: import_cycle is atomic: happy path archived, halfway failure left nothing`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -159,6 +247,7 @@ recreate(fresh)
 applyFile(fresh, join(root, 'supabase', 'schema.sql'))
 applyMigrations(fresh)
 assertArchiveLock(fresh)
+assertAtomicImport(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -167,6 +256,7 @@ writeFileSync(oldSchema, execFileSync('git', ['show', `${OLD_SCHEMA_REV}:supabas
 applyFile(legacy, oldSchema)
 applyMigrations(legacy, { skip: ['002_review_fixes.sql'] })
 assertArchiveLock(legacy)
+assertAtomicImport(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
