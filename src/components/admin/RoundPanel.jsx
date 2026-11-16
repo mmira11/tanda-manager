@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { formatMoney } from '../../utils/money'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName } from '../../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo } from '../../utils/rounds'
 import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
 import PaymentRow from './PaymentRow'
 
 // Notes save when the field loses focus, so typing doesn't write to the database per keystroke.
+function CollectionCountdown({ collectDate, timeZone }) {
+  const deadline = deadlineOnDate(collectDate, timeZone).getTime()
+  const [time, setTime] = useState(() => getCountdownTo(deadline))
+  useEffect(() => {
+    const id = setInterval(() => setTime(getCountdownTo(deadline)), 30000)
+    return () => clearInterval(id)
+  }, [deadline])
+  if (time.done) return <p className="text-xs text-gray-500 mt-1">Closed at 6:00 PM</p>
+  return <p className="text-xs text-gray-500 mt-1">Closes in {time.hours}h {time.minutes}m · 6:00 PM</p>
+}
+
 function RoundNotes({ notes, onSave, readOnly }) {
   const [draft, setDraft] = useState(notes)
   useEffect(() => setDraft(notes), [notes])
@@ -37,6 +48,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
   const allPaid = paidCount === total
   const orgPhone = store.config?.organizerPhone || ''
   const contribution = store.config.contribution
+  const timeZone = store.config.timezone
   const pot = formatMoney(contribution * total)
   const unpaidWithPhone = participants.filter(p => !round.payments[p.slot] && p.phone?.trim())
 
@@ -105,6 +117,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
           <div className="bg-gold-50 rounded-xl p-3">
             <p className="text-xs text-gray-500 font-medium">Collect {getDayName(round.collectDate)}</p>
             <p className="font-semibold text-gray-900 text-sm mt-0.5">{formatDate(round.collectDate)}</p>
+            {isCurrent && <CollectionCountdown collectDate={round.collectDate} timeZone={timeZone} />}
           </div>
           <div className="bg-gold-50 rounded-xl p-3">
             <p className="text-xs text-gray-500 font-medium">Pay Out {getDayName(round.payoutDate)}</p>

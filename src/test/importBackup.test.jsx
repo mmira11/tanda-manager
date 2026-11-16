@@ -11,6 +11,7 @@ import {
   inspectBackup,
   writeImport,
 } from '../utils/importBackup'
+import { isWholeCents } from '../utils/money'
 import { installFakeSupabase, seedCycle, adminSession } from './fakeSupabase'
 import { useCycleStore } from '../hooks/useCycleStore'
 import { StoreProvider, useStore } from '../context/StoreContext'
@@ -87,6 +88,9 @@ describe('buildImportPlan', () => {
   it('requires a contribution in whole cents', () => {
     expect(() => buildImportPlan(backup())).toThrow(/whole cents/)
     expect(() => buildImportPlan(backup(), { contribution: 87.555 })).toThrow(/whole cents/)
+    expect(() => buildImportPlan(backup(), { contribution: 1e8 })).toThrow(/whole cents/)
+    expect(isWholeCents(99999999.99)).toBe(true)
+    expect(isWholeCents(1e8)).toBe(false)
     expect(buildImportPlan(backup(), { contribution: 10.5, now: '2026-01-01T00:00:00.000Z', token: sequentialTokens() }).cycle.contribution).toBe(10.5)
   })
 
@@ -155,8 +159,34 @@ describe('useCycleStore import and cycle switch', () => {
 
     expect(await screen.findByText('Admin · Finished')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull()
     await userEvent.setup().click(screen.getByText('This Round'))
     expect(screen.getAllByRole('button', { name: 'Pending' })[0]).toBeDisabled()
+  })
+})
+
+describe('archive then create', () => {
+  it('asks in both languages, then unlocks New cycle', async () => {
+    installFakeSupabase({
+      session: adminSession,
+      isAdmin: true,
+      db: seedCycle({ names: ['Ada', 'Bea'], name: 'Current', contribution: 40 }),
+    })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+
+    expect(await screen.findByText('Admin · Current')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New cycle' })).toBeDisabled()
+    expect(screen.getByText(/Archiva el ciclo activo/)).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('Archive this cycle?')).toBeTruthy()
+    expect(screen.getByText('¿Archivar este ciclo?')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Archive cycle' }))
+
+    expect(await screen.findByText(/Archived cycle/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
   })
 })
 

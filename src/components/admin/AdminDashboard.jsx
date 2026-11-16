@@ -14,9 +14,12 @@ const TABS = [
 ]
 
 export default function AdminDashboard({ email, onNewCycle }) {
-  const { store, cycles, selectCycle, error, clearError } = useStore()
+  const { store, cycles, selectCycle, archiveCycle, error, clearError } = useStore()
   const [tab, setTab] = useState('round')
+  const [confirmArchive, setConfirmArchive] = useState(false)
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
+  const hasActive = cycles.some(cycle => cycle.status === 'active')
+  const viewingActive = store.config.status === 'active'
 
   const editRound = (roundNum) => {
     setSelectedRound(roundNum)
@@ -47,11 +50,22 @@ export default function AdminDashboard({ email, onNewCycle }) {
                 ))}
               </select>
             )}
+            {viewingActive && (
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(true)}
+                className="text-xs text-gray-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-50"
+              >
+                Archive
+              </button>
+            )}
             {onNewCycle && (
               <button
                 type="button"
                 onClick={onNewCycle}
-                className="text-xs text-gold-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-50"
+                disabled={hasActive}
+                title={hasActive ? 'Archive the active cycle before starting another' : undefined}
+                className="text-xs text-gold-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-50 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 New cycle
               </button>
@@ -68,6 +82,40 @@ export default function AdminDashboard({ email, onNewCycle }) {
 
       {/* Scrollable content with bottom padding for tab bar */}
       <div className="max-w-2xl mx-auto p-4 pb-28">
+        {hasActive && (
+          <p className="mb-4 text-xs text-gray-500">
+            Archive the active cycle before starting another.
+            {' '}Archiva el ciclo activo antes de empezar otro.
+          </p>
+        )}
+        {confirmArchive && (
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-title" className="mb-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <h2 id="archive-title" className="font-semibold text-gray-900">Archive this cycle?</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Payments and the roster will be locked. You can still view history, then start a new cycle.
+            </p>
+            <h3 className="font-semibold text-gray-900 mt-3">¿Archivar este ciclo?</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Los pagos y la lista quedarán bloqueados. Podrás ver el historial y luego empezar un ciclo nuevo.
+            </p>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => { setConfirmArchive(false); archiveCycle() }}
+                className="flex-1 bg-gray-900 text-white font-semibold py-2.5 rounded-xl text-sm"
+              >
+                Archive cycle
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(false)}
+                className="flex-1 border border-gray-200 font-semibold py-2.5 rounded-xl text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         {store.config.status === 'archived' && (
           <div className="mb-4 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700">
             Archived cycle. History lists every round, including the last one.

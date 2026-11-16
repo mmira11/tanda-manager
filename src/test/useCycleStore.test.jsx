@@ -25,6 +25,26 @@ describe('useCycleStore', () => {
     expect(rounds[1]).toMatchObject({ round: 2, collectDate: '2026-06-26', recipientSlot: 2, payments: { 1: false, 2: false } })
   })
 
+  it('archives the active cycle, then a new cycle can be created', async () => {
+    const { fake, result } = await loaded(seedCycle({ names: ['Ada', 'Bea'], name: 'Current', contribution: 40 }))
+    await act(() => result.current.archiveCycle())
+
+    expect(fake.tables.cycles[0]).toMatchObject({ status: 'archived' })
+    expect(fake.tables.cycles[0].archived_at).toBeTruthy()
+    expect(result.current.store.config.status).toBe('archived')
+
+    await act(() => result.current.createCycle({
+      name: 'Next Tanda',
+      startDate: '2027-04-02',
+      intervalDays: 14,
+      contribution: 40,
+      members: [{ name: 'Ada', phone: '' }, { name: 'Bea', phone: '' }],
+    }))
+
+    expect(result.current.store.config).toMatchObject({ name: 'Next Tanda', status: 'active' })
+    expect(fake.tables.cycles.map(c => c.status).sort()).toEqual(['active', 'archived'])
+  })
+
   it('returns no store when there is no active cycle', async () => {
     const { result } = await loaded({})
     expect(result.current.store).toBeNull()

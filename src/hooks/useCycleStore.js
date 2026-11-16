@@ -25,6 +25,7 @@ export function toStore(cycle, members, rounds, payments) {
       organizerName: cycle.organizer_display_name || '',
       organizerPhone: cycle.zelle_destination || '',
       status: cycle.status,
+      timezone: cycle.timezone || 'America/Los_Angeles',
     },
     participants: members.map(m => ({
       id: m.id, slot: m.slot, name: m.display_first_name, phone: m.phone || '',
@@ -273,6 +274,21 @@ export function useCycleStore() {
 
   // form: { name, startDate, intervalDays, contribution, organizerName, organizerPhone,
   //         members: [{ name, phone }] in payout order }. Throws on failure.
+  const archiveCycle = useCallback(async () => {
+    const { cycleId, status } = storeRef.current.config
+    if (status !== 'active') return
+    try {
+      check(await supabase.from('cycles').update({
+        status: 'archived',
+        archived_at: new Date().toISOString(),
+      }).eq('id', cycleId))
+      // Reload so the cycle list drops "active" and New cycle can open.
+      await load(cycleId)
+    } catch (e) {
+      setError(e.message || String(e))
+    }
+  }, [load])
+
   const createCycle = useCallback(async (form) => {
     const existingActive = check(await supabase.from('cycles').select('id').eq('status', 'active').limit(1))
     if (existingActive.length > 0) {
@@ -323,6 +339,7 @@ export function useCycleStore() {
     reload: load,
     selectCycle,
     importBackup,
+    archiveCycle,
     regenerateLink,
     createCycle,
     togglePayment,

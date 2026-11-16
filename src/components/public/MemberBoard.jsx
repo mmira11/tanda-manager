@@ -173,12 +173,15 @@ export default function MemberBoard() {
             t={labels}
             pot={pot}
             totalRounds={progress.length}
+            timeZone={board.cycle?.timezone}
           />
         )}
 
         {viewRound && (
           <CountdownTimer
+            deadline={round.collect_deadline}
             collectDate={viewRound.collectDate}
+            timeZone={board.cycle?.timezone}
             isComplete={complete}
             amountLabel={formatMoney(contribution)}
             t={labels}

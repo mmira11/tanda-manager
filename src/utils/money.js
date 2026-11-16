@@ -1,7 +1,8 @@
 // 200 → "$200", 2400 → "$2,400", 87.5 → "$87.50"
 export function isWholeCents(amount) {
   const n = Number(amount)
-  if (!Number.isFinite(n) || n <= 0) return false
+  // numeric(10,2) stores at most 99,999,999.99, which is below 1e8.
+  if (!Number.isFinite(n) || n <= 0 || n >= 1e8) return false
   const cents = Math.round(n * 100)
   return Math.abs(n * 100 - cents) < 1e-6
 }

@@ -1,15 +1,17 @@
 // src/components/public/CountdownTimer.jsx
 import { useState, useEffect } from 'react'
-import { getCountdownTo } from '../../utils/rounds'
+import { deadlineOnDate, getCountdownTo } from '../../utils/rounds'
 
-export default function CountdownTimer({ collectDate, isComplete, organizerName, organizerPhone, amountLabel, t }) {
-  const [time, setTime] = useState(() => getCountdownTo(collectDate))
+export default function CountdownTimer({ deadline, collectDate, timeZone, isComplete, organizerName, organizerPhone, amountLabel, t }) {
+  const target = deadline || (collectDate ? deadlineOnDate(collectDate, timeZone) : null)
+  const targetMs = target ? new Date(target).getTime() : NaN
+  const [time, setTime] = useState(() => getCountdownTo(targetMs))
 
   useEffect(() => {
-    if (isComplete) return
-    const id = setInterval(() => setTime(getCountdownTo(collectDate)), 30000)
+    if (isComplete || Number.isNaN(targetMs)) return
+    const id = setInterval(() => setTime(getCountdownTo(targetMs)), 30000)
     return () => clearInterval(id)
-  }, [collectDate, isComplete])
+  }, [targetMs, isComplete])
 
   if (isComplete) {
     return (

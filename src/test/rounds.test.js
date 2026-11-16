@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
 
 // The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
 const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
@@ -125,29 +125,38 @@ describe('isTandaComplete', () => {
   })
 })
 
+describe('deadlineOnDate', () => {
+  it('is 6 PM Pacific, including daylight saving, not the device zone', () => {
+    expect(deadlineOnDate('2026-07-10', 'America/Los_Angeles').toISOString()).toBe('2026-07-11T01:00:00.000Z')
+    expect(deadlineOnDate('2026-01-10', 'America/Los_Angeles').toISOString()).toBe('2026-01-11T02:00:00.000Z')
+  })
+})
+
 describe('getCountdownTo', () => {
   afterEach(() => vi.useRealTimers())
 
-  it('hits zero at 6 PM local on collection day', () => {
+  it('hits zero at the 6 PM Pacific deadline', () => {
+    const deadline = deadlineOnDate('2026-07-10', 'America/Los_Angeles')
     vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-07-10T17:30:00'))
-    expect(getCountdownTo('2026-07-10')).toMatchObject({ done: false, hours: 0, minutes: 30 })
-    vi.setSystemTime(new Date('2026-07-10T18:00:00'))
-    expect(getCountdownTo('2026-07-10').done).toBe(true)
+    vi.setSystemTime(new Date(deadline.getTime() - 30 * 60 * 1000))
+    expect(getCountdownTo(deadline)).toMatchObject({ done: false, hours: 0, minutes: 30 })
+    vi.setSystemTime(deadline)
+    expect(getCountdownTo(deadline).done).toBe(true)
   })
 })
 
 describe('isPayoutWindow', () => {
   const round = { collectDate: '2026-07-10', payoutDate: '2026-07-11' }
-  it('is false before collection closes (6pm collect day)', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-10T17:59:00'))).toBe(false)
+  const zone = 'America/Los_Angeles'
+  it('is false before collection closes (6pm Pacific on collect day)', () => {
+    expect(isPayoutWindow(round, new Date('2026-07-11T00:59:00Z'), zone)).toBe(false)
   })
   it('is true after collection close through payout day', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-10T18:00:01'))).toBe(true)
-    expect(isPayoutWindow(round, new Date('2026-07-11T23:00:00'))).toBe(true)
+    expect(isPayoutWindow(round, new Date('2026-07-11T01:00:01Z'), zone)).toBe(true)
+    expect(isPayoutWindow(round, new Date('2026-07-12T05:00:00Z'), zone)).toBe(true)
   })
   it('is false after payout day ends', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-12T00:00:01'))).toBe(false)
+    expect(isPayoutWindow(round, new Date('2026-07-12T07:00:01Z'), zone)).toBe(false)
   })
 })
 

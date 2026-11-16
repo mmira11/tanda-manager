@@ -18,8 +18,8 @@ function Confetti() {
   )
 }
 
-export default function RecipientSpotlight({ round, recipientName, t, pot, totalRounds }) {
-  const celebrate = isPayoutWindow(round) || round.payoutSent
+export default function RecipientSpotlight({ round, recipientName, t, pot, totalRounds, timeZone }) {
+  const celebrate = isPayoutWindow(round, new Date(), timeZone) || round.payoutSent
   const initial = (recipientName || '?')[0].toUpperCase()
 
   return (

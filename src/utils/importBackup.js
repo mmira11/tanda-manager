@@ -226,7 +226,14 @@ export async function writeImport(supabase, plan) {
 
   let cycleId = null
   try {
-    const [cycle] = resultOf(await supabase.from('cycles').insert(plan.cycle).select())
+    // Child rows are inserted while the cycle is still a draft. The archived-cycle
+    // write lock (see migration 003) rejects member/round/payment writes once
+    // status is archived, so the flip happens only after those inserts succeed.
+    const [cycle] = resultOf(await supabase.from('cycles').insert({
+      ...plan.cycle,
+      status: 'draft',
+      archived_at: null,
+    }).select())
     cycleId = cycle.id
     const members = resultOf(await supabase.from('members').insert(
       plan.members.map(member => ({ ...member, cycle_id: cycle.id })),
@@ -265,6 +272,10 @@ export async function writeImport(supabase, plan) {
     resultOf(await supabase.from('reminder_templates').insert(
       REMINDER_BODIES.map(([kind, lang, body]) => ({ cycle_id: cycle.id, kind, lang, body })),
     ))
+    resultOf(await supabase.from('cycles').update({
+      status: 'archived',
+      archived_at: plan.cycle.archived_at,
+    }).eq('id', cycle.id))
     return {
       cycleId: cycle.id,
       members: members.length,

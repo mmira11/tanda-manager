@@ -150,6 +150,47 @@ create policy admin_all_reminder_templates on public.reminder_templates
 create policy admin_all_pending_review on public.pending_review
   for all to authenticated using (public.is_admin()) with check (public.is_admin());
 
+-- Writes stop once the parent cycle is archived. SELECT stays open: a single
+-- restrictive FOR ALL policy whose USING rejected archived rows would hide
+-- history from the admin. FOR ALL below uses USING (true) so reads pass, and
+-- WITH CHECK blocks inserts and updates. A second restrictive DELETE policy
+-- blocks deletes, which do not consult WITH CHECK.
+create policy members_no_write_when_archived on public.members
+  as restrictive for all to authenticated
+  using (true)
+  with check (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
+create policy members_no_delete_when_archived on public.members
+  as restrictive for delete to authenticated
+  using (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
+
+create policy rounds_no_write_when_archived on public.rounds
+  as restrictive for all to authenticated
+  using (true)
+  with check (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
+create policy rounds_no_delete_when_archived on public.rounds
+  as restrictive for delete to authenticated
+  using (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
+
+create policy payments_no_write_when_archived on public.payments
+  as restrictive for all to authenticated
+  using (true)
+  with check (
+    coalesce((
+      select c.status from public.rounds r
+      join public.cycles c on c.id = r.cycle_id
+      where r.id = round_id
+    ), '') is distinct from 'archived'
+  );
+create policy payments_no_delete_when_archived on public.payments
+  as restrictive for delete to authenticated
+  using (
+    coalesce((
+      select c.status from public.rounds r
+      join public.cycles c on c.id = r.cycle_id
+      where r.id = round_id
+    ), '') is distinct from 'archived'
+  );
+
 -- Members never read tables directly. They call this RPC with their secret token.
 -- Returns only: their status, their payout date, current/last round, first names
 -- and paid/unpaid for group progress. No phones, no tokens, no aliases, no notes
@@ -164,8 +205,10 @@ as $$
 declare
   v_member public.members%rowtype;
   v_cycle  public.cycles%rowtype;
-  v_today  date := (timezone('America/Los_Angeles', now()))::date;
+  v_zone   text;
+  v_today  date;
   v_round  public.rounds%rowtype;
+  v_deadline timestamptz;
 begin
   if p_token is null or length(p_token) < 16 then
     raise exception 'not found' using errcode = 'P0002';
@@ -177,6 +220,8 @@ begin
   end if;
 
   select * into v_cycle from public.cycles where id = v_member.cycle_id;
+  v_zone := coalesce(nullif(btrim(v_cycle.timezone), ''), 'America/Los_Angeles');
+  v_today := (timezone(v_zone, now()))::date;
 
   select * into v_round
   from public.rounds
@@ -193,13 +238,18 @@ begin
     limit 1;
   end if;
 
+  if v_round.id is not null then
+    v_deadline := (v_round.collect_date + time '18:00') at time zone v_zone;
+  end if;
+
   return jsonb_build_object(
     'cycle', jsonb_build_object(
       'name', v_cycle.name,
       'contribution', v_cycle.contribution,
       'status', v_cycle.status,
       'start_date', v_cycle.start_date,
-      'interval_days', v_cycle.interval_days
+      'interval_days', v_cycle.interval_days,
+      'timezone', v_zone
     ),
     'me', jsonb_build_object(
       'slot', v_member.slot,
@@ -221,6 +271,7 @@ begin
       'collect_date', v_round.collect_date,
       'payout_date', v_round.payout_date,
       'payout_sent', v_round.payout_sent,
+      'collect_deadline', v_deadline,
       'recipient_first_name', (
         select m.display_first_name from public.members m
         where m.id = v_round.recipient_member_id
@@ -243,9 +294,11 @@ end;
 $$;
 
 -- Anon (no login) may only execute the member RPC, not read tables.
--- Default privileges stop future tables and functions from being granted automatically.
-alter default privileges in schema public revoke all on tables from anon, authenticated;
-alter default privileges in schema public revoke execute on functions from anon, authenticated, PUBLIC;
+-- Global default privileges, not schema-scoped: a schema-scoped revoke does not
+-- undo the database-wide grant Postgres and Supabase install for new functions.
+alter default privileges revoke all on tables from anon, authenticated;
+alter default privileges revoke execute on functions from public;
+alter default privileges revoke execute on functions from anon, authenticated;
 revoke all on all tables in schema public from anon, authenticated;
 revoke execute on all functions in schema public from PUBLIC, anon;
 grant usage on schema public to anon, authenticated;
