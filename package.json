@@ -9,6 +9,7 @@
     "build": "vite build && cp dist/index.html dist/404.html",
     "preview": "vite preview",
     "test": "vitest",
+    "test:sql": "node scripts/check-sql.mjs",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"
   },

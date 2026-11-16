@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { formatMoney } from '../../utils/money'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo } from '../../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo, formatCollectionCountdown } from '../../utils/rounds'
 import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
 import PaymentRow from './PaymentRow'
 
@@ -13,8 +13,7 @@ function CollectionCountdown({ collectDate, timeZone }) {
     const id = setInterval(() => setTime(getCountdownTo(deadline)), 30000)
     return () => clearInterval(id)
   }, [deadline])
-  if (time.done) return <p className="text-xs text-gray-500 mt-1">Closed at 6:00 PM</p>
-  return <p className="text-xs text-gray-500 mt-1">Closes in {time.hours}h {time.minutes}m · 6:00 PM</p>
+  return <p className="text-xs text-gray-500 mt-1">{formatCollectionCountdown(time)}</p>
 }
 
 function RoundNotes({ notes, onSave, readOnly }) {

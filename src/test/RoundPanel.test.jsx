@@ -45,6 +45,7 @@ describe('round selection', () => {
   it('opens on round 6 on its own payout day', async () => {
     await setup()
     expect(screen.queryByText(/Editing a past round/)).toBeNull()
+    expect(screen.getByText('Closed at 6:00 PM')).toBeTruthy()
   })
 
   it('steps back to round 5 and shows the past-round bar with its payout date', async () => {

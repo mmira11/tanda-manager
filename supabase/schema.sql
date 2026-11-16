@@ -294,11 +294,13 @@ end;
 $$;
 
 -- Anon (no login) may only execute the member RPC, not read tables.
--- Global default privileges, not schema-scoped: a schema-scoped revoke does not
--- undo the database-wide grant Postgres and Supabase install for new functions.
-alter default privileges revoke all on tables from anon, authenticated;
+-- Global revokes undo database-wide defaults. Schema-scoped revokes undo grants
+-- that were set only for public. Both are required.
 alter default privileges revoke execute on functions from public;
 alter default privileges revoke execute on functions from anon, authenticated;
+alter default privileges revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke execute on functions from anon, authenticated;
 revoke all on all tables in schema public from anon, authenticated;
 revoke execute on all functions in schema public from PUBLIC, anon;
 grant usage on schema public to anon, authenticated;

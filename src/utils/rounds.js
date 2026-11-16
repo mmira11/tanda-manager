@@ -64,6 +64,13 @@ export function deadlineOnDate(isoDate, timeZone = DEFAULT_TIME_ZONE) {
   return zonedWallTime(isoDate, 18, 0, 0, timeZone)
 }
 
+export function formatCollectionCountdown(time) {
+  if (time.done) return 'Closed at 6:00 PM'
+  const clock = `${time.hours}h ${time.minutes}m`
+  const span = time.days > 0 ? `${time.days}d ${clock}` : clock
+  return `Closes in ${span} · 6:00 PM`
+}
+
 export function getCountdownTo(deadline, now = new Date()) {
   const end = deadline instanceof Date ? deadline : new Date(deadline)
   const diff = end.getTime() - now.getTime()

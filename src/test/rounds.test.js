@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatCollectionCountdown, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
 
 // The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
 const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
@@ -142,6 +142,15 @@ describe('getCountdownTo', () => {
     expect(getCountdownTo(deadline)).toMatchObject({ done: false, hours: 0, minutes: 30 })
     vi.setSystemTime(deadline)
     expect(getCountdownTo(deadline).done).toBe(true)
+  })
+
+  it('keeps days in the admin countdown label', () => {
+    expect(formatCollectionCountdown({ days: 3, hours: 5, minutes: 0, done: false }))
+      .toBe('Closes in 3d 5h 0m · 6:00 PM')
+    expect(formatCollectionCountdown({ days: 0, hours: 5, minutes: 12, done: false }))
+      .toBe('Closes in 5h 12m · 6:00 PM')
+    expect(formatCollectionCountdown({ days: 0, hours: 0, minutes: 0, done: true }))
+      .toBe('Closed at 6:00 PM')
   })
 })
 

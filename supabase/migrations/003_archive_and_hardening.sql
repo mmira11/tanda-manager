@@ -1,11 +1,16 @@
--- Archive lock, global function privileges, and a timezone-aware member deadline.
+-- Archive lock, function privileges, and a timezone-aware member deadline.
 -- Safe to run more than once, including when 002_review_fixes.sql was never applied.
--- 002's schema-scoped default-privilege revoke does not undo a database-wide grant;
--- the global statements below do.
+-- One transaction: a syntax error rolls the whole file back.
 
-alter default privileges revoke all on tables from anon, authenticated;
+begin;
+
+-- Global revokes undo database-wide defaults. Schema-scoped revokes undo grants
+-- that were set only for public. Both are required.
 alter default privileges revoke execute on functions from public;
 alter default privileges revoke execute on functions from anon, authenticated;
+alter default privileges revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke all on tables from anon, authenticated;
+alter default privileges in schema public revoke execute on functions from anon, authenticated;
 
 revoke execute on all functions in schema public from PUBLIC;
 revoke execute on all functions in schema public from anon;
@@ -15,26 +20,31 @@ revoke execute on all functions in schema public from anon;
 -- also has a restrictive DELETE policy.
 drop policy if exists members_no_write_when_archived on public.members;
 create policy members_no_write_when_archived
+  on public.members
   as restrictive for all to authenticated
   using (true)
   with check (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
 drop policy if exists members_no_delete_when_archived on public.members;
 create policy members_no_delete_when_archived
+  on public.members
   as restrictive for delete to authenticated
   using (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
 
 drop policy if exists rounds_no_write_when_archived on public.rounds;
 create policy rounds_no_write_when_archived
+  on public.rounds
   as restrictive for all to authenticated
   using (true)
   with check (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
 drop policy if exists rounds_no_delete_when_archived on public.rounds;
 create policy rounds_no_delete_when_archived
+  on public.rounds
   as restrictive for delete to authenticated
   using (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
 
 drop policy if exists payments_no_write_when_archived on public.payments;
 create policy payments_no_write_when_archived
+  on public.payments
   as restrictive for all to authenticated
   using (true)
   with check (
@@ -46,6 +56,7 @@ create policy payments_no_write_when_archived
   );
 drop policy if exists payments_no_delete_when_archived on public.payments;
 create policy payments_no_delete_when_archived
+  on public.payments
   as restrictive for delete to authenticated
   using (
     coalesce((
@@ -155,3 +166,5 @@ $$;
 
 grant execute on function public.get_member_board(text) to anon, authenticated;
 grant execute on function public.is_admin() to authenticated;
+
+commit;
