@@ -4,7 +4,6 @@
 //     payoutDate, recipientSlot, payments: { [slot]: bool }, payoutSent, notes }] }
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
-import { notifyBoardChanged } from '../lib/boardSync'
 import { addDays, buildRounds, isValidTimeZone } from '../utils/rounds'
 import { buildImportPlan, newAccessToken, writeImport } from '../utils/importBackup'
 
@@ -155,7 +154,6 @@ export function useCycleStore() {
           paid_at: paid ? new Date().toISOString() : null,
           source: paid ? 'manual' : null,
         }, { onConflict: 'round_id,member_id' }))
-        notifyBoardChanged()
       }
     )
   }, [run])
