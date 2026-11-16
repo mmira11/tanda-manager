@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
-import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo } from '../../utils/rounds'
+import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo, dateLocale } from '../../utils/rounds'
 import { compactCountdown, paymentStats } from '../../utils/presentation'
 import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
@@ -11,6 +11,7 @@ import DataControls from './DataControls'
 import DashboardView from './DashboardView'
 import PaymentSheet from './PaymentSheet'
 import TabBar from '../ui/TabBar'
+import { LangProvider } from '../../context/LangContext'
 
 function readLang() {
   try {
@@ -46,7 +47,7 @@ export default function AdminDashboard({ email, onNewCycle }) {
   }))
   const sheetMember = members.find(person => person.slot === sheetSlot) || null
   const recipient = store.participants.find(person => person.slot === current?.recipientSlot)
-  const payoutDay = current ? getDayName(current.payoutDate, lang === 'es' ? 'es-ES' : 'en-US') : ''
+  const payoutDay = current ? getDayName(current.payoutDate, dateLocale(lang)) : ''
   const deadline = current ? deadlineOnDate(current.collectDate, store.config.timezone).getTime() : null
   const countdownLabel = deadline ? compactCountdown(getCountdownTo(deadline, now)) : ''
 
@@ -74,8 +75,10 @@ export default function AdminDashboard({ email, onNewCycle }) {
   ]
 
   return (
+    <LangProvider lang={lang}>
     <div className="admin-theme min-h-screen bg-ink text-stone-100">
       <div className="max-w-lg mx-auto px-4 pt-5 pb-28">
+        {email && <p className="mb-3 truncate text-[11px] text-stone-400">{email}</p>}
         {confirmArchive && (
           <div role="dialog" aria-modal="true" aria-labelledby="archive-title" className="mb-4 bg-panel border border-white/10 rounded-2xl p-4">
             <h2 id="archive-title" className="font-semibold text-stone-50">Archive this cycle?</h2>
@@ -92,27 +95,27 @@ export default function AdminDashboard({ email, onNewCycle }) {
                 onClick={() => { setConfirmArchive(false); archiveCycle() }}
                 className="flex-1 bg-mint text-ink font-semibold py-2.5 rounded-xl text-sm min-h-11"
               >
-                Archive cycle
+                {t.archiveCycle}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmArchive(false)}
                 className="flex-1 border border-white/15 font-semibold py-2.5 rounded-xl text-sm min-h-11"
               >
-                Cancel
+                {t.cancel}
               </button>
             </div>
           </div>
         )}
         {readOnly && (
           <div className="mb-4 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-stone-200">
-            Archived cycle. History lists every round, including the last one.
+            {t.archivedBanner}
           </div>
         )}
         {error && (
           <div role="alert" className="mb-4 flex items-center gap-3 bg-red-950/40 border border-red-400/30 rounded-xl px-4 py-2.5">
-            <p className="text-sm text-red-200 flex-1">Couldn't save: {error}</p>
-            <button type="button" onClick={clearError} className="text-xs font-semibold text-red-100 min-h-11">Dismiss</button>
+            <p className="text-sm text-red-200 flex-1">{t.couldntSave(error)}</p>
+            <button type="button" onClick={clearError} className="text-xs font-semibold text-red-100 min-h-11">{t.dismiss}</button>
           </div>
         )}
 
@@ -149,9 +152,9 @@ export default function AdminDashboard({ email, onNewCycle }) {
           <div className="space-y-4">
             {cycles.length > 0 && (
               <label className="block text-sm text-stone-300">
-                Cycle
+                {t.cycleLabel}
                 <select
-                  aria-label="Cycle"
+                  aria-label={t.cycleLabel}
                   value={store.config.cycleId}
                   onChange={e => selectCycle(e.target.value)}
                   className="mt-1 w-full rounded-xl bg-ink border border-white/15 px-3 py-3 text-sm text-stone-100"
@@ -177,7 +180,7 @@ export default function AdminDashboard({ email, onNewCycle }) {
                   onClick={() => setConfirmArchive(true)}
                   className="flex-1 min-h-11 text-sm font-semibold rounded-xl border border-white/15"
                 >
-                  Archive
+                  {t.archive}
                 </button>
               )}
               {onNewCycle && (
@@ -185,10 +188,10 @@ export default function AdminDashboard({ email, onNewCycle }) {
                   type="button"
                   onClick={onNewCycle}
                   disabled={hasActive}
-                  title={hasActive ? 'Archive the active cycle before starting another' : undefined}
+                  title={hasActive ? t.archiveFirst : undefined}
                   className="flex-1 min-h-11 text-sm font-semibold rounded-xl bg-mint text-ink disabled:opacity-40"
                 >
-                  New cycle
+                  {t.newCycle}
                 </button>
               )}
             </div>
@@ -207,7 +210,8 @@ export default function AdminDashboard({ email, onNewCycle }) {
         />
       )}
 
-      <TabBar tabs={tabs} active={tab} onChange={setTab} tone="dark" label="Admin" />
+      <TabBar tabs={tabs} active={tab} onChange={setTab} tone="dark" label={t.adminNav} />
     </div>
+    </LangProvider>
   )
 }

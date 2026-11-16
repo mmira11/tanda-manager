@@ -1,4 +1,4 @@
-export default function LangToggle({ lang, onToggle, tone = 'light' }) {
+export default function LangToggle({ lang, onToggle, tone = 'light', label = 'Toggle language' }) {
   const shell = tone === 'dark'
     ? 'border-white/15 bg-panel'
     : 'border-coral/30 bg-white'
@@ -8,7 +8,7 @@ export default function LangToggle({ lang, onToggle, tone = 'light' }) {
     <button
       type="button"
       onClick={onToggle}
-      aria-label="Toggle language"
+      aria-label={label}
       className={`flex items-center text-xs font-bold rounded-full overflow-hidden border min-h-11 ${shell}`}
     >
       <span className={`px-3 py-2 min-w-11 text-center ${lang === 'en' ? active : idle}`}>EN</span>

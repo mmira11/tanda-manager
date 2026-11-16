@@ -34,7 +34,7 @@ export default function DashboardView({
             {roundLabel && <span className="block text-xs font-semibold text-stone-400">{roundLabel}</span>}
           </h1>
         </div>
-        <LangToggle lang={lang} onToggle={onToggleLang} tone="dark" />
+        <LangToggle lang={lang} onToggle={onToggleLang} tone="dark" label={t.toggleLanguage} />
       </header>
 
       <section className="bg-panel rounded-3xl border border-white/10 px-4 py-6">

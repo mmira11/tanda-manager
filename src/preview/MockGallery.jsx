@@ -55,6 +55,12 @@ function MemberPreview() {
       paid,
       is_recipient: index === 2,
     })),
+    rounds: PEOPLE.map(([name], index) => ({
+      number: index + 1,
+      collect_date: '2099-03-06',
+      payout_date: index === 0 ? daysFromNow(12) : '2099-04-01',
+      recipient_first_name: name,
+    })),
   }
   return <MemberExperience board={board} lang="es" onToggleLang={() => {}} />
 }

@@ -1,10 +1,58 @@
+import { useEffect, useRef } from 'react'
+
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+
 export default function PaymentSheet({ member, t, readOnly, onClose, onToggle }) {
+  const dialogRef = useRef(null)
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+
+  useEffect(() => {
+    if (!member) return undefined
+    const node = dialogRef.current
+    if (!node) return undefined
+    const previous = document.activeElement
+    const focusable = () => [...node.querySelectorAll(FOCUSABLE)]
+    focusable()[0]?.focus()
+
+    function onKey(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        closeRef.current()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (items.length === 0) {
+        event.preventDefault()
+        return
+      }
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || !node.contains(active))) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && (active === last || !node.contains(active))) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      if (previous instanceof HTMLElement) previous.focus()
+    }
+  }, [member?.slot])
+
   if (!member) return null
   const paid = member.paid === true
   return (
     <div className="fixed inset-0 z-30 flex items-end justify-center">
       <button type="button" aria-label={t.close} className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="payment-sheet-title"

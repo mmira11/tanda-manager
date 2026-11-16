@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
-import { deadlineOnDate, formatDate, getCountdownTo } from '../../utils/rounds'
-import { compactCountdown, daysUntil, memberRounds, paymentStats } from '../../utils/presentation'
+import { dateLocale, deadlineOnDate, formatDate, getCountdownTo } from '../../utils/rounds'
+import { compactCountdown, daysUntil, memberRoundSteps, paymentStats } from '../../utils/presentation'
 import Logo from '../ui/Logo'
 import LangToggle from '../ui/LangToggle'
 import TabBar from '../ui/TabBar'
@@ -41,12 +41,13 @@ function CalendarIcon() {
 
 export default function MemberExperience({ board, lang, onToggleLang, complete = false }) {
   const t = LABELS[lang] || LABELS.en
+  const locale = dateLocale(lang)
   const [tab, setTab] = useState('home')
   const [toast, setToast] = useState(false)
   const progress = board.progress || []
   const round = board.current_round
   const stats = paymentStats(progress, board.cycle?.contribution)
-  const rounds = memberRounds(board)
+  const rounds = memberRoundSteps(board.rounds, round?.round_number)
   const paid = board.me?.paid_this_round === true
   const zelle = board.cycle?.zelle_destination?.trim() || ''
   const payoutDate = board.me?.payout_date
@@ -91,7 +92,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
             <h1 className="text-xl font-extrabold tracking-tight text-stone-900">Tanda</h1>
             <p className="text-xs text-stone-500 truncate">{t.tagline}</p>
           </div>
-          <LangToggle lang={lang} onToggle={onToggleLang} />
+          <LangToggle lang={lang} onToggle={onToggleLang} label={t.toggleLanguage} />
         </div>
       </header>
 
@@ -128,7 +129,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
                     <CalendarIcon />
                     <div className="min-w-0 flex-1">
                       <p className="text-xs text-stone-500">{t.yourPayout}</p>
-                      <p className="font-bold text-stone-900">{formatDate(payoutDate)} · {formatMoney(stats.pot)}</p>
+                      <p className="font-bold text-stone-900">{formatDate(payoutDate, locale)} · {formatMoney(stats.pot)}</p>
                       <p className="text-xs text-stone-500 mt-0.5">{t.thanksLine}</p>
                     </div>
                     {days != null && (
@@ -198,7 +199,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold truncate">{item.name}</p>
-                  <p className="text-xs text-stone-500">{formatDate(item.payoutDate)}</p>
+                  <p className="text-xs text-stone-500">{formatDate(item.payoutDate, locale)}</p>
                 </div>
               </div>
             ))}
@@ -218,7 +219,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
             <div>
               <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">{t.profilePayout}</p>
               <p className="mt-1 font-semibold">
-                {payoutDate ? `${formatDate(payoutDate)} · ${formatMoney(stats.pot)}` : '—'}
+                {payoutDate ? `${formatDate(payoutDate, locale)} · ${formatMoney(stats.pot)}` : '—'}
               </p>
             </div>
           </section>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { useLang } from '../../context/LangContext'
 import { formatMoney } from '../../utils/money'
 import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo, formatCollectionCountdown } from '../../utils/rounds'
 import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
@@ -34,6 +35,7 @@ function RoundNotes({ notes, onSave, readOnly }) {
 
 export default function RoundPanel({ selectedRound, onSelectRound, readOnly = false }) {
   const { store, togglePayout, updateRoundNotes } = useStore()
+  const { lang, locale } = useLang()
   const { participants, rounds } = store
   const currentRound = getCurrentRound(rounds)
   const round = rounds.find(r => r.round === clampRound(selectedRound, rounds))
@@ -55,7 +57,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
   if (unpaidWithPhone.length === 1) {
     reminderUrl = buildSmsUrl(unpaidWithPhone[0].phone, unpaidWithPhone[0].name, orgPhone, round.collectDate, contribution)
   } else if (unpaidWithPhone.length >= 2) {
-    const body = buildReminderBody(round.round, formatDate(round.collectDate), orgPhone, contribution)
+    const body = buildReminderBody(round.round, formatDate(round.collectDate, locale), orgPhone, contribution, lang)
     reminderUrl = buildGroupSmsUrl(unpaidWithPhone, body)
   }
 
@@ -69,8 +71,8 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
           <span className="text-lg flex-shrink-0">{isPast ? '🕓' : '📅'}</span>
           <p className="text-sm text-amber-800 font-medium flex-1">
             {isPast
-              ? `Editing a past round — paid out ${formatDate(round.payoutDate)}`
-              : `Editing an upcoming round — pays out ${formatDate(round.payoutDate)}`}
+              ? `Editing a past round — paid out ${formatDate(round.payoutDate, locale)}`
+              : `Editing an upcoming round — pays out ${formatDate(round.payoutDate, locale)}`}
           </p>
           <button
             onClick={() => onSelectRound(currentRound.round)}
@@ -114,13 +116,13 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
 
         <div className="grid grid-cols-2 gap-3 mb-4">
           <div className="bg-gold-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 font-medium">Collect {getDayName(round.collectDate)}</p>
-            <p className="font-semibold text-gray-900 text-sm mt-0.5">{formatDate(round.collectDate)}</p>
+            <p className="text-xs text-gray-500 font-medium">Collect {getDayName(round.collectDate, locale)}</p>
+            <p className="font-semibold text-gray-900 text-sm mt-0.5">{formatDate(round.collectDate, locale)}</p>
             {isCurrent && <CollectionCountdown collectDate={round.collectDate} timeZone={timeZone} />}
           </div>
           <div className="bg-gold-50 rounded-xl p-3">
-            <p className="text-xs text-gray-500 font-medium">Pay Out {getDayName(round.payoutDate)}</p>
-            <p className="font-semibold text-gray-900 text-sm mt-0.5">{formatDate(round.payoutDate)}</p>
+            <p className="text-xs text-gray-500 font-medium">Pay Out {getDayName(round.payoutDate, locale)}</p>
+            <p className="font-semibold text-gray-900 text-sm mt-0.5">{formatDate(round.payoutDate, locale)}</p>
           </div>
         </div>
 

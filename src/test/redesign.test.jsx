@@ -31,6 +31,7 @@ describe('member avatar grid', () => {
     { slot: 1, name: 'Maria', paid: true, phone: '(555) 010-0101' },
     { slot: 2, name: 'Rosa', paid: false, phone: '(555) 010-0102' },
     { slot: 3, name: 'Ana', paid: false, phone: '' },
+    { slot: 4, name: 'Luis', paid: false, phone: '12345' },
   ]
 
   it('offers a nudge only to unpaid members who have a phone', () => {
@@ -48,6 +49,24 @@ describe('member avatar grid', () => {
     expect(nudges).toHaveLength(1)
     expect(nudges[0].getAttribute('href')).toMatch(/^sms:/)
     expect(screen.queryByText('(555) 010-0102')).toBeNull()
+    expect(screen.queryByRole('link', { name: /Luis/ })).toBeNull()
+  })
+
+  it('formats the nudge date with the Spanish locale', () => {
+    render(
+      <MemberAvatarGrid
+        members={[{ slot: 1, name: 'Rosa', paid: false, phone: '(555) 010-0102' }]}
+        contribution={100}
+        zelle="familia.demo"
+        collectDate="2026-06-12"
+        locale="es-US"
+        t={t}
+        onSelect={() => {}}
+      />,
+    )
+    const body = decodeURIComponent(screen.getByRole('link').getAttribute('href').split('body=')[1])
+    expect(body.toLowerCase()).toContain('jun')
+    expect(body).not.toContain('Fri')
   })
 })
 

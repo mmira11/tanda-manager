@@ -20,6 +20,7 @@ export default function MemberLinkNotice() {
       <div className="bg-white rounded-3xl shadow-sm p-8 w-full max-w-sm text-center">
         <button
           onClick={toggleLang}
+          aria-label={t.toggleLanguage}
           className="text-xs font-semibold text-coralink border border-coral/40 rounded-full px-3 py-1 mb-4 min-h-11"
         >
           {lang === 'en' ? 'ES' : 'EN'}

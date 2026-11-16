@@ -11,21 +11,35 @@ function formatPhoneDisplay(phone) {
   return phone
 }
 
+export function isValidUsPhone(phone) {
+  const digits = stripPhone(String(phone || ''))
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
+}
+
+export function organizerFallback(lang = 'en') {
+  return lang === 'es' ? 'el organizador' : 'the organizer'
+}
+
+// `?&body=` opens the draft on both iOS and Android. `?body=` is dropped on iOS.
+export function smsLink(to, body) {
+  if (!to) return null
+  if (body == null || body === '') return `sms:${to}`
+  return `sms:${to}?&body=${encodeURIComponent(body)}`
+}
+
 function formatPhoneForSms(phone) {
+  if (!isValidUsPhone(phone)) return null
   const digits = stripPhone(phone)
   if (digits.length === 10) return `+1${digits}`
-  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
-  return digits.length > 0 ? `+${digits}` : null
+  return `+${digits}`
 }
 
 export function buildGroupSmsUrl(participants, body = '') {
   const numbers = participants
-    .filter(p => p.phone?.trim())
     .map(p => formatPhoneForSms(p.phone))
     .filter(Boolean)
   if (numbers.length < 2) return null
-  const encoded = body ? `?body=${encodeURIComponent(body)}` : ''
-  return `sms:${numbers.join(',')}${encoded}`
+  return smsLink(numbers.join(','), body)
 }
 
 function getCollectDayName(collectDate) {
@@ -34,18 +48,21 @@ function getCollectDayName(collectDate) {
 }
 
 export function buildSmsUrl(recipientPhone, recipientName, organizerPhone, collectDate, amount) {
-  const to = stripPhone(recipientPhone)
+  if (!isValidUsPhone(recipientPhone)) return null
   const orgNum = stripPhone(organizerPhone)
   const day = getCollectDayName(collectDate)
-  const body = encodeURIComponent(
+  return smsLink(stripPhone(recipientPhone),
     `Hi ${recipientName}, friendly reminder that Tanda collection is this ${day}. Please send ${formatMoney(amount)} to ${orgNum} via Zelle. Thank you!`
   )
-  return `sms:${to}?body=${body}`
 }
 
-export function buildReminderBody(roundNum, formattedDate, organizerPhone, amount) {
-  const org = organizerPhone?.trim() || 'the organizer'
-  return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send ${formatMoney(amount)} to ${org} via Zelle. Thank you!`
+export function buildReminderBody(roundNum, formattedDate, organizerPhone, amount, lang = 'en') {
+  const org = organizerPhone?.trim() || organizerFallback(lang)
+  const money = formatMoney(amount)
+  if (lang === 'es') {
+    return `Recordatorio: la recolección de la Ronda ${roundNum} de la tanda es el ${formattedDate}. Envía ${money} por Zelle a ${org}. ¡Gracias!`
+  }
+  return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send ${money} to ${org} via Zelle. Thank you!`
 }
 
 export function buildWhatsAppUrl(recipientPhone, recipientName, organizerPhone, collectDate, amount) {
@@ -67,22 +84,22 @@ function timedReminderBody(name, orgPhone, type, amount) {
 }
 
 export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organizerPhone, type, amount) {
-  const to = stripPhone(recipientPhone)
-  return `sms:${to}?body=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type, amount))}`
+  if (!isValidUsPhone(recipientPhone)) return null
+  return smsLink(stripPhone(recipientPhone), timedReminderBody(recipientName, organizerPhone, type, amount))
 }
 
 export function buildNudgeBody({ name, amount, zelle, when }) {
   const who = name?.trim() || 'there'
-  const dest = zelle?.trim() || 'the organizer'
+  const saved = zelle?.trim()
+  const destEn = saved || organizerFallback('en')
+  const destEs = saved || organizerFallback('es')
   const money = formatMoney(amount)
   const date = when ? ` (${when})` : ''
-  return `Hi ${who}, please send ${money} by Zelle to ${dest}${date}. Thank you! / Hola ${who}, por favor envía ${money} por Zelle a ${dest}${date}. ¡Gracias!`
+  return `Hi ${who}, please send ${money} by Zelle to ${destEn}${date}. Thank you! / Hola ${who}, por favor envía ${money} por Zelle a ${destEs}${date}. ¡Gracias!`
 }
 
 export function buildNudgeSmsUrl(phone, details) {
-  const to = formatPhoneForSms(phone)
-  if (!to) return null
-  return `sms:${to}?body=${encodeURIComponent(buildNudgeBody(details))}`
+  return smsLink(formatPhoneForSms(phone), buildNudgeBody(details))
 }
 
 export function buildTimedReminderWhatsAppUrl(recipientPhone, recipientName, organizerPhone, type, amount) {

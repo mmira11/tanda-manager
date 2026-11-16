@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { supabase } from '../../lib/supabase'
 import { formatDate } from '../../utils/rounds'
+import { useLang } from '../../context/LangContext'
 import { formatMoney } from '../../utils/money'
 import ImportBackup from './ImportBackup'
 
@@ -9,6 +10,7 @@ const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm fo
 
 export default function DataControls({ email }) {
   const { store, exportData, saveConfig } = useStore()
+  const { locale } = useLang()
   const { config, participants } = store
   const [organizerName, setOrganizerName] = useState(config.organizerName)
   const [organizerPhone, setOrganizerPhone] = useState(config.organizerPhone)
@@ -49,7 +51,7 @@ export default function DataControls({ email }) {
         <h3 className="font-semibold text-gray-900 mb-3">Cycle</h3>
         <div className="space-y-1 text-sm">
           {row('Name', config.name)}
-          {row('First collection', formatDate(config.startDate))}
+          {row('First collection', formatDate(config.startDate, locale))}
           {row('Days between rounds', config.intervalDays)}
           {row('Contribution', `${formatMoney(config.contribution)} per person`)}
           {row('Pot', `${formatMoney(config.contribution * participants.length)} per round`)}

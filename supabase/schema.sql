@@ -289,6 +289,17 @@ begin
       left join public.payments p
         on p.member_id = m.id and p.round_id = v_round.id
       where m.cycle_id = v_cycle.id
+    ),
+    'rounds', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'number', r.round_number,
+        'collect_date', r.collect_date,
+        'payout_date', r.payout_date,
+        'recipient_first_name', rm.display_first_name
+      ) order by r.round_number), '[]'::jsonb)
+      from public.rounds r
+      join public.members rm on rm.id = r.recipient_member_id
+      where r.cycle_id = v_cycle.id
     )
   );
 end;

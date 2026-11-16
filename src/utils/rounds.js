@@ -18,8 +18,12 @@ export function getPaidCount(payments) {
   return Object.values(payments).filter(Boolean).length
 }
 
-export function formatDate(iso) {
-  return new Date(iso + 'T12:00:00').toLocaleDateString('en-US', {
+export function dateLocale(lang) {
+  return lang === 'es' ? 'es-US' : 'en-US'
+}
+
+export function formatDate(iso, locale = 'en-US') {
+  return new Date(iso + 'T12:00:00').toLocaleDateString(locale, {
     weekday: 'short',
     month: 'short',
     day: 'numeric',

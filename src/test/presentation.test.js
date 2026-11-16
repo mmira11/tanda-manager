@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { LABELS } from '../data/labels'
 import {
-  paymentStats, roundStepState, daysUntil, compactCountdown, initials, canNudge, memberRounds,
+  paymentStats, roundStepState, daysUntil, compactCountdown, initials, canNudge, memberRoundSteps,
 } from '../utils/presentation'
 
 describe('payment progress', () => {
@@ -54,22 +57,44 @@ describe('avatars and nudges', () => {
     expect(canNudge({ paid: true, phone: '(555) 010-0101' })).toBe(false)
     expect(canNudge({ paid: false, phone: '   ' })).toBe(false)
     expect(canNudge({ paid: false, phone: '' })).toBe(false)
+    expect(canNudge({ paid: false, phone: '555-0100' })).toBe(false)
+    expect(canNudge({ paid: false, phone: '15550100104' })).toBe(true)
+  })
+})
+
+describe('plural copy', () => {
+  it('uses the singular when the count is 1', () => {
+    expect(LABELS.en.allDone(1)).toContain('1 round')
+    expect(LABELS.en.allDone(1)).not.toContain('rounds')
+    expect(LABELS.en.allDone(2)).toContain('rounds')
+    expect(LABELS.es.allDone(1)).toBe('La ronda terminó. ¡Excelente trabajo!')
+    expect(LABELS.es.allDone(2)).toContain('rondas')
+    expect(LABELS.es.groupPaid(1, 8)).toContain('pagó')
+    expect(LABELS.es.groupPaid(4, 8)).toContain('pagaron')
+    expect(LABELS.es.paidOf(1, 8)).toContain('pagó')
+    expect(LABELS.es.paidOf(4, 8)).toContain('pagaron')
+  })
+})
+
+describe('self-hosted font', () => {
+  it('loads Inter from the package instead of Google Fonts', () => {
+    const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8')
+    const main = readFileSync(join(process.cwd(), 'src/main.jsx'), 'utf8')
+    expect(css).not.toContain('fonts.googleapis.com')
+    expect(main).toContain('@fontsource/inter/400.css')
+    expect(main).toContain('@fontsource/inter/800.css')
   })
 })
 
 describe('member round list', () => {
-  it('derives one round per member from the cycle start', () => {
-    const rounds = memberRounds({
-      cycle: { start_date: '2099-06-01', interval_days: 14 },
-      current_round: { round_number: 2 },
-      progress: [
-        { slot: 1, display_first_name: 'Maria' },
-        { slot: 2, display_first_name: 'Rosa' },
-      ],
-    })
+  it('uses the rounds from the member board, including dates that are not an even interval', () => {
+    const rounds = memberRoundSteps([
+      { number: 2, collect_date: '2099-07-03', payout_date: '2099-07-04', recipient_first_name: 'Rosa' },
+      { number: 1, collect_date: '2099-06-01', payout_date: '2099-08-20', recipient_first_name: 'Maria' },
+    ], 2)
     expect(rounds.map(round => [round.round, round.name, round.state, round.payoutDate])).toEqual([
-      [1, 'Maria', 'past', '2099-06-02'],
-      [2, 'Rosa', 'current', '2099-06-16'],
+      [1, 'Maria', 'past', '2099-08-20'],
+      [2, 'Rosa', 'current', '2099-07-04'],
     ])
   })
 })

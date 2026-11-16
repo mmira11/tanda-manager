@@ -108,7 +108,47 @@ function assertArchiveLock(database) {
   if (!deadline.includes('zelle_destination')) {
     throw new Error(`${database}: get_member_board is missing the organizer Zelle destination`)
   }
-  console.log(`${database}: 6 archive policies, get_member_board uses the cycle timezone and Zelle destination`)
+  if (!/security definer/i.test(deadline) || !deadline.includes('search_path')) {
+    throw new Error(`${database}: get_member_board must stay SECURITY DEFINER with search_path`)
+  }
+  if (!deadline.includes("'rounds'") || !deadline.includes('recipient_first_name')) {
+    throw new Error(`${database}: get_member_board is missing the rounds list`)
+  }
+  const grants = psqlText(database, `
+    select has_function_privilege('anon', 'public.get_member_board(text)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.get_member_board(text)', 'execute')::text;
+  `).trim()
+  if (grants !== 'truetrue') {
+    throw new Error(`${database}: get_member_board grants changed (${grants})`)
+  }
+  const boardText = psqlText(database, `
+    insert into public.cycles (id, name, start_date, contribution, status, zelle_destination)
+    values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'Familia Demo', '2099-06-01', 100, 'active', 'familia.demo');
+    insert into public.members (id, cycle_id, slot, display_first_name, phone, access_token) values
+      ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, 'Maria', '5550100199', 'member-token-maria1'),
+      ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2, 'Rosa', '5550100102', 'member-token-rosa01');
+    insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id) values
+      ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, '2099-06-01', '2099-06-02', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
+      ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2, '2099-07-03', '2099-07-04', 'cccccccc-cccc-cccc-cccc-cccccccccccc');
+    select get_member_board('member-token-maria1');
+  `).trim().split('\n').filter(Boolean).pop()
+  const board = JSON.parse(boardText)
+  const rounds = board.rounds
+  if (!Array.isArray(rounds) || rounds.length !== 2) {
+    throw new Error(`${database}: expected 2 rounds, got ${JSON.stringify(rounds)}`)
+  }
+  const keys = Object.keys(rounds[0]).sort().join(',')
+  if (keys !== 'collect_date,number,payout_date,recipient_first_name') {
+    throw new Error(`${database}: round keys are ${keys}`)
+  }
+  if (rounds[1].number !== 2 || rounds[1].payout_date !== '2099-07-04' || rounds[1].recipient_first_name !== 'Rosa') {
+    throw new Error(`${database}: round payload was rewritten: ${JSON.stringify(rounds[1])}`)
+  }
+  const dumped = JSON.stringify(board)
+  if (dumped.includes('5550100199') || dumped.includes('member-token')) {
+    throw new Error(`${database}: get_member_board exposed a phone or token`)
+  }
+  console.log(`${database}: 6 archive policies, member board keeps Zelle, rounds, and the same grants`)
 }
 
 const fresh = 'tanda_sql_fresh'
@@ -129,4 +169,4 @@ applyMigrations(legacy, { skip: ['002_review_fixes.sql'] })
 assertArchiveLock(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
-console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 (002 skipped) x2')
+console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')

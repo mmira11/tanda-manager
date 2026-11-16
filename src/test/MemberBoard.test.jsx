@@ -38,6 +38,10 @@ function board({ paid = false, status = 'active' } = {}) {
       { slot: 1, display_first_name: 'Ada', paid, is_recipient: false },
       { slot: 2, display_first_name: 'Bea', paid: true, is_recipient: true },
     ],
+    rounds: [
+      { number: 1, collect_date: '2099-06-01', payout_date: '2099-06-02', recipient_first_name: 'Ada' },
+      { number: 2, collect_date: '2099-07-03', payout_date: '2099-07-04', recipient_first_name: 'Bea' },
+    ],
   }
 }
 
@@ -69,6 +73,8 @@ describe('member board', () => {
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'My Rounds' }))
     expect(screen.getByText('Bea')).toBeTruthy()
+    expect(screen.getByText(/Jul 4/)).toBeTruthy()
+    expect(screen.queryByText(/Jun 16/)).toBeNull()
     expect(screen.queryByText('5550100199')).toBeNull()
     expect(screen.queryByText(/\$200/)).toBeNull()
     expect(screen.queryByText(/\$2,400/)).toBeNull()
@@ -85,8 +91,9 @@ describe('member board', () => {
     await user.click(screen.getByLabelText('Toggle language'))
     expect(screen.getByText('Pendiente')).toBeTruthy()
     expect(screen.getByText(/¡Hola, Ada!/)).toBeTruthy()
+    expect(screen.getByLabelText('Cambiar idioma')).toBeTruthy()
 
-    await user.click(screen.getByLabelText('Toggle language'))
+    await user.click(screen.getByLabelText('Cambiar idioma'))
     expect(screen.getByText('Pending')).toBeTruthy()
   })
 
@@ -113,6 +120,13 @@ describe('member board', () => {
     supabase.rpc.mockResolvedValue({ data: board({ status: 'archived', paid: true }), error: null })
     renderBoard()
     expect(await screen.findByText('Tanda Complete!')).toBeTruthy()
+  })
+
+  it('shows Cargando while a Spanish member waits for the board', () => {
+    localStorage.setItem('tanda_lang', 'es')
+    supabase.rpc.mockReturnValue(new Promise(() => {}))
+    renderBoard()
+    expect(screen.getByText('Cargando…')).toBeTruthy()
   })
 
   it('copies the organizer Zelle handle without showing it', async () => {

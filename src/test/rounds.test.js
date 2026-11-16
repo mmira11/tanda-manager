@@ -85,6 +85,13 @@ describe('formatDate', () => {
     expect(result).toContain('Jun')
     expect(result).toContain('12')
   })
+
+  it('formats the same day in es-US', () => {
+    const result = formatDate('2026-06-12', 'es-US')
+    expect(result).toContain('12')
+    expect(result.toLowerCase()).toContain('jun')
+    expect(result).not.toContain('Fri')
+  })
 })
 
 const SPAN_ROUNDS = [

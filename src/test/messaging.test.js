@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildNudgeSmsUrl } from '../utils/messaging'
+import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildNudgeSmsUrl, buildNudgeBody } from '../utils/messaging'
 
 describe('messaging', () => {
   it('buildSmsUrl targets correct number and includes name in body', () => {
     const url = buildSmsUrl('(555) 010-0001', 'Ada', '(555) 010-0002', '2026-06-12', 80)
-    expect(url).toMatch(/^sms:5550100001/)
+    expect(url).toMatch(/^sms:5550100001\?&body=/)
     expect(url).toContain('Ada')
     expect(url).toContain('5550100002')
   })
@@ -55,7 +55,7 @@ describe('messaging', () => {
   it('buildGroupSmsUrl appends encoded body when provided', () => {
     const participants = [{ phone: '5550100001' }, { phone: '5550100002' }]
     const url = buildGroupSmsUrl(participants, 'Hello group!')
-    expect(url).toContain('body=')
+    expect(url).toMatch(/\?&body=/)
     expect(url).toContain('Hello%20group')
   })
 
@@ -74,6 +74,13 @@ describe('messaging', () => {
     expect(body).not.toContain('undefined')
   })
 
+  it('uses el organizador in the Spanish reminder and nudge', () => {
+    expect(buildReminderBody(1, 'vie, 12 de jun', '', 40, 'es')).toContain('el organizador')
+    const body = buildNudgeBody({ name: 'Rosa', amount: 100, zelle: '  ' })
+    expect(body).toContain('the organizer')
+    expect(body).toContain('el organizador')
+  })
+
   it('uses the cycle contribution instead of a fixed amount', () => {
     expect(buildReminderBody(1, 'Fri, Jun 12', '5550100009', 150)).toContain('$150')
     expect(decodeURIComponent(buildWhatsAppUrl('5550100001', 'Ana', '5550100000', '2026-06-12', 87.5)))
@@ -82,9 +89,11 @@ describe('messaging', () => {
 
   it('builds a bilingual nudge and skips a blank phone', () => {
     expect(buildNudgeSmsUrl('', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
+    expect(buildNudgeSmsUrl('555-0100', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
+    expect(buildNudgeSmsUrl('22345678901', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
     const url = buildNudgeSmsUrl('(555) 010-0104', { name: 'Rosa', amount: 100, zelle: 'familia.demo', when: 'Fri, Jun 12' })
     const body = decodeURIComponent(url.split('body=')[1])
-    expect(url).toMatch(/^sms:\+15550100104/)
+    expect(url).toMatch(/^sms:\+15550100104\?&body=/)
     expect(body).toContain('Rosa')
     expect(body).toContain('$100')
     expect(body).toContain('familia.demo')
@@ -94,6 +103,7 @@ describe('messaging', () => {
 
   it('labels the evening reminder at 6 PM, when the organizer sends it', () => {
     const url = buildTimedReminderSmsUrl('5550100001', 'Ada', '5550100002', '6pm', 40)
+    expect(url).toMatch(/\?&body=/)
     const body = decodeURIComponent(url.split('body=')[1])
     expect(body).toContain('6 PM')
     expect(body).not.toContain('8 PM')

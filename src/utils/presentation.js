@@ -1,4 +1,4 @@
-import { buildRounds } from './rounds'
+import { isValidUsPhone } from './messaging'
 
 const AVATAR_COLORS = ['#14857F', '#0F6B66', '#C46B4A', '#3D6B8C', '#7A5C3E', '#2F6F4E', '#8C4A6F', '#4E5B8C']
 
@@ -55,22 +55,19 @@ export function avatarColor(name) {
 }
 
 export function canNudge(member) {
-  return member?.paid !== true && Boolean(String(member?.phone || '').trim())
+  return member?.paid !== true && isValidUsPhone(member?.phone)
 }
 
-// The member RPC does not list every round. Slot order is payout order, and each
-// round is one interval after the cycle start, so the schedule can be derived.
-export function memberRounds(board) {
-  const progress = [...(board?.progress || [])].sort((a, b) => a.slot - b.slot)
-  const start = board?.cycle?.start_date
-  const interval = Number(board?.cycle?.interval_days)
-  if (!start || !Number.isInteger(interval) || interval < 1 || progress.length === 0) return []
-  const current = board?.current_round?.round_number ?? null
-  return buildRounds(start, interval, progress.length).map(plan => ({
-    round: plan.roundNumber,
-    collectDate: plan.collectDate,
-    payoutDate: plan.payoutDate,
-    name: progress.find(person => person.slot === plan.roundNumber)?.display_first_name || '',
-    state: roundStepState(plan.roundNumber, current),
-  }))
+// Rounds come from get_member_board. Dates are the stored collect and payout days,
+// not a schedule rebuilt from the cycle start.
+export function memberRoundSteps(rounds, currentRound) {
+  return [...(rounds || [])]
+    .map(round => ({
+      round: Number(round.number),
+      collectDate: round.collect_date,
+      payoutDate: round.payout_date,
+      name: round.recipient_first_name || '',
+      state: roundStepState(Number(round.number), currentRound),
+    }))
+    .sort((a, b) => a.round - b.round)
 }

@@ -77,7 +77,8 @@ export default function MemberBoard() {
     setLang(next)
   }
 
-  if (status === 'loading') return <Shell><p className="text-stone-500">Loading…</p></Shell>
+  const t = LABELS[lang] || LABELS.en
+  if (status === 'loading') return <Shell><p className="text-stone-500">{t.loading}</p></Shell>
   if (status === 'notfound') return <LinkNotFound />
   if (status !== 'ready' || !board) {
     return (
