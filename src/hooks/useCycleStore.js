@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { notifyBoardChanged } from '../lib/boardSync'
-import { addDays, buildRounds } from '../utils/rounds'
+import { addDays, buildRounds, isValidTimeZone } from '../utils/rounds'
 import { buildImportPlan, newAccessToken, writeImport } from '../utils/importBackup'
 
 function check({ data, error }) {
@@ -28,7 +28,7 @@ export function toStore(cycle, members, rounds, payments) {
       organizerName: cycle.organizer_display_name || '',
       organizerPhone: cycle.zelle_destination || '',
       status: cycle.status,
-      timezone: cycle.timezone || 'America/Los_Angeles',
+      timezone: isValidTimeZone(cycle.timezone) ? cycle.timezone : 'America/Los_Angeles',
       // Slots stay unique across removed members too, so new members go after the highest one.
       nextSlot: Math.max(0, ...members.map(m => m.slot)) + 1,
     },

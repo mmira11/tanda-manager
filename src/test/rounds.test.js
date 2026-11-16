@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatCollectionCountdown, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatCollectionCountdown, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds, validateSchedule, isValidTimeZone } from '../utils/rounds'
 
 // The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
 const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
@@ -226,6 +226,33 @@ describe('historyRounds', () => {
   it('lists every round of an archived cycle, including the last one', () => {
     expect(historyRounds(rounds, { status: 'archived', today: new Date('2026-01-10T12:00:00') }).map(r => r.round))
       .toEqual([2, 1])
+  })
+})
+
+describe('validateSchedule / isValidTimeZone (N11)', () => {
+  const r = (round, collectDate, payoutDate) => ({ round, collectDate, payoutDate })
+  it('accepts the generated schedule', () => {
+    expect(validateSchedule(ROUND_SCHEDULE)).toBeNull()
+  })
+  it('allows payout on the collection day', () => {
+    expect(validateSchedule([r(1, '2030-01-04', '2030-01-04')])).toBeNull()
+  })
+  it('rejects a payout before its collection date', () => {
+    expect(validateSchedule([r(1, '2030-01-04', '2030-01-03')])).toMatch(/Round 1 pays out before it collects/)
+  })
+  it('rejects collection dates that do not rise with the round number', () => {
+    expect(validateSchedule([r(1, '2030-01-04', '2030-01-05'), r(2, '2030-01-04', '2030-01-05')]))
+      .toMatch(/Round 2 collects on or before round 1/)
+    expect(validateSchedule([r(2, '2030-01-04', '2030-01-05'), r(1, '2030-01-18', '2030-01-19')]))
+      .toMatch(/Round 2 collects on or before round 1/)
+  })
+  it('knows real IANA zones from made-up ones', () => {
+    expect(isValidTimeZone('America/Los_Angeles')).toBe(true)
+    expect(isValidTimeZone('America/New_York')).toBe(true)
+    expect(isValidTimeZone('Mars/Olympus_Mons')).toBe(false)
+    expect(isValidTimeZone('PST')).toBe(false)
+    expect(isValidTimeZone('')).toBe(false)
+    expect(isValidTimeZone(null)).toBe(false)
   })
 })
 

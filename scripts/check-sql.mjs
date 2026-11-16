@@ -338,6 +338,41 @@ function assertSoftDeleteReorder(database) {
   console.log(`${database}: swap_payout_order is atomic; removed members leave progress, keep rows (${kept} payments)`)
 }
 
+// N11: payout on/after collect, collect dates rise with round number, real time zones.
+// Familia Demo has rounds 1 (collects 2099-06-01) and 2 (collects 2099-07-03). Fake data only.
+function assertScheduleValidation(database) {
+  const cycle = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const maria = `(select id from public.members where access_token = 'member-token-maria1')`
+  const mustFail = (label, sql, pattern) => {
+    const error = psqlFails(database, sql)
+    if (!pattern.test(error)) throw new Error(`${database}: ${label} failed for the wrong reason: ${error}`)
+  }
+
+  mustFail('payout before collect', `
+    insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id)
+    values ('${cycle}', 3, '2099-08-01', '2099-07-31', ${maria});
+  `, /rounds_payout_on_or_after_collect/)
+  mustFail('round 3 collecting before round 2', `
+    insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id)
+    values ('${cycle}', 3, '2099-06-15', '2099-06-16', ${maria});
+  `, /out of date order/)
+  mustFail('moving round 1 after round 2', `
+    update public.rounds set collect_date = '2099-07-10', payout_date = '2099-07-11'
+    where cycle_id = '${cycle}' and round_number = 1;
+  `, /out of date order/)
+  psqlText(database, `
+    insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id)
+    values ('${cycle}', 3, '2099-07-17', '2099-07-17', ${maria});
+    delete from public.rounds where cycle_id = '${cycle}' and round_number = 3;
+  `)
+
+  mustFail('made-up time zone', `update public.cycles set timezone = 'Mars/Olympus_Mons' where id = '${cycle}';`, /Unknown time zone/)
+  mustFail('null time zone', `update public.cycles set timezone = null where id = '${cycle}';`, /Unknown time zone|null value/)
+  psqlText(database, `update public.cycles set timezone = 'America/New_York' where id = '${cycle}';`)
+  psqlText(database, `update public.cycles set timezone = 'America/Los_Angeles' where id = '${cycle}';`)
+  console.log(`${database}: rounds stay in date order with payout on/after collect; time zones must be real`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -349,6 +384,7 @@ assertArchiveLock(fresh)
 assertAtomicImport(fresh)
 assertLinkRevokeExpiry(fresh)
 assertSoftDeleteReorder(fresh)
+assertScheduleValidation(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -360,6 +396,7 @@ assertArchiveLock(legacy)
 assertAtomicImport(legacy)
 assertLinkRevokeExpiry(legacy)
 assertSoftDeleteReorder(legacy)
+assertScheduleValidation(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
