@@ -62,11 +62,13 @@ describe('member board', () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     renderBoard()
 
-    expect(await screen.findByText(/Your payment is pending this round/)).toBeTruthy()
-    expect(screen.getAllByText('Ada').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Bea').length).toBeGreaterThan(0)
+    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(screen.getByText(/Hi, Ada!/)).toBeTruthy()
+    expect(screen.getByText(/\$160/)).toBeTruthy()
     expect(screen.getAllByText(/Jun 2/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/\$80 per person/)).toBeTruthy()
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'My Rounds' }))
+    expect(screen.getByText('Bea')).toBeTruthy()
     expect(screen.queryByText('5550100199')).toBeNull()
     expect(screen.queryByText(/\$200/)).toBeNull()
     expect(screen.queryByText(/\$2,400/)).toBeNull()
@@ -78,13 +80,14 @@ describe('member board', () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     const user = userEvent.setup()
     renderBoard()
-    await screen.findByText(/pending this round/)
+    await screen.findByText('Pending')
 
     await user.click(screen.getByLabelText('Toggle language'))
-    expect(screen.getByText(/pendiente esta ronda/)).toBeTruthy()
+    expect(screen.getByText('Pendiente')).toBeTruthy()
+    expect(screen.getByText(/¡Hola, Ada!/)).toBeTruthy()
 
     await user.click(screen.getByLabelText('Toggle language'))
-    expect(screen.getByText(/pending this round/)).toBeTruthy()
+    expect(screen.getByText('Pending')).toBeTruthy()
   })
 
   it('flips to paid when the board is refetched', async () => {
@@ -93,7 +96,7 @@ describe('member board', () => {
       .mockResolvedValueOnce({ data: board({ paid: false }), error: null })
       .mockResolvedValue({ data: board({ paid: true }), error: null })
     renderBoard()
-    expect(await screen.findByText(/pending this round/)).toBeTruthy()
+    expect(await screen.findByText('Pending')).toBeTruthy()
 
     await act(async () => {
       vi.advanceTimersByTime(10000)
@@ -101,7 +104,7 @@ describe('member board', () => {
       await Promise.resolve()
     })
 
-    expect(await screen.findByText(/paid for this round/)).toBeTruthy()
+    expect(await screen.findByText('Paid! ✅')).toBeTruthy()
     expect(supabase.rpc).toHaveBeenCalledWith('get_member_board', { p_token: TOKEN })
     expect(screen.queryByText('5550100199')).toBeNull()
   })
@@ -110,6 +113,22 @@ describe('member board', () => {
     supabase.rpc.mockResolvedValue({ data: board({ status: 'archived', paid: true }), error: null })
     renderBoard()
     expect(await screen.findByText('Tanda Complete!')).toBeTruthy()
+  })
+
+  it('copies the organizer Zelle handle without showing it', async () => {
+    const data = board()
+    data.cycle.zelle_destination = 'familia.demo'
+    supabase.rpc.mockResolvedValue({ data, error: null })
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
+    renderBoard()
+
+    await user.click(await screen.findByRole('button', { name: 'Copy Zelle' }))
+
+    expect(writeText).toHaveBeenCalledWith('familia.demo')
+    expect(await screen.findByRole('status')).toHaveTextContent('Copied')
+    expect(screen.queryByText('familia.demo')).toBeNull()
+    expect(screen.queryByText('5550100199')).toBeNull()
   })
 
   it('shows a bilingual message for a bad token', async () => {

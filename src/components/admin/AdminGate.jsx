@@ -8,8 +8,8 @@ import ImportBackup from './ImportBackup'
 
 function Screen({ children }) {
   return (
-    <div className="min-h-screen bg-gold-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center">{children}</div>
+    <div className="admin-theme min-h-screen bg-ink flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-lg p-8 w-full max-w-sm text-center">{children}</div>
     </div>
   )
 }
@@ -113,7 +113,7 @@ function AdminHome({ email }) {
   }
   if (importing && (!store || creating)) {
     return (
-      <div className="min-h-screen bg-gold-50 p-4">
+      <div className="admin-theme min-h-screen bg-ink p-4">
         <div className="max-w-lg mx-auto">
           <ImportBackup onCancel={() => setImporting(false)} />
         </div>

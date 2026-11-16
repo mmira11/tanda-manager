@@ -23,6 +23,7 @@ let fake
 const setup = async (expected = 'Round 6 of 12') => {
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   render(<StoreProvider><Loaded /></StoreProvider>)
+  await user.click(await screen.findByRole('button', { name: 'Schedule' }))
   await screen.findByText(expected)
   return user
 }
@@ -168,7 +169,6 @@ describe('amounts come from the cycle', () => {
 describe('History → Edit', () => {
   it('jumps from a history card into that round', async () => {
     const user = await setup()
-    await user.click(screen.getByText('History'))
     const card = screen.getByText('Round 3').closest('div.bg-white')
 
     await user.click(within(card).getByText('Edit'))
@@ -178,8 +178,7 @@ describe('History → Edit', () => {
   })
 
   it('lists round 5 as history on round 6 payout day', async () => {
-    const user = await setup()
-    await user.click(screen.getByText('History'))
+    await setup()
 
     expect(screen.getByText('Round 5')).toBeTruthy()
     expect(screen.queryByText('Round 6')).toBeNull()

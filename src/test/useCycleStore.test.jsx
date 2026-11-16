@@ -99,6 +99,17 @@ describe('useCycleStore', () => {
     expect(fake.tables.rounds).toHaveLength(0)
   })
 
+  it('loads only this cycle’s unmatched Zelle rows', async () => {
+    const db = seedCycle({ names: ['Ana', 'Beto'], contribution: 100 })
+    db.pending_review = [
+      { id: 'rev-1', cycle_id: 'cycle-1', sender_name: 'J. LOPEZ', amount: 100, status: 'pending' },
+      { id: 'rev-2', cycle_id: 'cycle-1', sender_name: 'A. DIAZ', amount: 100, status: 'matched' },
+      { id: 'rev-3', cycle_id: 'other', sender_name: 'X. SAMPLE', amount: 50, status: 'pending' },
+    ]
+    const { result } = await loaded(db)
+    expect(result.current.pendingReview.map(row => row.sender_name)).toEqual(['J. LOPEZ'])
+  })
+
   it('surfaces a failed write and reloads the saved state', async () => {
     const db = seedCycle({ names: ['Ana', 'Beto'] })
     const fake = installFakeSupabase({ db, failOn: (table, op) => table === 'payments' && op === 'upsert' })

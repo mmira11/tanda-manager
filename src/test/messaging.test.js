@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl } from '../utils/messaging'
+import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildNudgeSmsUrl } from '../utils/messaging'
 
 describe('messaging', () => {
   it('buildSmsUrl targets correct number and includes name in body', () => {
@@ -78,6 +78,18 @@ describe('messaging', () => {
     expect(buildReminderBody(1, 'Fri, Jun 12', '5550100009', 150)).toContain('$150')
     expect(decodeURIComponent(buildWhatsAppUrl('5550100001', 'Ana', '5550100000', '2026-06-12', 87.5)))
       .toContain('$87.50')
+  })
+
+  it('builds a bilingual nudge and skips a blank phone', () => {
+    expect(buildNudgeSmsUrl('', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
+    const url = buildNudgeSmsUrl('(555) 010-0104', { name: 'Rosa', amount: 100, zelle: 'familia.demo', when: 'Fri, Jun 12' })
+    const body = decodeURIComponent(url.split('body=')[1])
+    expect(url).toMatch(/^sms:\+15550100104/)
+    expect(body).toContain('Rosa')
+    expect(body).toContain('$100')
+    expect(body).toContain('familia.demo')
+    expect(body).toContain('Hola')
+    expect(body).not.toContain('5550100104')
   })
 
   it('labels the evening reminder at 6 PM, when the organizer sends it', () => {

@@ -35,8 +35,8 @@ describe('AdminGate', () => {
     installFakeSupabase({ session: adminSession, isAdmin: true, db: seedCycle({ names: ['Ana', 'Beto', 'Cata'] }) })
     render(<AdminGate />)
 
-    expect(await screen.findByText('This Round')).toBeTruthy()
-    expect(screen.getByText('Admin · Test Tanda')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Dashboard' })).toBeTruthy()
+    expect(screen.getByText('Test Tanda')).toBeTruthy()
   })
 })
 

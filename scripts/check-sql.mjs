@@ -105,7 +105,10 @@ function assertArchiveLock(database) {
   if (!deadline.includes('collect_deadline') || !deadline.includes('v_cycle.timezone')) {
     throw new Error(`${database}: get_member_board is missing the cycle-timezone deadline`)
   }
-  console.log(`${database}: 6 archive policies, get_member_board uses the cycle timezone`)
+  if (!deadline.includes('zelle_destination')) {
+    throw new Error(`${database}: get_member_board is missing the organizer Zelle destination`)
+  }
+  console.log(`${database}: 6 archive policies, get_member_board uses the cycle timezone and Zelle destination`)
 }
 
 const fresh = 'tanda_sql_fresh'

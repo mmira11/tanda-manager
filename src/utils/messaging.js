@@ -71,6 +71,20 @@ export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organize
   return `sms:${to}?body=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type, amount))}`
 }
 
+export function buildNudgeBody({ name, amount, zelle, when }) {
+  const who = name?.trim() || 'there'
+  const dest = zelle?.trim() || 'the organizer'
+  const money = formatMoney(amount)
+  const date = when ? ` (${when})` : ''
+  return `Hi ${who}, please send ${money} by Zelle to ${dest}${date}. Thank you! / Hola ${who}, por favor envía ${money} por Zelle a ${dest}${date}. ¡Gracias!`
+}
+
+export function buildNudgeSmsUrl(phone, details) {
+  const to = formatPhoneForSms(phone)
+  if (!to) return null
+  return `sms:${to}?body=${encodeURIComponent(buildNudgeBody(details))}`
+}
+
 export function buildTimedReminderWhatsAppUrl(recipientPhone, recipientName, organizerPhone, type, amount) {
   const to = '1' + stripPhone(recipientPhone)
   return `https://wa.me/${to}?text=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type, amount))}`

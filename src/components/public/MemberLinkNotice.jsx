@@ -16,20 +16,20 @@ export default function MemberLinkNotice() {
   }
 
   return (
-    <div className="min-h-screen bg-gold-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-sm text-center">
+    <div className="min-h-screen bg-cream flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-sm p-8 w-full max-w-sm text-center">
         <button
           onClick={toggleLang}
-          className="text-xs font-semibold text-gold-600 border border-gold-200 rounded-full px-3 py-1 mb-4"
+          className="text-xs font-semibold text-coralink border border-coral/40 rounded-full px-3 py-1 mb-4 min-h-11"
         >
           {lang === 'en' ? 'ES' : 'EN'}
         </button>
-        <div className="text-5xl mb-3">💰</div>
-        <h1 className="text-2xl font-bold text-gray-900">{t.useLinkTitle}</h1>
-        <p className="text-gray-500 mt-2 text-sm">{t.useLinkBody}</p>
+        <div className="text-5xl mb-3">🤝</div>
+        <h1 className="text-2xl font-bold text-stone-900">{t.useLinkTitle}</h1>
+        <p className="text-stone-500 mt-2 text-sm">{t.useLinkBody}</p>
         <Link
           to="/admin"
-          className="mt-6 inline-block w-full bg-gold-500 hover:bg-gold-600 text-white font-semibold py-3 rounded-xl transition-colors"
+          className="mt-6 inline-block w-full bg-teal hover:opacity-90 text-white font-semibold py-3 rounded-xl transition-colors min-h-12"
         >
           {t.organizerSignIn}
         </Link>

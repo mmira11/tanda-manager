@@ -157,10 +157,12 @@ describe('useCycleStore import and cycle switch', () => {
     installFakeSupabase({ session: adminSession, isAdmin: true, db })
     render(<AdminGate />)
 
-    expect(await screen.findByText('Admin · Finished')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
+    expect(await screen.findByText('Finished')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull()
-    await userEvent.setup().click(screen.getByText('This Round'))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Schedule' }))
     expect(screen.getAllByRole('button', { name: 'Pending' })[0]).toBeDisabled()
   })
 })
@@ -175,7 +177,8 @@ describe('archive then create', () => {
     const user = userEvent.setup()
     render(<AdminGate />)
 
-    expect(await screen.findByText('Admin · Current')).toBeTruthy()
+    expect(await screen.findByText('Current')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('button', { name: 'New cycle' })).toBeDisabled()
     expect(screen.getByText(/Archiva el ciclo activo/)).toBeTruthy()
 
@@ -202,9 +205,10 @@ describe('import then create', () => {
     await user.type(screen.getByLabelText('Contribution per person'), '40')
     await user.click(screen.getByText('Import as archived cycle'))
 
-    expect(await screen.findByText('Admin · Tanda 2025')).toBeTruthy()
+    expect(await screen.findByText('Tanda 2025')).toBeTruthy()
     expect(fake.tables.cycles.map(c => c.status)).toEqual(['archived'])
 
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
     await user.click(screen.getByRole('button', { name: 'New cycle' }))
     await user.type(screen.getByLabelText('Cycle name'), 'Next Tanda')
     fireEvent.change(screen.getByLabelText('First collection date'), { target: { value: '2027-04-02' } })
@@ -213,7 +217,7 @@ describe('import then create', () => {
     await user.type(screen.getByLabelText('Member 2 first name'), 'Bea')
     await user.click(screen.getByText('Create cycle'))
 
-    expect(await screen.findByText('Admin · Next Tanda')).toBeTruthy()
+    expect(await screen.findByText('Next Tanda')).toBeTruthy()
     expect(fake.tables.cycles.map(c => c.status).sort()).toEqual(['active', 'archived'])
     expect(screen.getByText('Round 1 of 2')).toBeTruthy()
   })
@@ -232,7 +236,7 @@ describe('archived history and personal links', () => {
     const user = userEvent.setup()
     render(<StoreProvider><Loaded /></StoreProvider>)
 
-    await user.click(await screen.findByText('History'))
+    await user.click(await screen.findByRole('button', { name: 'Schedule' }))
 
     expect(screen.getByText('Round 1')).toBeTruthy()
     expect(screen.getByText('Round 2')).toBeTruthy()
@@ -246,7 +250,7 @@ describe('archived history and personal links', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<StoreProvider><Loaded /></StoreProvider>)
 
-    await user.click(await screen.findByText('Roster'))
+    await user.click(await screen.findByRole('button', { name: 'Members' }))
     expect(screen.queryByText('test-token-1')).toBeNull()
     await user.click(screen.getAllByText('Copy personal link')[0])
     expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/m\/test-token-1$/))

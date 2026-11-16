@@ -30,7 +30,7 @@ create table public.cycles (
   status text not null default 'draft'
     check (status in ('draft', 'active', 'archived')),
   timezone text not null default 'America/Los_Angeles',
-  zelle_destination text,          -- organizer Zelle target; admin-only
+  zelle_destination text,          -- organizer Zelle target; members receive it from get_member_board
   organizer_display_name text,
   created_at timestamptz not null default now(),
   archived_at timestamptz
@@ -249,7 +249,8 @@ begin
       'status', v_cycle.status,
       'start_date', v_cycle.start_date,
       'interval_days', v_cycle.interval_days,
-      'timezone', v_zone
+      'timezone', v_zone,
+      'zelle_destination', v_cycle.zelle_destination
     ),
     'me', jsonb_build_object(
       'slot', v_member.slot,

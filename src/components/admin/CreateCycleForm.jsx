@@ -83,7 +83,7 @@ export default function CreateCycleForm({ onImport, onCancel }) {
   )
 
   return (
-    <div className="min-h-screen bg-gold-50 p-4">
+    <div className="admin-theme min-h-screen bg-ink p-4">
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-lg mx-auto space-y-5">
         <div className="text-center">
           <div className="text-4xl mb-2">💰</div>
