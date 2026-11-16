@@ -131,6 +131,18 @@ describe('writeImport', () => {
     expect(fake.tables.members).toHaveLength(0)
     expect(fake.tables.rounds).toHaveLength(0)
   })
+
+  it('writes through one import_cycle call, not table by table', async () => {
+    const fake = installFakeSupabase()
+    const plan = buildImportPlan(backup(), { contribution: 40, token: sequentialTokens() })
+    await writeImport(fake, plan)
+
+    expect(fake.rpc).toHaveBeenCalledTimes(1)
+    expect(fake.rpc.mock.calls[0][0]).toBe('import_cycle')
+    expect(fake.rpc.mock.calls[0][1].p_plan.reminder_templates).toHaveLength(6)
+    // The only direct table call is the read-only duplicate start-date check.
+    expect(fake.from.mock.calls.map(([table]) => table)).toEqual(['cycles'])
+  })
 })
 
 describe('useCycleStore import and cycle switch', () => {
