@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { buildRounds, formatDate } from '../../utils/rounds'
+import { useLang } from '../../context/LangContext'
 import { formatMoney, isWholeCents } from '../../utils/money'
 
 const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors'
@@ -20,6 +21,7 @@ export function validateCycleForm(f) {
 
 export default function CreateCycleForm({ onImport, onCancel }) {
   const { createCycle } = useStore()
+  const { locale } = useLang()
   const [form, setForm] = useState({
     name: '', startDate: '', intervalDays: '14', contribution: '',
     organizerName: '', organizerPhone: '', members: [emptyMember(), emptyMember()],
@@ -83,7 +85,7 @@ export default function CreateCycleForm({ onImport, onCancel }) {
   )
 
   return (
-    <div className="min-h-screen bg-gold-50 p-4">
+    <div className="admin-theme min-h-screen bg-ink p-4">
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-lg mx-auto space-y-5">
         <div className="text-center">
           <div className="text-4xl mb-2">💰</div>
@@ -135,7 +137,7 @@ export default function CreateCycleForm({ onImport, onCancel }) {
         {plan && parsed.contribution > 0 && (
           <div className="bg-gold-50 border border-gold-200 rounded-xl p-3 text-sm text-gray-700">
             {memberCount} rounds · {formatMoney(parsed.contribution * memberCount)} pot each round ·
-            last payout {formatDate(plan[plan.length - 1].payoutDate)}
+            last payout {formatDate(plan[plan.length - 1].payoutDate, locale)}
           </div>
         )}
 

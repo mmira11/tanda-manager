@@ -23,6 +23,7 @@ let fake
 const setup = async (expected = 'Round 6 of 12') => {
   const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
   render(<StoreProvider><Loaded /></StoreProvider>)
+  await user.click(await screen.findByRole('button', { name: 'Schedule' }))
   await screen.findByText(expected)
   return user
 }
@@ -54,6 +55,17 @@ describe('round selection', () => {
 
     expect(screen.getByText('Round 5 of 12')).toBeTruthy()
     expect(screen.getByText(/Editing a past round — paid out Sat, Aug 8/)).toBeTruthy()
+  })
+
+  it('hides timed reminder icons when the phone is not a valid US number', async () => {
+    fake.tables.members.find(member => member.display_first_name === 'Ada').phone = '12345'
+    await setup()
+    const ada = screen.getAllByText('Ada').map(node => node.closest('div.flex-1')).find(Boolean)
+    expect(within(ada).queryByTitle('SMS 12 PM reminder to Ada')).toBeNull()
+    expect(within(ada).queryByTitle('SMS 6 PM final notice to Ada')).toBeNull()
+    expect(within(ada).queryByTitle('WhatsApp 12 PM reminder to Ada')).toBeNull()
+    expect(within(ada).queryByTitle('WhatsApp 6 PM final notice to Ada')).toBeNull()
+    expect(screen.getByTitle('SMS 6 PM final notice to Bea')).toBeTruthy()
   })
 
   it('hides Reminders and Remind Unpaid on a past round', async () => {
@@ -168,7 +180,6 @@ describe('amounts come from the cycle', () => {
 describe('History → Edit', () => {
   it('jumps from a history card into that round', async () => {
     const user = await setup()
-    await user.click(screen.getByText('History'))
     const card = screen.getByText('Round 3').closest('div.bg-white')
 
     await user.click(within(card).getByText('Edit'))
@@ -178,8 +189,7 @@ describe('History → Edit', () => {
   })
 
   it('lists round 5 as history on round 6 payout day', async () => {
-    const user = await setup()
-    await user.click(screen.getByText('History'))
+    await setup()
 
     expect(screen.getByText('Round 5')).toBeTruthy()
     expect(screen.queryByText('Round 6')).toBeNull()

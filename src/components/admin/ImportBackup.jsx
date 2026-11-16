@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { ImportError, formatImportSummary, inspectBackup } from '../../utils/importBackup'
 import { formatDate } from '../../utils/rounds'
+import { useLang } from '../../context/LangContext'
 
 const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors'
 
 export default function ImportBackup({ onCancel }) {
   const { importBackup } = useStore()
+  const { locale } = useLang()
   const [raw, setRaw] = useState('')
   const [preview, setPreview] = useState(null)
   const [contribution, setContribution] = useState('')
@@ -80,7 +82,7 @@ export default function ImportBackup({ onCancel }) {
       {preview && (
         <div className="bg-gold-50 border border-gold-200 rounded-xl p-3 text-sm text-gray-700 space-y-1">
           <p>{preview.memberCount} members · {preview.roundCount} rounds · {preview.paymentCount} payments · {preview.paidCount} paid</p>
-          <p>Starts {formatDate(preview.startDate)}</p>
+          <p>Starts {formatDate(preview.startDate, locale)}</p>
         </div>
       )}
 

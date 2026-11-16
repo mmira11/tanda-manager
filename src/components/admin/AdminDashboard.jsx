@@ -1,156 +1,217 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound } from '../../utils/rounds'
+import { LABELS } from '../../data/labels'
+import { formatMoney } from '../../utils/money'
+import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo, dateLocale } from '../../utils/rounds'
+import { compactCountdown, paymentStats } from '../../utils/presentation'
 import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
 import HistoryLog from './HistoryLog'
 import DataControls from './DataControls'
+import DashboardView from './DashboardView'
+import PaymentSheet from './PaymentSheet'
+import TabBar from '../ui/TabBar'
+import { LangProvider } from '../../context/LangContext'
 
-const TABS = [
-  { id: 'round',    label: 'This Round', icon: '💰' },
-  { id: 'roster',   label: 'Roster',     icon: '👥' },
-  { id: 'history',  label: 'History',    icon: '📋' },
-  { id: 'settings', label: 'Settings',   icon: '⚙️' },
-]
+function readLang() {
+  try {
+    const value = localStorage.getItem('tanda_lang')
+    return value === 'es' || value === 'en' ? value : 'en'
+  } catch {
+    return 'en'
+  }
+}
 
 export default function AdminDashboard({ email, onNewCycle }) {
-  const { store, cycles, selectCycle, archiveCycle, error, clearError } = useStore()
-  const [tab, setTab] = useState('round')
+  const { store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment } = useStore()
+  const [tab, setTab] = useState('dashboard')
+  const [lang, setLang] = useState(readLang)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
+  const [sheetSlot, setSheetSlot] = useState(null)
+  const [now, setNow] = useState(() => new Date())
   const hasActive = cycles.some(cycle => cycle.status === 'active')
   const viewingActive = store.config.status === 'active'
+  const readOnly = store.config.status === 'archived'
+  const t = LABELS[lang] || LABELS.en
+  const current = getCurrentRound(store.rounds)
+  const stats = paymentStats(
+    store.participants.map(person => current?.payments?.[person.slot] === true),
+    store.config.contribution,
+  )
+  const members = store.participants.map(person => ({
+    slot: person.slot,
+    name: person.name,
+    phone: person.phone,
+    paid: current?.payments?.[person.slot] === true,
+  }))
+  const sheetMember = members.find(person => person.slot === sheetSlot) || null
+  const recipient = store.participants.find(person => person.slot === current?.recipientSlot)
+  const payoutDay = current ? getDayName(current.payoutDate, dateLocale(lang)) : ''
+  const deadline = current ? deadlineOnDate(current.collectDate, store.config.timezone).getTime() : null
+  const countdownLabel = deadline ? compactCountdown(getCountdownTo(deadline, now)) : ''
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000)
+    return () => clearInterval(id)
+  }, [])
+
+  function toggleLang() {
+    const next = lang === 'en' ? 'es' : 'en'
+    try { localStorage.setItem('tanda_lang', next) } catch { /* private mode */ }
+    setLang(next)
+  }
 
   const editRound = (roundNum) => {
     setSelectedRound(roundNum)
-    setTab('round')
+    setTab('schedule')
   }
 
-  return (
-    <div className="min-h-screen bg-gold-50">
-      {/* Sticky header */}
-      <div className="bg-white border-b border-gray-100 px-4 py-4 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">Tanda Manager</h1>
-            <p className="text-xs text-gray-500">Admin · {store.config.name}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            {cycles.length > 0 && (
-              <select
-                aria-label="Cycle"
-                value={store.config.cycleId}
-                onChange={e => selectCycle(e.target.value)}
-                className="text-xs border border-gray-200 rounded-full px-2 py-1.5 bg-white max-w-[11rem]"
-              >
-                {cycles.map(cycle => (
-                  <option key={cycle.id} value={cycle.id}>
-                    {cycle.name} · {cycle.status}
-                  </option>
-                ))}
-              </select>
-            )}
-            {viewingActive && (
-              <button
-                type="button"
-                onClick={() => setConfirmArchive(true)}
-                className="text-xs text-gray-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-50"
-              >
-                Archive
-              </button>
-            )}
-            {onNewCycle && (
-              <button
-                type="button"
-                onClick={onNewCycle}
-                disabled={hasActive}
-                title={hasActive ? 'Archive the active cycle before starting another' : undefined}
-                className="text-xs text-gold-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                New cycle
-              </button>
-            )}
-            <a
-              href={import.meta.env.BASE_URL || '/'}
-              className="text-xs text-gold-600 font-semibold bg-gold-50 px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-100 transition-colors"
-            >
-              Home
-            </a>
-          </div>
-        </div>
-      </div>
+  const tabs = [
+    { id: 'dashboard', label: t.tabDashboard, icon: 'home' },
+    { id: 'members', label: t.tabMembers, icon: 'members' },
+    { id: 'schedule', label: t.tabSchedule, icon: 'rounds' },
+    { id: 'settings', label: t.tabSettings, icon: 'settings' },
+  ]
 
-      {/* Scrollable content with bottom padding for tab bar */}
-      <div className="max-w-2xl mx-auto p-4 pb-28">
-        {hasActive && (
-          <p className="mb-4 text-xs text-gray-500">
-            Archive the active cycle before starting another.
-            {' '}Archiva el ciclo activo antes de empezar otro.
-          </p>
-        )}
+  return (
+    <LangProvider lang={lang}>
+    <div className="admin-theme min-h-screen bg-ink text-stone-100">
+      <div className="max-w-lg mx-auto px-4 pt-5 pb-28">
+        {email && <p className="mb-3 truncate text-[11px] text-stone-400">{email}</p>}
         {confirmArchive && (
-          <div role="dialog" aria-modal="true" aria-labelledby="archive-title" className="mb-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
-            <h2 id="archive-title" className="font-semibold text-gray-900">Archive this cycle?</h2>
-            <p className="text-sm text-gray-600 mt-1">
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-title" className="mb-4 bg-panel border border-white/10 rounded-2xl p-4">
+            <h2 id="archive-title" className="font-semibold text-stone-50">Archive this cycle?</h2>
+            <p className="text-sm text-stone-300 mt-1">
               Payments and the roster will be locked. You can still view history, then start a new cycle.
             </p>
-            <h3 className="font-semibold text-gray-900 mt-3">¿Archivar este ciclo?</h3>
-            <p className="text-sm text-gray-600 mt-1">
+            <h3 className="font-semibold text-stone-50 mt-3">¿Archivar este ciclo?</h3>
+            <p className="text-sm text-stone-300 mt-1">
               Los pagos y la lista quedarán bloqueados. Podrás ver el historial y luego empezar un ciclo nuevo.
             </p>
             <div className="flex gap-2 mt-4">
               <button
                 type="button"
                 onClick={() => { setConfirmArchive(false); archiveCycle() }}
-                className="flex-1 bg-gray-900 text-white font-semibold py-2.5 rounded-xl text-sm"
+                className="flex-1 bg-mint text-ink font-semibold py-2.5 rounded-xl text-sm min-h-11"
               >
-                Archive cycle
+                {t.archiveCycle}
               </button>
               <button
                 type="button"
                 onClick={() => setConfirmArchive(false)}
-                className="flex-1 border border-gray-200 font-semibold py-2.5 rounded-xl text-sm"
+                className="flex-1 border border-white/15 font-semibold py-2.5 rounded-xl text-sm min-h-11"
               >
-                Cancel
+                {t.cancel}
               </button>
             </div>
           </div>
         )}
-        {store.config.status === 'archived' && (
-          <div className="mb-4 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700">
-            Archived cycle. History lists every round, including the last one.
+        {readOnly && (
+          <div className="mb-4 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-stone-200">
+            {t.archivedBanner}
           </div>
         )}
         {error && (
-          <div role="alert" className="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
-            <p className="text-sm text-red-700 flex-1">Couldn't save: {error}</p>
-            <button onClick={clearError} className="text-xs font-semibold text-red-700">Dismiss</button>
+          <div role="alert" className="mb-4 flex items-center gap-3 bg-red-950/40 border border-red-400/30 rounded-xl px-4 py-2.5">
+            <p className="text-sm text-red-200 flex-1">{t.couldntSave(error)}</p>
+            <button type="button" onClick={clearError} className="text-xs font-semibold text-red-100 min-h-11">{t.dismiss}</button>
           </div>
         )}
-        {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} readOnly={store.config.status === 'archived'} />}
-        {tab === 'roster'   && <RosterEditor readOnly={store.config.status === 'archived'} />}
-        {tab === 'history'  && <HistoryLog onEditRound={editRound} />}
-        {tab === 'settings' && <DataControls email={email} />}
+
+        {tab === 'dashboard' && (
+          <DashboardView
+            t={t}
+            lang={lang}
+            onToggleLang={toggleLang}
+            cycleName={store.config.name}
+            roundLabel={current ? t.roundOf(current.round, store.rounds.length) : ''}
+            collectedLabel={formatMoney(stats.collected)}
+            potLabel={formatMoney(stats.pot)}
+            paid={stats.paid}
+            total={stats.total}
+            payoutLine={current ? t.payoutLine(payoutDay, recipient?.name || '') : ''}
+            countdownLabel={countdownLabel}
+            members={members}
+            contribution={store.config.contribution}
+            zelle={store.config.organizerPhone}
+            collectDate={current?.collectDate}
+            reviews={pendingReview}
+            readOnly={readOnly}
+            onSelectMember={member => setSheetSlot(member.slot)}
+          />
+        )}
+        {tab === 'members' && <RosterEditor readOnly={readOnly} />}
+        {tab === 'schedule' && (
+          <div className="space-y-4">
+            <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} readOnly={readOnly} />
+            <HistoryLog onEditRound={editRound} />
+          </div>
+        )}
+        {tab === 'settings' && (
+          <div className="space-y-4">
+            {cycles.length > 0 && (
+              <label className="block text-sm text-stone-300">
+                {t.cycleLabel}
+                <select
+                  aria-label={t.cycleLabel}
+                  value={store.config.cycleId}
+                  onChange={e => selectCycle(e.target.value)}
+                  className="mt-1 w-full rounded-xl bg-ink border border-white/15 px-3 py-3 text-sm text-stone-100"
+                >
+                  {cycles.map(cycle => (
+                    <option key={cycle.id} value={cycle.id}>
+                      {cycle.name} · {cycle.status}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {hasActive && (
+              <p className="text-xs text-stone-400">
+                Archive the active cycle before starting another.
+                {' '}Archiva el ciclo activo antes de empezar otro.
+              </p>
+            )}
+            <div className="flex gap-2">
+              {viewingActive && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmArchive(true)}
+                  className="flex-1 min-h-11 text-sm font-semibold rounded-xl border border-white/15"
+                >
+                  {t.archive}
+                </button>
+              )}
+              {onNewCycle && (
+                <button
+                  type="button"
+                  onClick={onNewCycle}
+                  disabled={hasActive}
+                  title={hasActive ? t.archiveFirst : undefined}
+                  className="flex-1 min-h-11 text-sm font-semibold rounded-xl bg-mint text-ink disabled:opacity-40"
+                >
+                  {t.newCycle}
+                </button>
+              )}
+            </div>
+            <DataControls email={email} />
+          </div>
+        )}
       </div>
 
-      {/* Fixed bottom tab bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-10">
-        <div className="max-w-2xl mx-auto grid grid-cols-4">
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex flex-col items-center justify-center py-3 gap-0.5 transition-colors ${
-                tab === t.id ? 'text-gold-600' : 'text-gray-400 hover:text-gray-600'
-              }`}
-            >
-              <span className="text-xl">{t.icon}</span>
-              <span className="text-xs font-medium">{t.label}</span>
-              {tab === t.id && <div className="w-4 h-0.5 bg-gold-500 rounded-full" />}
-            </button>
-          ))}
-        </div>
-      </div>
+      {sheetMember && (
+        <PaymentSheet
+          member={sheetMember}
+          t={t}
+          readOnly={readOnly}
+          onClose={() => setSheetSlot(null)}
+          onToggle={member => togglePayment(current.round, member.slot)}
+        />
+      )}
+
+      <TabBar tabs={tabs} active={tab} onChange={setTab} tone="dark" label={t.adminNav} />
     </div>
+    </LangProvider>
   )
 }

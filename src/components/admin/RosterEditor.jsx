@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { memberLink } from '../../utils/memberLink'
-import { buildGroupSmsUrl } from '../../utils/messaging'
+import { buildGroupSmsUrl, organizerFallback } from '../../utils/messaging'
+import { useLang } from '../../context/LangContext'
 import { formatMoney } from '../../utils/money'
 
 function hasPaymentHistory(store, slot) {
@@ -144,6 +145,7 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
 
 export default function RosterEditor({ readOnly = false }) {
   const { store, addMember } = useStore()
+  const { lang } = useLang()
   const [editMode, setEditMode] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
@@ -253,7 +255,7 @@ export default function RosterEditor({ readOnly = false }) {
       {(() => {
         const withPhone = store.participants.filter(p => p.phone?.trim())
         const orgPhone = store.config?.organizerPhone || ''
-        const body = `Welcome to ${store.config.name}! 🎉 Collection is every ${store.config.intervalDays} days — please send ${formatMoney(store.config.contribution)} to ${orgPhone || 'the organizer'} via Zelle on collection day. Looking forward to a great tanda with everyone!`
+        const body = `Welcome to ${store.config.name}! 🎉 Collection is every ${store.config.intervalDays} days — please send ${formatMoney(store.config.contribution)} to ${orgPhone || organizerFallback(lang)} via Zelle on collection day. Looking forward to a great tanda with everyone!`
         const groupUrl = buildGroupSmsUrl(withPhone, body)
         return (
           <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">

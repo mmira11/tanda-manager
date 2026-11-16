@@ -30,7 +30,7 @@ create table public.cycles (
   status text not null default 'draft'
     check (status in ('draft', 'active', 'archived')),
   timezone text not null default 'America/Los_Angeles',
-  zelle_destination text,          -- organizer Zelle target; admin-only
+  zelle_destination text,          -- organizer Zelle target; members receive it from get_member_board
   organizer_display_name text,
   created_at timestamptz not null default now(),
   archived_at timestamptz
@@ -249,7 +249,8 @@ begin
       'status', v_cycle.status,
       'start_date', v_cycle.start_date,
       'interval_days', v_cycle.interval_days,
-      'timezone', v_zone
+      'timezone', v_zone,
+      'zelle_destination', v_cycle.zelle_destination
     ),
     'me', jsonb_build_object(
       'slot', v_member.slot,
@@ -288,6 +289,17 @@ begin
       left join public.payments p
         on p.member_id = m.id and p.round_id = v_round.id
       where m.cycle_id = v_cycle.id
+    ),
+    'rounds', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'number', r.round_number,
+        'collect_date', r.collect_date,
+        'payout_date', r.payout_date,
+        'recipient_first_name', rm.display_first_name
+      ) order by r.round_number), '[]'::jsonb)
+      from public.rounds r
+      join public.members rm on rm.id = r.recipient_member_id
+      where r.cycle_id = v_cycle.id
     )
   );
 end;

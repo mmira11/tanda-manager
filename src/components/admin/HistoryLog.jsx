@@ -1,9 +1,11 @@
 import { useStore } from '../../context/StoreContext'
+import { useLang } from '../../context/LangContext'
 import { historyRounds, getPaidCount, formatDate } from '../../utils/rounds'
 import { formatMoney } from '../../utils/money'
 
 export default function HistoryLog({ onEditRound }) {
   const { store } = useStore()
+  const { locale } = useLang()
   const { rounds, participants } = store
   const past = historyRounds(rounds, { status: store.config.status })
 
@@ -53,8 +55,8 @@ export default function HistoryLog({ onEditRound }) {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
-              <span>Collected: <strong className="text-gray-900">{formatDate(round.collectDate)}</strong></span>
-              <span>Paid out: <strong className="text-gray-900">{formatDate(round.payoutDate)}</strong></span>
+              <span>Collected: <strong className="text-gray-900">{formatDate(round.collectDate, locale)}</strong></span>
+              <span>Paid out: <strong className="text-gray-900">{formatDate(round.payoutDate, locale)}</strong></span>
             </div>
             <div className="text-sm text-gray-600 mb-2">
               Contributions: <strong className="text-gray-900">{paidCount} / {participants.length}</strong>

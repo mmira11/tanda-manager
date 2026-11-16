@@ -23,7 +23,7 @@ const DEFAULTS = {
 export function installFakeSupabase({ session = null, isAdmin = false, db = {}, failOn = null } = {}) {
   const tables = {
     cycles: [], members: [], rounds: [], payments: [],
-    reminder_settings: [], reminder_templates: [],
+    reminder_settings: [], reminder_templates: [], pending_review: [],
     ...structuredClone(db),
   }
   let nextId = 1000

@@ -9,12 +9,16 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
+      workbox: {
+        // Default patterns skip fonts. Latin woff2 only, so the precache stays small.
+        globPatterns: ['**/*.{js,css,html,woff2}'],
+      },
       manifest: {
         name: 'Tanda Manager',
         short_name: 'Tanda',
         description: 'Rotating savings group manager',
-        theme_color: '#f59e0b',
-        background_color: '#fffbeb',
+        theme_color: '#127A74',
+        background_color: '#FBF8F3',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/tanda-manager/',

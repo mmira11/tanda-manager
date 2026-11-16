@@ -59,6 +59,7 @@ function pickCycle(cycles, preferredId) {
 export function useCycleStore() {
   const [store, setStore] = useState(null)
   const [cycles, setCycles] = useState([])
+  const [pendingReview, setPendingReview] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const storeRef = useRef(null)
@@ -77,6 +78,7 @@ export function useCycleStore() {
       if (!cycleSummary) {
         selectedIdRef.current = null
         setStore(null)
+        setPendingReview([])
         return
       }
       selectedIdRef.current = cycleSummary.id
@@ -84,6 +86,7 @@ export function useCycleStore() {
       if (!cycle) {
         selectedIdRef.current = null
         setStore(null)
+        setPendingReview([])
         return
       }
       const [members, rounds] = await Promise.all([
@@ -96,8 +99,13 @@ export function useCycleStore() {
         ? check(await supabase.from('payments').select('round_id, member_id, paid_at')
             .in('round_id', rounds.map(r => r.id)))
         : []
+      const reviews = check(await supabase.from('pending_review')
+        .select('id, sender_name, amount, raw_subject, status, received_at')
+        .eq('cycle_id', cycle.id)
+        .eq('status', 'pending'))
       if (request !== requestRef.current) return
       setStore(toStore(cycle, members, rounds, payments))
+      setPendingReview(reviews)
     } catch (e) {
       if (request !== requestRef.current) return
       setError(e.message || String(e))
@@ -333,6 +341,7 @@ export function useCycleStore() {
   return {
     store,
     cycles,
+    pendingReview,
     loading,
     error,
     clearError: () => setError(''),

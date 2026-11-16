@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { installFakeSupabase, seedCycle, adminSession } from './fakeSupabase'
@@ -35,8 +35,9 @@ describe('AdminGate', () => {
     installFakeSupabase({ session: adminSession, isAdmin: true, db: seedCycle({ names: ['Ana', 'Beto', 'Cata'] }) })
     render(<AdminGate />)
 
-    expect(await screen.findByText('This Round')).toBeTruthy()
-    expect(screen.getByText('Admin · Test Tanda')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Dashboard' })).toBeTruthy()
+    expect(screen.getByText('Test Tanda')).toBeTruthy()
+    expect(screen.getByText('admin@example.com')).toBeTruthy()
   })
 })
 
@@ -97,6 +98,33 @@ describe('first run: create a cycle', () => {
   })
 })
 
+describe('spanish admin chrome', () => {
+  afterEach(() => localStorage.clear())
+
+  it('translates cycle controls and the navigation label', async () => {
+    localStorage.setItem('tanda_lang', 'es')
+    installFakeSupabase({ session: adminSession, isAdmin: true, db: seedCycle({ names: ['Ana', 'Beto'] }) })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+
+    expect(await screen.findByRole('navigation', { name: 'Administración' })).toBeTruthy()
+    expect(screen.getByLabelText('Cambiar idioma')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Ajustes' }))
+    expect(screen.getByRole('button', { name: 'Archivar' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Nuevo ciclo' })).toBeDisabled()
+    expect(screen.getByLabelText('Ciclo')).toBeTruthy()
+  })
+
+  it('shows the archived banner in Spanish', async () => {
+    localStorage.setItem('tanda_lang', 'es')
+    const db = seedCycle({ names: ['Ana', 'Beto'], name: 'Finished' })
+    db.cycles[0].status = 'archived'
+    installFakeSupabase({ session: adminSession, isAdmin: true, db })
+    render(<AdminGate />)
+    expect(await screen.findByText('Ciclo archivado. El historial incluye cada ronda, también la última.')).toBeTruthy()
+  })
+})
+
 describe('sign out', () => {
   it('returns to the sign-in screen', async () => {
     const fake = installFakeSupabase({ session: adminSession, isAdmin: true, db: seedCycle({ names: ['Ana', 'Beto'] }) })
@@ -104,7 +132,7 @@ describe('sign out', () => {
     render(<AdminGate />)
 
     await user.click(await screen.findByText('Settings'))
-    expect(screen.getByText('admin@example.com')).toBeTruthy()
+    expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(1)
     await user.click(screen.getByText('Sign out'))
 
     await waitFor(() => expect(screen.getByText('Admin Sign In')).toBeTruthy())
