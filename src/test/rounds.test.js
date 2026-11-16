@@ -1,6 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, formatRelativeTime, resolveMySlot } from '../utils/rounds'
-import { ROUND_SCHEDULE } from '../data/scheduleTemplate'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatCollectionCountdown, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds } from '../utils/rounds'
+
+// The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
+const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
+  round: r.roundNumber, collectDate: r.collectDate, payoutDate: r.payoutDate, recipientSlot: r.roundNumber,
+}))
 
 const base = ROUND_SCHEDULE.map(r => ({
   ...r,
@@ -121,17 +125,47 @@ describe('isTandaComplete', () => {
   })
 })
 
+describe('deadlineOnDate', () => {
+  it('is 6 PM Pacific, including daylight saving, not the device zone', () => {
+    expect(deadlineOnDate('2026-07-10', 'America/Los_Angeles').toISOString()).toBe('2026-07-11T01:00:00.000Z')
+    expect(deadlineOnDate('2026-01-10', 'America/Los_Angeles').toISOString()).toBe('2026-01-11T02:00:00.000Z')
+  })
+})
+
+describe('getCountdownTo', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('hits zero at the 6 PM Pacific deadline', () => {
+    const deadline = deadlineOnDate('2026-07-10', 'America/Los_Angeles')
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(deadline.getTime() - 30 * 60 * 1000))
+    expect(getCountdownTo(deadline)).toMatchObject({ done: false, hours: 0, minutes: 30 })
+    vi.setSystemTime(deadline)
+    expect(getCountdownTo(deadline).done).toBe(true)
+  })
+
+  it('keeps days in the admin countdown label', () => {
+    expect(formatCollectionCountdown({ days: 3, hours: 5, minutes: 0, done: false }))
+      .toBe('Closes in 3d 5h 0m · 6:00 PM')
+    expect(formatCollectionCountdown({ days: 0, hours: 5, minutes: 12, done: false }))
+      .toBe('Closes in 5h 12m · 6:00 PM')
+    expect(formatCollectionCountdown({ days: 0, hours: 0, minutes: 0, done: true }))
+      .toBe('Closed at 6:00 PM')
+  })
+})
+
 describe('isPayoutWindow', () => {
   const round = { collectDate: '2026-07-10', payoutDate: '2026-07-11' }
-  it('is false before collection closes (8pm collect day)', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-10T19:59:00'))).toBe(false)
+  const zone = 'America/Los_Angeles'
+  it('is false before collection closes (6pm Pacific on collect day)', () => {
+    expect(isPayoutWindow(round, new Date('2026-07-11T00:59:00Z'), zone)).toBe(false)
   })
   it('is true after collection close through payout day', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-10T20:00:01'))).toBe(true)
-    expect(isPayoutWindow(round, new Date('2026-07-11T23:00:00'))).toBe(true)
+    expect(isPayoutWindow(round, new Date('2026-07-11T01:00:01Z'), zone)).toBe(true)
+    expect(isPayoutWindow(round, new Date('2026-07-12T05:00:00Z'), zone)).toBe(true)
   })
   it('is false after payout day ends', () => {
-    expect(isPayoutWindow(round, new Date('2026-07-12T00:00:01'))).toBe(false)
+    expect(isPayoutWindow(round, new Date('2026-07-12T07:00:01Z'), zone)).toBe(false)
   })
 })
 
@@ -147,6 +181,44 @@ describe('formatRelativeTime', () => {
   it('says minutes ago (en/es)', () => {
     expect(formatRelativeTime(now - 5 * 60_000, now, 'en')).toBe('Updated 5 min ago')
     expect(formatRelativeTime(now - 5 * 60_000, now, 'es')).toBe('Actualizado hace 5 min')
+  })
+})
+
+describe('addDays / buildRounds', () => {
+  it('adds calendar days across month and DST boundaries', () => {
+    expect(addDays('2026-10-30', 3)).toBe('2026-11-02')
+    expect(addDays('2026-03-07', 1)).toBe('2026-03-08')
+  })
+  it('reproduces the 2026 schedule from start date and interval', () => {
+    expect(ROUND_SCHEDULE[0]).toMatchObject({ collectDate: '2026-06-12', payoutDate: '2026-06-13' })
+    expect(ROUND_SCHEDULE[11]).toMatchObject({ collectDate: '2026-11-13', payoutDate: '2026-11-14' })
+  })
+  it('builds one round per member at any interval', () => {
+    const rounds = buildRounds('2027-01-08', 7, 5)
+    expect(rounds.map(r => r.collectDate)).toEqual(['2027-01-08', '2027-01-15', '2027-01-22', '2027-01-29', '2027-02-05'])
+    expect(rounds[4]).toEqual({ roundNumber: 5, collectDate: '2027-02-05', payoutDate: '2027-02-06' })
+  })
+})
+
+describe('historyRounds', () => {
+  const rounds = [
+    { round: 1, collectDate: '2026-01-02', payoutDate: '2026-01-03' },
+    { round: 2, collectDate: '2026-01-16', payoutDate: '2026-01-17' },
+  ]
+
+  it('hides the round that is still current', () => {
+    expect(historyRounds(rounds, { status: 'active', today: new Date('2026-01-17T12:00:00') }).map(r => r.round))
+      .toEqual([1])
+  })
+
+  it('includes the final round once the tanda is complete', () => {
+    expect(historyRounds(rounds, { status: 'active', today: new Date('2026-01-18T00:00:01') }).map(r => r.round))
+      .toEqual([2, 1])
+  })
+
+  it('lists every round of an archived cycle, including the last one', () => {
+    expect(historyRounds(rounds, { status: 'archived', today: new Date('2026-01-10T12:00:00') }).map(r => r.round))
+      .toEqual([2, 1])
   })
 })
 

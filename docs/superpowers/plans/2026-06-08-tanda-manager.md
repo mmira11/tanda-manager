@@ -454,13 +454,13 @@ import { describe, it, expect } from 'vitest'
 import { buildSmsUrl, buildWhatsAppUrl } from '../utils/messaging'
 describe('messaging', () => {
   it('buildSmsUrl has correct recipient and body', () => {
-    const url = buildSmsUrl('(510) 230-1571', 'Edy', '(209) 362-0911')
+    const url = buildSmsUrl('(510) 230-1571', 'Edy', '(555) 010-0002')
     expect(url).toMatch(/^sms:5102301571/)
     expect(url).toContain('Edy')
-    expect(url).toContain('2093620911')
+    expect(url).toContain('5550100002')
   })
   it('buildWhatsAppUrl prefixes country code', () => {
-    const url = buildWhatsAppUrl('(510) 230-1571', 'Edy', '(209) 362-0911')
+    const url = buildWhatsAppUrl('(510) 230-1571', 'Edy', '(555) 010-0002')
     expect(url).toMatch(/^https:\/\/wa\.me\/15102301571/)
   })
 })
@@ -620,7 +620,7 @@ export default function SetupWizard() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Your Phone (Zelle number)</label>
               <input className="w-full border-2 border-gray-200 rounded-xl px-4 py-3 focus:outline-none focus:border-gold-500"
                 value={form.organizerPhone} onChange={e => set('organizerPhone', e.target.value)}
-                placeholder="(209) 362-0911" inputMode="tel" />
+                placeholder="(555) 010-0002" inputMode="tel" />
               {errors.organizerPhone && <p className="text-red-500 text-xs mt-1">{errors.organizerPhone}</p>}
             </div>
             <div className="bg-gold-50 rounded-xl p-3 text-sm text-gray-600">

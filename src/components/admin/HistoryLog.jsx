@@ -1,11 +1,11 @@
 import { useStore } from '../../context/StoreContext'
-import { getCurrentRound, getPaidCount, formatDate } from '../../utils/rounds'
+import { historyRounds, getPaidCount, formatDate } from '../../utils/rounds'
+import { formatMoney } from '../../utils/money'
 
 export default function HistoryLog({ onEditRound }) {
   const { store } = useStore()
   const { rounds, participants } = store
-  const currentRound = getCurrentRound(rounds)
-  const past = rounds.filter(r => r.round < currentRound.round).reverse()
+  const past = historyRounds(rounds, { status: store.config.status })
 
   if (past.length === 0) {
     return (
@@ -58,7 +58,9 @@ export default function HistoryLog({ onEditRound }) {
             </div>
             <div className="text-sm text-gray-600 mb-2">
               Contributions: <strong className="text-gray-900">{paidCount} / {participants.length}</strong>
-              <span className="text-gray-400 ml-1">(${paidCount * 200} of $2,400)</span>
+              <span className="text-gray-400 ml-1">
+                ({formatMoney(paidCount * store.config.contribution)} of {formatMoney(participants.length * store.config.contribution)})
+              </span>
             </div>
             {round.notes && (
               <div className="bg-gold-50 rounded-xl p-3 text-sm text-gray-700 italic border border-gold-100">

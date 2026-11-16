@@ -5,7 +5,6 @@ import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
 import HistoryLog from './HistoryLog'
 import DataControls from './DataControls'
-import PublishBanner from './PublishBanner'
 
 const TABS = [
   { id: 'round',    label: 'This Round', icon: '💰' },
@@ -14,10 +13,13 @@ const TABS = [
   { id: 'settings', label: 'Settings',   icon: '⚙️' },
 ]
 
-export default function AdminDashboard() {
-  const { store } = useStore()
+export default function AdminDashboard({ email, onNewCycle }) {
+  const { store, cycles, selectCycle, archiveCycle, error, clearError } = useStore()
   const [tab, setTab] = useState('round')
+  const [confirmArchive, setConfirmArchive] = useState(false)
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
+  const hasActive = cycles.some(cycle => cycle.status === 'active')
+  const viewingActive = store.config.status === 'active'
 
   const editRound = (roundNum) => {
     setSelectedRound(roundNum)
@@ -31,24 +33,104 @@ export default function AdminDashboard() {
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Tanda Manager</h1>
-            <p className="text-xs text-gray-500">Admin · {store.config.organizerName}</p>
+            <p className="text-xs text-gray-500">Admin · {store.config.name}</p>
           </div>
-          <a
-            href="/tanda-manager/"
-            className="text-xs text-gold-600 font-semibold bg-gold-50 px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-100 transition-colors"
-          >
-            Public Board ↗
-          </a>
+          <div className="flex items-center gap-2">
+            {cycles.length > 0 && (
+              <select
+                aria-label="Cycle"
+                value={store.config.cycleId}
+                onChange={e => selectCycle(e.target.value)}
+                className="text-xs border border-gray-200 rounded-full px-2 py-1.5 bg-white max-w-[11rem]"
+              >
+                {cycles.map(cycle => (
+                  <option key={cycle.id} value={cycle.id}>
+                    {cycle.name} · {cycle.status}
+                  </option>
+                ))}
+              </select>
+            )}
+            {viewingActive && (
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(true)}
+                className="text-xs text-gray-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gray-200 hover:bg-gray-50"
+              >
+                Archive
+              </button>
+            )}
+            {onNewCycle && (
+              <button
+                type="button"
+                onClick={onNewCycle}
+                disabled={hasActive}
+                title={hasActive ? 'Archive the active cycle before starting another' : undefined}
+                className="text-xs text-gold-700 font-semibold bg-white px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                New cycle
+              </button>
+            )}
+            <a
+              href={import.meta.env.BASE_URL || '/'}
+              className="text-xs text-gold-600 font-semibold bg-gold-50 px-3 py-1.5 rounded-full border border-gold-200 hover:bg-gold-100 transition-colors"
+            >
+              Home
+            </a>
+          </div>
         </div>
       </div>
 
       {/* Scrollable content with bottom padding for tab bar */}
       <div className="max-w-2xl mx-auto p-4 pb-28">
-        {tab !== 'settings' && <PublishBanner onGoToSettings={() => setTab('settings')} />}
-        {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} />}
-        {tab === 'roster'   && <RosterEditor />}
+        {hasActive && (
+          <p className="mb-4 text-xs text-gray-500">
+            Archive the active cycle before starting another.
+            {' '}Archiva el ciclo activo antes de empezar otro.
+          </p>
+        )}
+        {confirmArchive && (
+          <div role="dialog" aria-modal="true" aria-labelledby="archive-title" className="mb-4 bg-white border border-gray-200 rounded-2xl p-4 shadow-sm">
+            <h2 id="archive-title" className="font-semibold text-gray-900">Archive this cycle?</h2>
+            <p className="text-sm text-gray-600 mt-1">
+              Payments and the roster will be locked. You can still view history, then start a new cycle.
+            </p>
+            <h3 className="font-semibold text-gray-900 mt-3">¿Archivar este ciclo?</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Los pagos y la lista quedarán bloqueados. Podrás ver el historial y luego empezar un ciclo nuevo.
+            </p>
+            <div className="flex gap-2 mt-4">
+              <button
+                type="button"
+                onClick={() => { setConfirmArchive(false); archiveCycle() }}
+                className="flex-1 bg-gray-900 text-white font-semibold py-2.5 rounded-xl text-sm"
+              >
+                Archive cycle
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmArchive(false)}
+                className="flex-1 border border-gray-200 font-semibold py-2.5 rounded-xl text-sm"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+        {store.config.status === 'archived' && (
+          <div className="mb-4 bg-gray-100 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700">
+            Archived cycle. History lists every round, including the last one.
+          </div>
+        )}
+        {error && (
+          <div role="alert" className="mb-4 flex items-center gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-2.5">
+            <p className="text-sm text-red-700 flex-1">Couldn't save: {error}</p>
+            <button onClick={clearError} className="text-xs font-semibold text-red-700">Dismiss</button>
+          </div>
+        )}
+        {tab === 'round'    && <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} readOnly={store.config.status === 'archived'} />}
+        {tab === 'roster'   && <RosterEditor readOnly={store.config.status === 'archived'} />}
         {tab === 'history'  && <HistoryLog onEditRound={editRound} />}
-        {tab === 'settings' && <DataControls />}
+        {tab === 'settings' && <DataControls email={email} />}
       </div>
 
       {/* Fixed bottom tab bar */}
