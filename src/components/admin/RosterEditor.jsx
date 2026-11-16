@@ -10,7 +10,7 @@ function hasPaymentHistory(store, slot) {
 }
 
 function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnly }) {
-  const { updateParticipant, reorderMember, removeMember, regenerateLink } = useStore()
+  const { updateParticipant, reorderMember, removeMember, regenerateLink, revokeLink } = useStore()
   const [name, setName] = useState(participant.name)
   const [phone, setPhone] = useState(participant.phone)
   const [confirming, setConfirming] = useState(false)
@@ -41,6 +41,12 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
     if (!window.confirm('Replace this personal link? The old link will stop working.')) return
     setCopied(false)
     regenerateLink(participant.slot)
+  }
+
+  function revoke() {
+    if (!window.confirm('Turn off this personal link? It stops working right away. Regenerate to send a new one.')) return
+    setCopied(false)
+    revokeLink(participant.slot)
   }
 
   return (
@@ -96,14 +102,18 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
       </div>
 
       {!editMode && participant.accessToken && (
-        <div className="flex gap-2 pb-2 pl-9">
-          <button
-            type="button"
-            onClick={copyLink}
-            className="text-xs font-semibold text-gold-700 border border-gold-200 rounded-lg px-2 py-1 hover:bg-gold-50"
-          >
-            {copied ? 'Copied' : 'Copy personal link'}
-          </button>
+        <div className="flex gap-2 pb-2 pl-9 items-center">
+          {participant.linkRevoked ? (
+            <span className="text-xs font-semibold text-red-600">Link revoked</span>
+          ) : (
+            <button
+              type="button"
+              onClick={copyLink}
+              className="text-xs font-semibold text-gold-700 border border-gold-200 rounded-lg px-2 py-1 hover:bg-gold-50"
+            >
+              {copied ? 'Copied' : 'Copy personal link'}
+            </button>
+          )}
           {!readOnly && (
             <button
               type="button"
@@ -111,6 +121,15 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
               className="text-xs font-semibold text-gray-600 border border-gray-200 rounded-lg px-2 py-1 hover:bg-gray-50"
             >
               Regenerate link
+            </button>
+          )}
+          {!readOnly && !participant.linkRevoked && (
+            <button
+              type="button"
+              onClick={revoke}
+              className="text-xs font-semibold text-red-600 border border-red-200 rounded-lg px-2 py-1 hover:bg-red-50"
+            >
+              Revoke link
             </button>
           )}
         </div>

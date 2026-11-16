@@ -240,6 +240,28 @@ function Loaded() {
   return store ? <AdminDashboard email="admin@example.com" /> : null
 }
 
+describe('revoking a personal link (N7)', () => {
+  it('revokes, hides Copy, and Regenerate brings back a working link', async () => {
+    const fake = installFakeSupabase({ db: seedCycle({ names: ['Ada', 'Bea'], contribution: 40 }) })
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<StoreProvider><Loaded /></StoreProvider>)
+
+    await user.click(await screen.findByRole('button', { name: 'Members' }))
+    await user.click(screen.getAllByText('Revoke link')[0])
+
+    await waitFor(() => expect(fake.tables.members.find(m => m.slot === 1).token_revoked_at).toBeTruthy())
+    expect(screen.getByText('Link revoked')).toBeTruthy()
+    expect(screen.getAllByText('Copy personal link')).toHaveLength(1) // only Bea's link is still copyable
+    expect(fake.tables.members.find(m => m.slot === 2).token_revoked_at ?? null).toBeNull()
+
+    await user.click(screen.getAllByText('Regenerate link')[0])
+    await waitFor(() => expect(fake.tables.members.find(m => m.slot === 1).token_revoked_at).toBeNull())
+    expect(fake.tables.members.find(m => m.slot === 1).access_token).not.toBe('test-token-1')
+    expect(screen.queryByText('Link revoked')).toBeNull()
+  })
+})
+
 describe('archived history and personal links', () => {
   it('lists the final round in History for an archived cycle', async () => {
     const db = seedCycle({ names: ['Ada', 'Bea'], name: 'Finished', startDate: '2027-06-04', contribution: 40 })

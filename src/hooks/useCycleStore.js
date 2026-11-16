@@ -30,6 +30,7 @@ export function toStore(cycle, members, rounds, payments) {
     participants: members.map(m => ({
       id: m.id, slot: m.slot, name: m.display_first_name, phone: m.phone || '',
       accessToken: m.access_token || '',
+      linkRevoked: Boolean(m.token_revoked_at),
     })),
     rounds: rounds.map(r => ({
       id: r.id,
@@ -90,7 +91,7 @@ export function useCycleStore() {
         return
       }
       const [members, rounds] = await Promise.all([
-        supabase.from('members').select('id, slot, display_first_name, phone, access_token')
+        supabase.from('members').select('id, slot, display_first_name, phone, access_token, token_revoked_at')
           .eq('cycle_id', cycle.id).order('slot').then(check),
         supabase.from('rounds').select('*')
           .eq('cycle_id', cycle.id).order('round_number').then(check),
@@ -275,8 +276,19 @@ export function useCycleStore() {
     const member = storeRef.current.participants.find(p => p.slot === slot)
     const accessToken = newAccessToken()
     return run(
-      s => ({ ...s, participants: s.participants.map(p => (p.slot === slot ? { ...p, accessToken } : p)) }),
-      async () => check(await supabase.from('members').update({ access_token: accessToken }).eq('id', member.id)),
+      s => ({ ...s, participants: s.participants.map(p => (p.slot === slot ? { ...p, accessToken, linkRevoked: false } : p)) }),
+      async () => check(await supabase.from('members')
+        .update({ access_token: accessToken, token_revoked_at: null }).eq('id', member.id)),
+    )
+  }, [run])
+
+  // Stops the member's current link (migration 007). Regenerate issues a working one.
+  const revokeLink = useCallback((slot) => {
+    const member = storeRef.current.participants.find(p => p.slot === slot)
+    return run(
+      s => ({ ...s, participants: s.participants.map(p => (p.slot === slot ? { ...p, linkRevoked: true } : p)) }),
+      async () => check(await supabase.from('members')
+        .update({ token_revoked_at: new Date().toISOString() }).eq('id', member.id)),
     )
   }, [run])
 
@@ -350,6 +362,7 @@ export function useCycleStore() {
     importBackup,
     archiveCycle,
     regenerateLink,
+    revokeLink,
     createCycle,
     togglePayment,
     togglePayout,
