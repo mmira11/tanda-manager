@@ -139,8 +139,8 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
         <div className="mb-3 p-3 border-2 border-red-200 rounded-xl bg-red-50 space-y-2">
           <p className="text-sm text-gray-700">
             {hasHistory
-              ? `⚠️ ${participant.name || `Slot ${participant.slot}`} has payment history. Removing them will delete all recorded payments.`
-              : `Remove ${participant.name || `Slot ${participant.slot}`} from the roster? This cannot be undone.`}
+              ? `Remove ${participant.name || `Slot ${participant.slot}`}? Their payment history is kept, their link stops working, and their payout round will need a new recipient.`
+              : `Remove ${participant.name || `Slot ${participant.slot}`} from the roster? Their link stops working and their payout round will need a new recipient.`}
           </p>
           <div className="flex gap-2">
             <button

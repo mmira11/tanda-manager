@@ -155,6 +155,21 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
     rpc: vi.fn(async (name, args) => {
       if (name === 'is_admin') return { data: isAdmin, error: null }
       if (name === 'import_cycle') return importCycle(args.p_plan)
+      if (name === 'swap_payout_order') {
+        // Mirrors migration 008: swap slots and payout rounds together, or change nothing.
+        const a = tables.members.find(m => m.id === args.p_a)
+        const b = tables.members.find(m => m.id === args.p_b)
+        if (!a || !b || a === b || a.cycle_id !== b.cycle_id) {
+          return { data: null, error: { message: 'Both members must exist and be in the same cycle' } }
+        }
+        ;[a.slot, b.slot] = [b.slot, a.slot]
+        for (const r of tables.rounds) {
+          if (r.cycle_id !== a.cycle_id) continue
+          if (r.recipient_member_id === a.id) r.recipient_member_id = b.id
+          else if (r.recipient_member_id === b.id) r.recipient_member_id = a.id
+        }
+        return { data: null, error: null }
+      }
       return { data: null, error: { message: `unknown rpc ${name}` } }
     }),
     auth: {

@@ -272,6 +272,72 @@ function assertLinkRevokeExpiry(database) {
   console.log(`${database}: member links revoke, regenerate, and expire 30 days after archive`)
 }
 
+// N5: swap_payout_order is atomic, and removed members drop out of the member page.
+// Uses the Familia Demo cycle: Maria (member-token-maria1, slot 1) and Rosa
+// (member-token-rosa02 after assertLinkRevokeExpiry, slot 2). Fake data only.
+function assertSoftDeleteReorder(database) {
+  const ids = `
+    (select id from public.members where access_token = 'member-token-maria1') as maria,
+    (select id from public.members where access_token = 'member-token-rosa02') as rosa`
+  const state = () => psqlText(database, `
+    select string_agg(m.display_first_name || ':' || m.slot || ':' || r.round_number, ',' order by m.display_first_name)
+    from public.members m join public.rounds r on r.recipient_member_id = m.id
+    where m.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  `).trim()
+  const swap = `select public.swap_payout_order(maria, rosa) from (select ${ids}) x;`
+
+  const grants = psqlText(database, `
+    select has_function_privilege('anon', 'public.swap_payout_order(uuid, uuid)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.swap_payout_order(uuid, uuid)', 'execute')::text;
+  `).trim()
+  if (grants !== 'falsetrue') throw new Error(`${database}: swap_payout_order grants are ${grants}`)
+
+  const before = state()
+  if (before !== 'Maria:1:1,Rosa:2:2') throw new Error(`${database}: unexpected starting order ${before}`)
+  psqlText(database, swap)
+  if (state() !== 'Maria:2:2,Rosa:1:1') throw new Error(`${database}: swap did not move slots and rounds together: ${state()}`)
+
+  // Halfway failure: the member slots are already swapped when the rounds update raises.
+  psqlText(database, `
+    create or replace function public.test_block_round_update() returns trigger language plpgsql as $$
+    begin raise exception 'blocked for test'; end $$;
+    create trigger test_block_round_update before update on public.rounds
+      for each row execute function public.test_block_round_update();
+  `)
+  const failure = psqlFails(database, swap)
+  psqlText(database, `
+    drop trigger test_block_round_update on public.rounds;
+    drop function public.test_block_round_update();
+  `)
+  if (!failure.includes('blocked for test')) throw new Error(`${database}: swap failed for the wrong reason: ${failure}`)
+  if (state() !== 'Maria:2:2,Rosa:1:1') throw new Error(`${database}: failed swap left a partial change: ${state()}`)
+
+  const otherCycle = psqlFails(database, `
+    select public.swap_payout_order(
+      (select id from public.members where access_token = 'member-token-maria1'),
+      (select id from public.members where access_token = 'expiry-token-recent1'));
+  `)
+  if (!otherCycle.includes('same cycle')) throw new Error(`${database}: cross-cycle swap was not refused: ${otherCycle}`)
+
+  psqlText(database, `update public.members set removed_at = now() where access_token = 'member-token-rosa02';`)
+  const board = JSON.parse(psqlText(database, `select get_member_board('member-token-maria1');`).trim().split('\n').pop())
+  if (board.progress.length !== 1 || board.progress[0].display_first_name !== 'Maria') {
+    throw new Error(`${database}: removed member still in progress: ${JSON.stringify(board.progress)}`)
+  }
+  const rosaRound = board.rounds.find(r => r.number === 1)
+  if (!rosaRound || rosaRound.recipient_first_name !== null) {
+    throw new Error(`${database}: removed member's round should have no recipient name: ${JSON.stringify(board.rounds)}`)
+  }
+  const removed = psqlFails(database, `select get_member_board('member-token-rosa02');`)
+  if (!/not found/.test(removed)) throw new Error(`${database}: removed member's link still works`)
+  const kept = psqlText(database, `
+    select count(*) from public.payments p join public.members m on m.id = p.member_id
+    where m.access_token = 'member-token-rosa02';
+  `).trim()
+  psqlText(database, `update public.members set removed_at = null where access_token = 'member-token-rosa02';`)
+  console.log(`${database}: swap_payout_order is atomic; removed members leave progress, keep rows (${kept} payments)`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -282,6 +348,7 @@ applyMigrations(fresh)
 assertArchiveLock(fresh)
 assertAtomicImport(fresh)
 assertLinkRevokeExpiry(fresh)
+assertSoftDeleteReorder(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -292,6 +359,7 @@ applyMigrations(legacy, { skip: ['002_review_fixes.sql'] })
 assertArchiveLock(legacy)
 assertAtomicImport(legacy)
 assertLinkRevokeExpiry(legacy)
+assertSoftDeleteReorder(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
