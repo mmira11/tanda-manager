@@ -74,14 +74,35 @@ describe('useCycleStore', () => {
     expect(result.current.store.rounds[0].payments).toMatchObject({ 1: false, 2: true }) // Ana (now slot 2) paid round 1
   })
 
-  it('removeMember deletes the member and their round, then closes the gaps', async () => {
+  it('removeMember soft-deletes: keeps rows, revokes the link, flags the round (N5)', async () => {
     const { fake, result } = await loaded(seedCycle({ names: ['Ana', 'Beto', 'Cata'] }))
     await act(() => result.current.removeMember(2))
 
-    expect(member(fake, 'Beto')).toBeUndefined()
-    expect(member(fake, 'Cata').slot).toBe(2)
-    expect(fake.tables.rounds.map(r => r.round_number).sort()).toEqual([1, 2])
-    expect(fake.tables.payments).toHaveLength(4)
+    expect(member(fake, 'Beto').removed_at).toBeTruthy()
+    expect(member(fake, 'Beto').token_revoked_at).toBeTruthy()
+    expect(fake.tables.rounds).toHaveLength(3)
+    expect(fake.tables.payments).toHaveLength(9)
+    expect(result.current.store.participants.map(p => p.name)).toEqual(['Ana', 'Cata'])
+    expect(result.current.store.rounds[1]).toMatchObject({ round: 2, needsRecipient: true })
+    expect(Object.keys(result.current.store.rounds[0].payments)).toEqual(['1', '3'])
+
+    await act(() => result.current.assignRecipient(2, 3))
+    expect(fake.tables.rounds.find(r => r.round_number === 2).recipient_member_id).toBe(member(fake, 'Cata').id)
+    expect(result.current.store.rounds[1].needsRecipient).toBe(false)
+  })
+
+  it('after a removal, reorder skips the removed member and add uses a fresh slot', async () => {
+    const { fake, result } = await loaded(seedCycle({ names: ['Ana', 'Beto', 'Cata'] }))
+    await act(() => result.current.removeMember(2))
+    await act(() => result.current.reorderMember(1, 'down'))
+
+    expect(member(fake, 'Ana').slot).toBe(3)
+    expect(member(fake, 'Cata').slot).toBe(1)
+    expect(member(fake, 'Beto').slot).toBe(2)
+    expect(fake.rpc).toHaveBeenCalledWith('swap_payout_order', { p_a: 'member-1', p_b: 'member-3' })
+
+    await act(() => result.current.addMember('Dani', ''))
+    expect(member(fake, 'Dani').slot).toBe(4)
   })
 
   it('createCycle removes the half-built cycle when a later insert fails', async () => {

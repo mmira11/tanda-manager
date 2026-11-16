@@ -14,7 +14,10 @@ function check({ data, error }) {
 }
 
 export function toStore(cycle, members, rounds, payments) {
+  // Removed members (N5) keep their rows for history but drop out of the roster and totals.
+  const active = members.filter(m => !m.removed_at)
   const slotById = Object.fromEntries(members.map(m => [m.id, m.slot]))
+  const activeIds = new Set(active.map(m => m.id))
   return {
     config: {
       cycleId: cycle.id,
@@ -26,8 +29,10 @@ export function toStore(cycle, members, rounds, payments) {
       organizerPhone: cycle.zelle_destination || '',
       status: cycle.status,
       timezone: cycle.timezone || 'America/Los_Angeles',
+      // Slots stay unique across removed members too, so new members go after the highest one.
+      nextSlot: Math.max(0, ...members.map(m => m.slot)) + 1,
     },
-    participants: members.map(m => ({
+    participants: active.map(m => ({
       id: m.id, slot: m.slot, name: m.display_first_name, phone: m.phone || '',
       accessToken: m.access_token || '',
       linkRevoked: Boolean(m.token_revoked_at),
@@ -38,11 +43,12 @@ export function toStore(cycle, members, rounds, payments) {
       collectDate: r.collect_date,
       payoutDate: r.payout_date,
       recipientSlot: slotById[r.recipient_member_id],
+      needsRecipient: !activeIds.has(r.recipient_member_id),
       payoutSent: r.payout_sent,
       notes: r.notes,
       payments: Object.fromEntries(
         payments
-          .filter(p => p.round_id === r.id && slotById[p.member_id] !== undefined)
+          .filter(p => p.round_id === r.id && activeIds.has(p.member_id))
           .map(p => [slotById[p.member_id], p.paid_at !== null])
       ),
     })),
@@ -91,7 +97,7 @@ export function useCycleStore() {
         return
       }
       const [members, rounds] = await Promise.all([
-        supabase.from('members').select('id, slot, display_first_name, phone, access_token, token_revoked_at')
+        supabase.from('members').select('id, slot, display_first_name, phone, access_token, token_revoked_at, removed_at')
           .eq('cycle_id', cycle.id).order('slot').then(check),
         supabase.from('rounds').select('*')
           .eq('cycle_id', cycle.id).order('round_number').then(check),
@@ -189,7 +195,7 @@ export function useCycleStore() {
     if (!name.trim()) return
     const s = storeRef.current
     const { cycleId, intervalDays, startDate, contribution } = s.config
-    const slot = s.participants.length + 1
+    const slot = s.config.nextSlot
     const last = s.rounds[s.rounds.length - 1]
     const collectDate = last ? addDays(last.collectDate, intervalDays) : startDate
     return run(null, async () => {
@@ -210,42 +216,33 @@ export function useCycleStore() {
     })
   }, [run])
 
-  // Swap payout positions with the neighbor. Payments stay with each person; round dates stay put.
+  // Swap payout positions with the next active member up or down, in one transaction
+  // (swap_payout_order, migration 008). Payments stay with each person; round dates stay put.
   const reorderMember = useCallback((slot, direction) => {
-    const s = storeRef.current
-    const otherSlot = direction === 'up' ? slot - 1 : slot + 1
-    const a = s.participants.find(p => p.slot === slot)
-    const b = s.participants.find(p => p.slot === otherSlot)
+    const list = storeRef.current.participants
+    const i = list.findIndex(p => p.slot === slot)
+    const a = list[i]
+    const b = list[direction === 'up' ? i - 1 : i + 1]
     if (!a || !b) return
-    const roundA = s.rounds.find(r => r.recipientSlot === slot)
-    const roundB = s.rounds.find(r => r.recipientSlot === otherSlot)
-    return run(null, async () => {
-      // (cycle_id, slot) is unique, so park one member on a temporary slot first.
-      check(await supabase.from('members').update({ slot: 100000 + slot }).eq('id', a.id))
-      check(await supabase.from('members').update({ slot }).eq('id', b.id))
-      check(await supabase.from('members').update({ slot: otherSlot }).eq('id', a.id))
-      if (roundA) check(await supabase.from('rounds').update({ recipient_member_id: b.id }).eq('id', roundA.id))
-      if (roundB) check(await supabase.from('rounds').update({ recipient_member_id: a.id }).eq('id', roundB.id))
-    })
+    return run(null, async () => check(await supabase.rpc('swap_payout_order', { p_a: a.id, p_b: b.id })))
   }, [run])
 
-  // Delete the member and the round they receive, then close the gaps in slot and round numbers.
+  // Soft-delete (N5): keep payment history and the member's round; revoke their link.
+  // The round then shows "Needs a recipient" until assignRecipient picks someone.
   const removeMember = useCallback((slot) => {
+    const member = storeRef.current.participants.find(p => p.slot === slot)
+    const now = new Date().toISOString()
+    return run(null, async () => check(await supabase.from('members')
+      .update({ removed_at: now, token_revoked_at: now }).eq('id', member.id)))
+  }, [run])
+
+  const assignRecipient = useCallback((roundNum, slot) => {
     const s = storeRef.current
+    const round = s.rounds.find(r => r.round === roundNum)
     const member = s.participants.find(p => p.slot === slot)
-    const round = s.rounds.find(r => r.recipientSlot === slot)
-    return run(null, async () => {
-      if (round) check(await supabase.from('rounds').delete().eq('id', round.id))
-      check(await supabase.from('members').delete().eq('id', member.id))
-      for (const p of s.participants.filter(p => p.slot > slot)) {
-        check(await supabase.from('members').update({ slot: p.slot - 1 }).eq('id', p.id))
-      }
-      if (round) {
-        for (const r of s.rounds.filter(r => r.round > round.round)) {
-          check(await supabase.from('rounds').update({ round_number: r.round - 1 }).eq('id', r.id))
-        }
-      }
-    })
+    if (!round || !member) return
+    return run(null, async () => check(await supabase.from('rounds')
+      .update({ recipient_member_id: member.id }).eq('id', round.id)))
   }, [run])
 
   const saveConfig = useCallback(({ organizerName, organizerPhone }) => {
@@ -363,6 +360,7 @@ export function useCycleStore() {
     archiveCycle,
     regenerateLink,
     revokeLink,
+    assignRecipient,
     createCycle,
     togglePayment,
     togglePayout,

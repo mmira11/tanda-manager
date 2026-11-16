@@ -34,7 +34,7 @@ function RoundNotes({ notes, onSave, readOnly }) {
 }
 
 export default function RoundPanel({ selectedRound, onSelectRound, readOnly = false }) {
-  const { store, togglePayout, updateRoundNotes } = useStore()
+  const { store, togglePayout, updateRoundNotes, assignRecipient } = useStore()
   const { lang, locale } = useLang()
   const { participants, rounds } = store
   const currentRound = getCurrentRound(rounds)
@@ -43,8 +43,8 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
   const isPast = round.round < currentRound.round
   const paidCount = getPaidCount(round.payments)
   const total = participants.length
-  const recipient = participants.find(p => p.slot === round.recipientSlot)
-  const recipientName = recipient?.name || `Slot ${round.recipientSlot}`
+  const recipient = round.needsRecipient ? null : participants.find(p => p.slot === round.recipientSlot)
+  const recipientName = recipient?.name || (round.needsRecipient ? 'Needs a recipient' : `Slot ${round.recipientSlot}`)
 
   const allPaid = paidCount === total
   const orgPhone = store.config?.organizerPhone || ''
@@ -108,8 +108,21 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
               </button>
             </div>
             <h2 className="text-xl font-bold text-gray-900 mt-0.5">
-              {recipientName} receives
+              {round.needsRecipient ? recipientName : `${recipientName} receives`}
             </h2>
+            {round.needsRecipient && !readOnly && (
+              <select
+                aria-label="Assign recipient"
+                value=""
+                onChange={e => e.target.value && assignRecipient(round.round, Number(e.target.value))}
+                className="mt-2 text-sm border border-amber-300 bg-amber-50 rounded-lg px-2 py-1"
+              >
+                <option value="" disabled>Choose who receives this round</option>
+                {participants.map(p => (
+                  <option key={p.slot} value={p.slot}>{p.name || `Slot ${p.slot}`}</option>
+                ))}
+              </select>
+            )}
           </div>
           <div className="text-2xl font-black text-gold-600">{pot}</div>
         </div>
