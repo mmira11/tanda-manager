@@ -130,6 +130,9 @@ function assertArchiveLock(database) {
     insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id) values
       ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 1, '2099-06-01', '2099-06-02', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'),
       ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 2, '2099-07-03', '2099-07-04', 'cccccccc-cccc-cccc-cccc-cccccccccccc');
+    insert into public.payments (round_id, member_id, amount)
+      select r.id, m.id, 100 from public.rounds r join public.members m on m.cycle_id = r.cycle_id
+      where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
     select get_member_board('member-token-maria1');
   `).trim().split('\n').filter(Boolean).pop()
   const board = JSON.parse(boardText)
@@ -373,6 +376,24 @@ function assertScheduleValidation(database) {
   console.log(`${database}: rounds stay in date order with payout on/after collect; time zones must be real`)
 }
 
+// N9: rounds and members don't have to match. An import where one member has no payment row
+// in round 1 is accepted, and the member page counts only that round's payment rows.
+function assertRoundsNotMembers(database) {
+  const plan = importPlan({
+    name: 'Uneven Demo', dates: ['2098-08-07', '2098-08-08', '2098-08-21', '2098-08-22'], tokenPrefix: 'uneven-token',
+  })
+  plan.payments = plan.payments.filter(p => !(p.roundNumber === 1 && p.slot === 2)) // Beto skips round 1
+  const summary = JSON.parse(psqlText(database, callImport(plan)).trim().split('\n').filter(Boolean).pop())
+  if (summary.members !== 2 || summary.rounds !== 2 || summary.payments !== 3) {
+    throw new Error(`${database}: uneven import summary was ${JSON.stringify(summary)}`)
+  }
+  const board = JSON.parse(psqlText(database, `select get_member_board('uneven-token-ana-0001');`).trim().split('\n').pop())
+  if (board.current_round?.round_number !== 1) throw new Error(`${database}: expected round 1, got ${JSON.stringify(board.current_round)}`)
+  const names = board.progress.map(p => p.display_first_name).join(',')
+  if (names !== 'Ana') throw new Error(`${database}: round 1 progress should list only Ana, got ${names}`)
+  console.log(`${database}: an uneven import is accepted and progress counts only the round's payment rows`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -385,6 +406,7 @@ assertAtomicImport(fresh)
 assertLinkRevokeExpiry(fresh)
 assertSoftDeleteReorder(fresh)
 assertScheduleValidation(fresh)
+assertRoundsNotMembers(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -397,6 +419,7 @@ assertAtomicImport(legacy)
 assertLinkRevokeExpiry(legacy)
 assertSoftDeleteReorder(legacy)
 assertScheduleValidation(legacy)
+assertRoundsNotMembers(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')

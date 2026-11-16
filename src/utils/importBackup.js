@@ -178,7 +178,6 @@ export function buildImportPlan(raw, options = {}) {
       })
     }
   }
-  if (payments.length !== members.length * rounds.length) fail('Payment rows must equal members × rounds')
 
   const organizerName = typeof config.organizerName === 'string' ? config.organizerName.trim() : ''
   const organizerPhone = typeof config.organizerPhone === 'string' ? config.organizerPhone.trim() : ''

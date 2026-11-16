@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
-import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo, dateLocale } from '../../utils/rounds'
+import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo, dateLocale, inRound } from '../../utils/rounds'
 import { compactCountdown, paymentStats } from '../../utils/presentation'
 import RoundPanel from './RoundPanel'
 import RosterEditor from './RosterEditor'
@@ -35,11 +35,12 @@ export default function AdminDashboard({ email, onNewCycle }) {
   const readOnly = store.config.status === 'archived'
   const t = LABELS[lang] || LABELS.en
   const current = getCurrentRound(store.rounds)
+  const payers = inRound(current, store.participants)
   const stats = paymentStats(
-    store.participants.map(person => current?.payments?.[person.slot] === true),
+    payers.map(person => current?.payments?.[person.slot] === true),
     store.config.contribution,
   )
-  const members = store.participants.map(person => ({
+  const members = payers.map(person => ({
     slot: person.slot,
     name: person.name,
     phone: person.phone,

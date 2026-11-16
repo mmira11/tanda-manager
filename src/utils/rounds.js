@@ -143,6 +143,12 @@ export function addDays(iso, days) {
   return d.toISOString().slice(0, 10)
 }
 
+// N9: who pays in a round comes from that round's payment rows, not the whole roster.
+export function inRound(round, participants) {
+  if (!round) return []
+  return participants.filter(p => Object.prototype.hasOwnProperty.call(round.payments || {}, p.slot))
+}
+
 // Mirrors migration 009. rounds: [{ round, collectDate, payoutDate }] ('YYYY-MM-DD').
 // Returns an error message, or null when payout ≥ collect and collect dates rise with round.
 export function validateSchedule(rounds) {

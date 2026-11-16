@@ -59,9 +59,9 @@ export default function HistoryLog({ onEditRound }) {
               <span>Paid out: <strong className="text-gray-900">{formatDate(round.payoutDate, locale)}</strong></span>
             </div>
             <div className="text-sm text-gray-600 mb-2">
-              Contributions: <strong className="text-gray-900">{paidCount} / {participants.length}</strong>
+              Contributions: <strong className="text-gray-900">{paidCount} / {Object.keys(round.payments).length}</strong>
               <span className="text-gray-400 ml-1">
-                ({formatMoney(paidCount * store.config.contribution)} of {formatMoney(participants.length * store.config.contribution)})
+                ({formatMoney(paidCount * store.config.contribution)} of {formatMoney(Object.keys(round.payments).length * store.config.contribution)})
               </span>
             </div>
             {round.notes && (

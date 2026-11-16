@@ -177,6 +177,22 @@ describe('amounts come from the cycle', () => {
   })
 })
 
+describe('rounds are not tied to the member count (N9)', () => {
+  it('counts only the members with a payment row in this round', async () => {
+    const db = seedCycle({ names: NAMES.slice(0, 5), contribution: 150, startDate: '2026-08-14', intervalDays: 7 })
+    // Eve (slot 5) has no payment row in round 2.
+    db.payments = db.payments.filter(p => !(p.round_id === 'round-2' && p.member_id === 'member-5'))
+    fake = installFakeSupabase({ db })
+    await setup('Round 2 of 5')
+
+    expect(screen.getByText('$600')).toBeTruthy()
+    expect(screen.getByText('$0 collected · $600 remaining')).toBeTruthy()
+    const collection = screen.getByText('Collection Status').closest('div')
+    expect(within(collection).queryByText('Eve')).toBeNull()
+    expect(within(collection).getByText('Ada')).toBeTruthy()
+  })
+})
+
 describe('History → Edit', () => {
   it('jumps from a history card into that round', async () => {
     const user = await setup()
