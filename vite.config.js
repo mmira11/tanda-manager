@@ -9,6 +9,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
+      workbox: {
+        // Default patterns skip fonts. Latin woff2 only, so the precache stays small.
+        globPatterns: ['**/*.{js,css,html,woff2}'],
+      },
       manifest: {
         name: 'Tanda Manager',
         short_name: 'Tanda',

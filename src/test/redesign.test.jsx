@@ -65,8 +65,10 @@ describe('member avatar grid', () => {
       />,
     )
     const body = decodeURIComponent(screen.getByRole('link').getAttribute('href').split('body=')[1])
-    expect(body.toLowerCase()).toContain('jun')
-    expect(body).not.toContain('Fri')
+    const [english, spanish] = body.split(' / ')
+    expect(english).toContain('Fri, Jun 12')
+    expect(spanish.toLowerCase()).toContain('jun')
+    expect(spanish).not.toContain('Fri')
   })
 })
 

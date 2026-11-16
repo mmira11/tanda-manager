@@ -47,7 +47,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
   const progress = board.progress || []
   const round = board.current_round
   const stats = paymentStats(progress, board.cycle?.contribution)
-  const rounds = memberRoundSteps(board.rounds, round?.round_number)
+  const rounds = memberRoundSteps(board.rounds, round?.round_number, board)
   const paid = board.me?.paid_this_round === true
   const zelle = board.cycle?.zelle_destination?.trim() || ''
   const payoutDate = board.me?.payout_date

@@ -57,6 +57,17 @@ describe('round selection', () => {
     expect(screen.getByText(/Editing a past round — paid out Sat, Aug 8/)).toBeTruthy()
   })
 
+  it('hides timed reminder icons when the phone is not a valid US number', async () => {
+    fake.tables.members.find(member => member.display_first_name === 'Ada').phone = '12345'
+    await setup()
+    const ada = screen.getAllByText('Ada').map(node => node.closest('div.flex-1')).find(Boolean)
+    expect(within(ada).queryByTitle('SMS 12 PM reminder to Ada')).toBeNull()
+    expect(within(ada).queryByTitle('SMS 6 PM final notice to Ada')).toBeNull()
+    expect(within(ada).queryByTitle('WhatsApp 12 PM reminder to Ada')).toBeNull()
+    expect(within(ada).queryByTitle('WhatsApp 6 PM final notice to Ada')).toBeNull()
+    expect(screen.getByTitle('SMS 6 PM final notice to Bea')).toBeTruthy()
+  })
+
   it('hides Reminders and Remind Unpaid on a past round', async () => {
     const user = await setup()
     expect(screen.getByText('Reminders')).toBeTruthy()

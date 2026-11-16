@@ -81,8 +81,11 @@ describe('self-hosted font', () => {
     const css = readFileSync(join(process.cwd(), 'src/index.css'), 'utf8')
     const main = readFileSync(join(process.cwd(), 'src/main.jsx'), 'utf8')
     expect(css).not.toContain('fonts.googleapis.com')
-    expect(main).toContain('@fontsource/inter/400.css')
-    expect(main).toContain('@fontsource/inter/800.css')
+    expect(main).toContain('@fontsource/inter/latin-400.css')
+    expect(main).toContain('@fontsource/inter/latin-800.css')
+    expect(main).not.toContain('@fontsource/inter/400.css')
+    const vite = readFileSync(join(process.cwd(), 'vite.config.js'), 'utf8')
+    expect(vite).toContain('woff2')
   })
 })
 
@@ -96,5 +99,23 @@ describe('member round list', () => {
       [1, 'Maria', 'past', '2099-08-20'],
       [2, 'Rosa', 'current', '2099-07-04'],
     ])
+  })
+
+  it('falls back to the current round and this member payout when rounds are missing', () => {
+    const board = {
+      current_round: {
+        round_number: 3,
+        collect_date: '2099-06-01',
+        payout_date: '2099-06-02',
+        recipient_first_name: 'Luis',
+      },
+      me: { slot: 1, display_first_name: 'Maria', payout_date: '2099-08-20' },
+    }
+    const steps = memberRoundSteps(undefined, null, board)
+    expect(steps.map(step => [step.round, step.name, step.state, step.payoutDate])).toEqual([
+      [1, 'Maria', 'past', '2099-08-20'],
+      [3, 'Luis', 'current', '2099-06-02'],
+    ])
+    expect(memberRoundSteps([], 3, board)).toEqual(steps)
   })
 })

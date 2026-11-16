@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildNudgeSmsUrl, buildNudgeBody } from '../utils/messaging'
+import { buildSmsUrl, buildWhatsAppUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl, buildNudgeSmsUrl, buildNudgeBody } from '../utils/messaging'
 
 describe('messaging', () => {
   it('buildSmsUrl targets correct number and includes name in body', () => {
@@ -13,6 +13,12 @@ describe('messaging', () => {
     const url = buildWhatsAppUrl('(555) 010-0001', 'Ada', '(555) 010-0002')
     expect(url).toMatch(/^https:\/\/wa\.me\/15550100001/)
     expect(url).toContain('Ada')
+  })
+
+  it('hides WhatsApp links for a phone that is not 10 or 11 digits', () => {
+    expect(buildWhatsAppUrl('12345', 'Rosa', '(555) 010-0002', '2026-06-12', 100)).toBeNull()
+    expect(buildTimedReminderWhatsAppUrl('22345678901', 'Rosa', '(555) 010-0002', '6pm', 100)).toBeNull()
+    expect(buildTimedReminderSmsUrl('12345', 'Rosa', '(555) 010-0002', '12pm', 100)).toBeNull()
   })
 
   it('strips all non-digits from phone numbers', () => {
@@ -99,6 +105,21 @@ describe('messaging', () => {
     expect(body).toContain('familia.demo')
     expect(body).toContain('Hola')
     expect(body).not.toContain('5550100104')
+  })
+
+  it('puts the en-US date in the English half and the es-US date in the Spanish half', () => {
+    const body = buildNudgeBody({
+      name: 'Rosa',
+      amount: 100,
+      zelle: 'familia.demo',
+      whenEn: 'Fri, Jun 12',
+      whenEs: 'vie, 12 de jun',
+    })
+    const [english, spanish] = body.split(' / ')
+    expect(english).toContain('Fri, Jun 12')
+    expect(english).not.toContain('vie')
+    expect(spanish).toContain('vie, 12 de jun')
+    expect(spanish).not.toContain('Fri')
   })
 
   it('labels the evening reminder at 6 PM, when the organizer sends it', () => {

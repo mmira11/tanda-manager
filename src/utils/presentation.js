@@ -58,16 +58,51 @@ export function canNudge(member) {
   return member?.paid !== true && isValidUsPhone(member?.phone)
 }
 
-// Rounds come from get_member_board. Dates are the stored collect and payout days,
-// not a schedule rebuilt from the cycle start.
-export function memberRoundSteps(rounds, currentRound) {
-  return [...(rounds || [])]
+function fallbackRounds(board) {
+  if (!board || Array.isArray(board)) return []
+  const current = board.current_round
+  const me = board.me
+  const steps = []
+  if (current?.round_number != null) {
+    steps.push({
+      number: current.round_number,
+      collect_date: current.collect_date ?? null,
+      payout_date: current.payout_date ?? null,
+      recipient_first_name: current.recipient_first_name || '',
+    })
+  }
+  const ownNumber = me?.slot
+  const listed = steps.some(step => Number(step.number) === Number(ownNumber))
+  if (me?.payout_date && ownNumber != null && !listed) {
+    steps.push({
+      number: ownNumber,
+      collect_date: null,
+      payout_date: me.payout_date,
+      recipient_first_name: me.display_first_name || '',
+    })
+  } else if (!steps.length && me?.payout_date) {
+    steps.push({
+      number: ownNumber || 1,
+      collect_date: null,
+      payout_date: me.payout_date,
+      recipient_first_name: me.display_first_name || '',
+    })
+  }
+  return steps
+}
+
+// Prefer the rounds array from get_member_board. If that migration is not applied
+// yet, keep the current round and this member's payout turn so the stepper is not blank.
+export function memberRoundSteps(rounds, currentRound, board) {
+  const provided = Array.isArray(rounds) && rounds.length > 0 ? rounds : fallbackRounds(board)
+  const current = currentRound ?? board?.current_round?.round_number ?? null
+  return provided
     .map(round => ({
       round: Number(round.number),
       collectDate: round.collect_date,
       payoutDate: round.payout_date,
       name: round.recipient_first_name || '',
-      state: roundStepState(Number(round.number), currentRound),
+      state: roundStepState(Number(round.number), current),
     }))
     .sort((a, b) => a.round - b.round)
 }

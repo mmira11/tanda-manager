@@ -1,7 +1,6 @@
 import { avatarColor, canNudge, initials } from '../../utils/presentation'
 import { buildNudgeSmsUrl } from '../../utils/messaging'
 import { formatDate } from '../../utils/rounds'
-import { useLang } from '../../context/LangContext'
 
 function Badge({ paid }) {
   const tone = paid ? 'bg-mint text-ink' : 'bg-amberwarm text-ink'
@@ -16,14 +15,14 @@ function Badge({ paid }) {
   )
 }
 
-export default function MemberAvatarGrid({ members, contribution, zelle, collectDate, t, onSelect, readOnly, locale }) {
-  const { locale: contextLocale } = useLang()
-  const when = collectDate ? formatDate(collectDate, locale || contextLocale) : ''
+export default function MemberAvatarGrid({ members, contribution, zelle, collectDate, t, onSelect, readOnly }) {
+  const whenEn = collectDate ? formatDate(collectDate, 'en-US') : ''
+  const whenEs = collectDate ? formatDate(collectDate, 'es-US') : ''
   return (
     <ul className="grid grid-cols-5 gap-x-2 gap-y-4">
       {members.map(member => {
         const nudge = canNudge(member)
-          ? buildNudgeSmsUrl(member.phone, { name: member.name, amount: contribution, zelle, when })
+          ? buildNudgeSmsUrl(member.phone, { name: member.name, amount: contribution, zelle, whenEn, whenEs })
           : null
         const state = member.paid ? t.paidState : t.unpaidState
         return (

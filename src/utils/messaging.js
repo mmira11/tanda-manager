@@ -65,8 +65,15 @@ export function buildReminderBody(roundNum, formattedDate, organizerPhone, amoun
   return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send ${money} to ${org} via Zelle. Thank you!`
 }
 
+function whatsAppNumber(phone) {
+  if (!isValidUsPhone(phone)) return null
+  const digits = stripPhone(phone)
+  return digits.length === 11 ? digits : `1${digits}`
+}
+
 export function buildWhatsAppUrl(recipientPhone, recipientName, organizerPhone, collectDate, amount) {
-  const to = '1' + stripPhone(recipientPhone)
+  const to = whatsAppNumber(recipientPhone)
+  if (!to) return null
   const orgNum = stripPhone(organizerPhone)
   const day = getCollectDayName(collectDate)
   const body = encodeURIComponent(
@@ -88,14 +95,17 @@ export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organize
   return smsLink(stripPhone(recipientPhone), timedReminderBody(recipientName, organizerPhone, type, amount))
 }
 
-export function buildNudgeBody({ name, amount, zelle, when }) {
+export function buildNudgeBody({ name, amount, zelle, when, whenEn, whenEs }) {
   const who = name?.trim() || 'there'
   const saved = zelle?.trim()
   const destEn = saved || organizerFallback('en')
   const destEs = saved || organizerFallback('es')
   const money = formatMoney(amount)
-  const date = when ? ` (${when})` : ''
-  return `Hi ${who}, please send ${money} by Zelle to ${destEn}${date}. Thank you! / Hola ${who}, por favor envía ${money} por Zelle a ${destEs}${date}. ¡Gracias!`
+  const englishWhen = whenEn || when || ''
+  const spanishWhen = whenEs || when || ''
+  const enDate = englishWhen ? ` (${englishWhen})` : ''
+  const esDate = spanishWhen ? ` (${spanishWhen})` : ''
+  return `Hi ${who}, please send ${money} by Zelle to ${destEn}${enDate}. Thank you! / Hola ${who}, por favor envía ${money} por Zelle a ${destEs}${esDate}. ¡Gracias!`
 }
 
 export function buildNudgeSmsUrl(phone, details) {
@@ -103,6 +113,7 @@ export function buildNudgeSmsUrl(phone, details) {
 }
 
 export function buildTimedReminderWhatsAppUrl(recipientPhone, recipientName, organizerPhone, type, amount) {
-  const to = '1' + stripPhone(recipientPhone)
+  const to = whatsAppNumber(recipientPhone)
+  if (!to) return null
   return `https://wa.me/${to}?text=${encodeURIComponent(timedReminderBody(recipientName, organizerPhone, type, amount))}`
 }
