@@ -4,6 +4,7 @@ import { DEFAULT_TIME_ZONE, formatZonedDate } from '../../utils/rounds'
 
 const TIMING = {
   early: 'timingEarly',
+  on_time: 'timingOnTime',
   after_deadline: 'timingAfterDeadline',
   late: 'timingLate',
 }
@@ -15,7 +16,8 @@ function ReviewItem({ item, t, participants, rounds, locale, timeZone, readOnly,
   const knownRound = !rounds.length || rounds.some(r => r.id === item.round_id)
   const [roundId, setRoundId] = useState(knownRound ? (item.round_id || '') : '')
   const [reason, setReason] = useState('')
-  const canMatch = !readOnly && Boolean(memberId) && Boolean(roundId)
+  const amountDiffers = String(item.match_reason || '').includes('amount_differs')
+  const canMatch = !readOnly && !amountDiffers && Boolean(memberId) && Boolean(roundId)
   const chosen = rounds.find(r => r.id === roundId)
   const when = item.received_at ? formatZonedDate(item.received_at, locale, timeZone) : ''
   const timingKey = roundId === item.round_id ? TIMING[item.round_timing] : ''
@@ -58,6 +60,7 @@ function ReviewItem({ item, t, participants, rounds, locale, timeZone, readOnly,
         <button
           type="button"
           disabled={!canMatch}
+          title={amountDiffers ? t.amountDiffersHint : undefined}
           onClick={() => onMatch(item.id, memberId, roundId)}
           className="shrink-0 min-h-11 px-3 rounded-xl bg-amberwarm text-ink text-sm font-bold disabled:opacity-50"
         >
@@ -72,6 +75,7 @@ function ReviewItem({ item, t, participants, rounds, locale, timeZone, readOnly,
           {t.dismissItem}
         </button>
       </div>
+      {amountDiffers && <p className="text-xs text-stone-400">{t.amountDiffersHint}</p>}
       <input
         aria-label={t.dismissReason}
         placeholder={t.dismissReason}

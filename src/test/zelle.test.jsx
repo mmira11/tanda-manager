@@ -328,6 +328,32 @@ describe('Match and Dismiss on the Needs-review card', () => {
     expect(screen.getByText('Match').disabled).toBe(true)
   })
 
+  it('turns Match off when the amount differs, in English and Spanish', () => {
+    const differs = { ...item, match_reason: 'first_name,amount_differs' }
+    const { rerender } = render(
+      <NeedsReviewCard items={[differs]} t={t} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={vi.fn()} />,
+    )
+    expect(screen.getByRole('button', { name: 'Match' }).disabled).toBe(true)
+    expect(screen.getByText('Amount differs, so Match is off. Mark this payment by hand.')).toBeTruthy()
+    rerender(
+      <NeedsReviewCard items={[differs]} t={LABELS.es} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={vi.fn()} />,
+    )
+    expect(screen.getByRole('button', { name: 'Emparejar' }).disabled).toBe(true)
+    expect(screen.getByText('El monto es distinto, así que Emparejar está desactivado. Márcalo a mano.')).toBeTruthy()
+  })
+
+  it('shows an on-time chip in English and Spanish', () => {
+    const onTime = { ...item, round_timing: 'on_time' }
+    const { rerender } = render(
+      <NeedsReviewCard items={[onTime]} t={t} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={vi.fn()} />,
+    )
+    expect(screen.getByText(/On time/)).toBeTruthy()
+    rerender(
+      <NeedsReviewCard items={[onTime]} t={LABELS.es} participants={participants} rounds={rounds} locale="es-US" onMatch={vi.fn()} onDismiss={vi.fn()} />,
+    )
+    expect(screen.getByText(/A tiempo/)).toBeTruthy()
+  })
+
   it('confirmMatch marks only that member paid, closes the review, and saves the alias', async () => {
     const db = seedCycle({ names: ['Ana', 'Beto'], contribution: 150 })
     db.pending_review = [{
@@ -369,6 +395,23 @@ describe('Match and Dismiss on the Needs-review card', () => {
     expect(fake.tables.payments.find(p => p.round_id === 'round-1' && p.member_id === 'member-2'))
       .toMatchObject({ paid_at: '2026-06-12T18:00:00.000Z', source: 'manual' })
     expect(fake.tables.pending_review.find(r => r.id === 'rv4').status).toBe('matched')
+  })
+
+  it('refuses Match when the cycle is archived and does not pay anyone', async () => {
+    const db = seedCycle({ names: ['Ana'], contribution: 150 })
+    db.cycles[0].status = 'archived'
+    db.pending_review = [{
+      id: 'rv-arch', cycle_id: 'cycle-1', round_id: 'round-1', status: 'pending',
+      sender_name: 'Ana Prueba', amount: 150, received_at: at,
+    }]
+    const fake = installFakeSupabase({ db })
+    const { result } = renderHook(() => useCycleStore())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(() => result.current.confirmMatch('rv-arch', 'member-1', 'round-1'))
+    expect(result.current.error).toMatch(/cycle is archived/)
+    expect(fake.tables.payments.every(p => p.paid_at === null)).toBe(true)
+    expect(fake.tables.pending_review[0]).toMatchObject({ status: 'pending', round_id: 'round-1' })
+    expect(fake.tables.payer_aliases).toEqual([])
   })
 
   it('dismissReview sets the row aside, keeps an optional reason, and pays nobody', async () => {

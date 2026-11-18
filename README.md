@@ -33,7 +33,7 @@ A few decisions mattered more than they might look:
 
 **Members never read tables directly.** The member page calls one `security definer` function, `get_member_board(token)`. It returns that member's own status plus first names and paid/unpaid for the group, the round list, and the organizer's Zelle destination. It never returns phone numbers, other members' tokens, or payer aliases. Anonymous users can run only that function.
 
-**Archived cycles are locked in the database.** Restrictive policies block inserts, updates, and deletes on an archived cycle's members, rounds, and payments, so history can't be edited by accident.
+**Archived cycles are locked in the database.** Restrictive policies block inserts, updates, and deletes on an archived cycle's members, rounds, payments, pending review rows, and payer aliases, so history can't be edited by accident. The cycle row itself can still be viewed and unarchived. `confirm_zelle_match` refuses an archived cycle before it changes a payment.
 
 **The SQL is tested against real Postgres.** `npm run test:sql` applies `schema.sql` plus every migration twice on a throwaway database. It then checks the archive lock, the function grants, and that the member board leaks no phone or token. CI runs it on every push and pull request.
 
@@ -49,12 +49,13 @@ Nudges on the dashboard still open the phone's SMS app. Scheduled reminders and 
 
 ## Supabase setup
 
-1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `015`). Each migration is safe to run more than once.
+1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `016`). Each migration is safe to run more than once.
    - `013` — reminder log and SMS opt-outs
    - `014` — Zelle `pending_review` rows and `confirm_zelle_match`
    - `015` — the round the admin picked, an optional dismiss reason, and `round_timing` (`early`, `on_time`, `after_deadline`, `late`)
+   - `016` — an archived cycle refuses Match, dismiss, and payer-alias edits. The cycle can still be viewed and unarchived.
 
-Apply `014` before `015`. `015` replaces the two-argument `confirm_zelle_match` from `014`.
+Apply `014`, then `015`, then `016`. `015` replaces the two-argument `confirm_zelle_match` from `014`. `016` replaces it again. If `014` and `015` are already applied, run `016` next.
 2. **Turn on email sign-in.** Under Authentication → Providers, enable Email. The app sends magic links only and won't create new users (`shouldCreateUser: false`), so create your own user under Authentication → Users.
 3. **Allow the redirect URLs.** Under Authentication → URL Configuration, add every address you'll sign in from, including the `/tanda-manager/` base path:
    - `http://localhost:5173/tanda-manager/admin`
@@ -102,7 +103,7 @@ supabase secrets set \
 
 ### scan-zelle-email
 
-Needs migrations `014` and `015`. Reads Zelle "you received" mail with the Gmail read-only scope and queues Needs review. It never marks anyone paid.
+Needs migrations `014`, `015`, and `016`. Reads Zelle "you received" mail with the Gmail read-only scope and queues Needs review. It never marks anyone paid.
 
 ```bash
 supabase functions deploy scan-zelle-email --no-verify-jwt
