@@ -132,3 +132,22 @@ describe('messaging', () => {
     expect(body).not.toContain('5550100001')
   })
 })
+
+describe('texts to members are bilingual', () => {
+  it('sends English then Spanish in one-tap SMS and WhatsApp reminders', () => {
+    const sms = decodeURIComponent(buildSmsUrl('(555) 010-0001', 'Ada', '(555) 010-0002', '2026-06-12', 80))
+    expect(sms).toMatch(/Hi Ada, friendly reminder/)
+    expect(sms).toMatch(/Hola Ada, te recordamos/)
+    expect(sms).toMatch(/viernes/)
+    const wa = decodeURIComponent(buildWhatsAppUrl('(555) 010-0001', 'Ada', '(555) 010-0002', '2026-06-12', 80))
+    expect(wa).toMatch(/Hi Ada/)
+    expect(wa).toMatch(/Hola Ada/)
+  })
+
+  it('timed 12 PM and 6 PM reminders carry both languages', () => {
+    const noon = decodeURIComponent(buildTimedReminderSmsUrl('(555) 010-0001', 'Ada', '(555) 010-0002', '12pm', 80))
+    const last = decodeURIComponent(buildTimedReminderWhatsAppUrl('(555) 010-0001', 'Ada', '(555) 010-0002', '6pm', 80))
+    expect(noon).toMatch(/closes TODAY at 6 PM[\s\S]*cierra HOY a las 6 PM/)
+    expect(last).toMatch(/last call[\s\S]*último aviso/)
+  })
+})

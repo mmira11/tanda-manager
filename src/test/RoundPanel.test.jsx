@@ -252,4 +252,13 @@ describe('archived cycle dashboard', () => {
     await renderOn('archived')
     expect(screen.queryByText(/^\d+d \d+h$|^\d+h \d+m$/)).toBeNull()
   })
+
+  it('Schedule on an archived cycle has no countdown or reminder buttons', async () => {
+    await renderOn('archived')
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    await user.click(screen.getByRole('button', { name: 'Schedule' }))
+    expect(screen.queryByText(/Remind Unpaid/)).toBeNull()
+    expect(screen.queryByText(/Closes in/)).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Reminders' })).toBeNull()
+  })
 })

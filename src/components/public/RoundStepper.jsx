@@ -1,6 +1,6 @@
 export default function RoundStepper({ rounds, label }) {
   return (
-    <ol aria-label={label} className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
+    <ol aria-label={label} className="scrollbar-none flex gap-3 overflow-x-auto pb-1 -mx-1 px-1">
       {rounds.map(step => {
         const circle = step.state === 'current'
           ? 'bg-teal text-white'

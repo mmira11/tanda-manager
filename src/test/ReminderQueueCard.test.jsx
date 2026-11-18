@@ -49,6 +49,15 @@ describe('reminder queue card', () => {
     expect(screen.getByRole('region', { name: 'Send reminders now' }).textContent).not.toMatch(/555/)
   })
 
+  it('sends exactly the message shown, tucked behind Show message', () => {
+    renderCard([bea])
+    const sms = screen.getByRole('link', { name: 'SMS Bea' }).getAttribute('href')
+    const wa = screen.getByRole('link', { name: 'WhatsApp Bea' }).getAttribute('href')
+    expect(decodeURIComponent(sms.split('body=')[1])).toBe(message('Bea'))
+    expect(decodeURIComponent(wa.split('text=')[1])).toBe(message('Bea'))
+    expect(screen.getByText('Show message').closest('details').open).toBe(false)
+  })
+
   it('marks that row sent when SMS is tapped, and mark-all skips people who already paid', async () => {
     const user = userEvent.setup()
     const { onMarkSent, onSkip, onMarkAll } = renderCard([bea, cal, ada])
@@ -119,7 +128,6 @@ describe('dashboard reminder count', () => {
         onSelectMember={() => {}}
         reminderItems={[bea, ada]}
         reminderWindowLabel="Noon reminder"
-        reminderCollectDate="2026-11-20"
         onMarkSent={() => {}}
         onSkipReminder={() => {}}
         onMarkAllReminders={() => {}}

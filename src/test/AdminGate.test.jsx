@@ -98,30 +98,30 @@ describe('first run: create a cycle', () => {
   })
 })
 
-describe('spanish admin chrome', () => {
+describe('admin is always English', () => {
   afterEach(() => localStorage.clear())
 
-  it('translates cycle controls and the navigation label', async () => {
+  it('stays in English with no language toggle, even if this phone chose Spanish on a member page', async () => {
     localStorage.setItem('tanda_lang', 'es')
     installFakeSupabase({ session: adminSession, isAdmin: true, db: seedCycle({ names: ['Ana', 'Beto'] }) })
     const user = userEvent.setup()
     render(<AdminGate />)
 
-    expect(await screen.findByRole('navigation', { name: 'Administración' })).toBeTruthy()
-    expect(screen.getByLabelText('Cambiar idioma')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Ajustes' }))
-    expect(screen.getByRole('button', { name: 'Archivar' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Nuevo ciclo' })).toBeDisabled()
-    expect(screen.getByLabelText('Ciclo')).toBeTruthy()
+    expect(await screen.findByRole('navigation', { name: 'Admin' })).toBeTruthy()
+    expect(screen.queryByLabelText('Toggle language')).toBeNull()
+    expect(screen.queryByLabelText('Cambiar idioma')).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.getByRole('button', { name: 'Archive' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'New cycle' })).toBeDisabled()
   })
 
-  it('shows the archived banner in Spanish', async () => {
+  it('shows the archived banner in English', async () => {
     localStorage.setItem('tanda_lang', 'es')
     const db = seedCycle({ names: ['Ana', 'Beto'], name: 'Finished' })
     db.cycles[0].status = 'archived'
     installFakeSupabase({ session: adminSession, isAdmin: true, db })
     render(<AdminGate />)
-    expect(await screen.findByText('Ciclo archivado. El historial incluye cada ronda, también la última.')).toBeTruthy()
+    expect(await screen.findByText(/^Archived cycle\./)).toBeTruthy()
   })
 })
 

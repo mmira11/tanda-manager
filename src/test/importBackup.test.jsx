@@ -199,7 +199,7 @@ describe('useCycleStore import and cycle switch', () => {
 })
 
 describe('archive then create', () => {
-  it('asks in both languages, then unlocks New cycle', async () => {
+  it('asks in English, then unlocks New cycle', async () => {
     installFakeSupabase({
       session: adminSession,
       isAdmin: true,
@@ -211,12 +211,12 @@ describe('archive then create', () => {
     expect(await screen.findByText('Current')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('button', { name: 'New cycle' })).toBeDisabled()
-    expect(screen.getByText(/Archiva el ciclo activo/)).toBeTruthy()
+    expect(screen.getByText(/Archive the active cycle before starting another/)).toBeTruthy()
 
     await user.click(screen.getByRole('button', { name: 'Archive' }))
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByText('Archive this cycle?')).toBeTruthy()
-    expect(screen.getByText('¿Archivar este ciclo?')).toBeTruthy()
+    expect(screen.queryByText('¿Archivar este ciclo?')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Archive cycle' }))
 
     expect(await screen.findByText(/Archived cycle/)).toBeTruthy()
@@ -341,5 +341,19 @@ describe('import-backup script', () => {
     expect(output).not.toContain(PHONE)
     expect(output).not.toContain(PIN)
     expect(output).not.toContain(GITHUB_TOKEN)
+  })
+})
+
+describe('organizer can see what a member sees', () => {
+  it('links each member to a preview of their page', async () => {
+    installFakeSupabase({ db: seedCycle({ names: ['Ada', 'Bea'], contribution: 40 }) })
+    const user = userEvent.setup()
+    render(<StoreProvider><Loaded /></StoreProvider>)
+
+    await user.click(await screen.findByRole('button', { name: 'Members' }))
+    const views = screen.getAllByRole('link', { name: 'View as member' })
+    expect(views).toHaveLength(2)
+    expect(views[0].getAttribute('href')).toMatch(/\/m\/test-token-1\?preview=1$/)
+    expect(views[0].getAttribute('target')).toBe('_blank')
   })
 })

@@ -89,7 +89,6 @@ function AdminPreview() {
       <div className="max-w-lg mx-auto px-4 pt-5 pb-28">
         <DashboardView
           t={t}
-          lang="en"
           onToggleLang={() => {}}
           cycleName="Familia Demo"
           roundLabel={t.roundOf(3, members.length)}
@@ -108,7 +107,6 @@ function AdminPreview() {
           onSelectMember={() => {}}
           reminderItems={queued}
           reminderWindowLabel={t.reminderNoon}
-          reminderCollectDate={daysFromNow(0)}
           onMarkSent={() => {}}
           onSkipReminder={() => {}}
           onMarkAllReminders={() => {}}

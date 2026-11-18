@@ -126,7 +126,7 @@ describe('member board', () => {
 
     expect(await screen.findByText('Pending')).toBeTruthy()
     expect(screen.getByText(/Hi, Ada!/)).toBeTruthy()
-    expect(screen.getByText(/\$160/)).toBeTruthy()
+    expect(screen.getAllByText(/\$160/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Jun 2/).length).toBeGreaterThan(0)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'My Rounds' }))
@@ -240,5 +240,65 @@ describe('landing page', () => {
     expect(screen.getByText('Open the link the organizer texted you')).toBeTruthy()
     expect(screen.getByRole('link', { name: 'Organizer sign in' })).toHaveAttribute('href', '/tanda-manager/admin')
     expect(screen.queryByText(/Public Board/)).toBeNull()
+  })
+})
+
+describe('member page highlights', () => {
+  it('says who receives this round and marks my own round with You', async () => {
+    supabase.rpc.mockResolvedValue({ data: board(), error: null })
+    const user = userEvent.setup()
+    renderBoard()
+    expect(await screen.findByText('This round goes to Bea 🎉')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'Tanda 2099' })).toBeTruthy()
+
+    await user.click(screen.getByRole('button', { name: 'My Rounds' }))
+    const mine = screen.getByText('You').closest('div')
+    expect(mine.textContent).toMatch(/Ada/)
+  })
+
+  it('thanks a member once when their payment lands', async () => {
+    supabase.rpc.mockResolvedValue({ data: board({ paid: true }), error: null })
+    const user = userEvent.setup()
+    const first = renderBoard()
+    expect(await screen.findByRole('dialog', { name: 'Thank you, Ada! 💕' })).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Yay!' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    first.unmount()
+
+    renderBoard()
+    expect(await screen.findByText('Paid! ✅')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('celebrates the round that is mine', async () => {
+    const data = board()
+    data.progress = data.progress.map(p => ({ ...p, is_recipient: p.slot === 1 }))
+    data.current_round.recipient_first_name = 'Ada'
+    supabase.rpc.mockResolvedValue({ data, error: null })
+    renderBoard()
+    expect(await screen.findByRole('dialog', { name: "It's your turn, Ada! 🎉" })).toBeTruthy()
+    expect(screen.getByText('This round is yours! 🎉')).toBeTruthy()
+  })
+
+  it('organizer preview saves nothing on the phone and hides Forget this phone', async () => {
+    localStorage.setItem('tanda_lang', 'es')
+    supabase.rpc.mockResolvedValue({ data: board({ paid: true }), error: null })
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={[`/m/${TOKEN}?preview=1`]}>
+        <Routes>
+          <Route path="/m/:token" element={<MemberBoard />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+    // Ada's language_pref is en, so the preview ignores this phone's Spanish setting.
+    expect(await screen.findByText(/Preview: this is what Ada sees/)).toBeTruthy()
+    expect(screen.getByText('Paid! ✅')).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(localStorage.getItem('tanda_member_token')).toBeNull()
+    expect(localStorage.getItem('tanda_seen_paid_1')).toBeNull()
+
+    await user.click(screen.getByRole('button', { name: /Profile/ }))
+    expect(screen.queryByText('Forget this phone')).toBeNull()
   })
 })
