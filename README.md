@@ -51,7 +51,7 @@ Reminders still go out by hand through `sms:` links. The schema already has `pay
 
 ## Supabase setup
 
-1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `005`). Each migration is safe to run more than once.
+1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `011`). Each migration is safe to run more than once.
 2. **Turn on email sign-in.** Under Authentication → Providers, enable Email. The app sends magic links only and won't create new users (`shouldCreateUser: false`), so create your own user under Authentication → Users.
 3. **Allow the redirect URLs.** Under Authentication → URL Configuration, add every address you'll sign in from, including the `/tanda-manager/` base path:
    - `http://localhost:5173/tanda-manager/admin`
