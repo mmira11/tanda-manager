@@ -332,8 +332,8 @@ describe('useTandaStore', () => {
 
   it('updateParticipant saves name and phone', () => {
     const { result } = renderHook(() => useTandaStore())
-    act(() => result.current.updateParticipant(1, { name:'Edy', phone:'5102301571' }))
-    expect(result.current.store.participants[0].name).toBe('Edy')
+    act(() => result.current.updateParticipant(1, { name:'Alex', phone:'5550100100' }))
+    expect(result.current.store.participants[0].name).toBe('Alex')
   })
 
   it('togglePayment marks and unmarks paid', () => {
@@ -380,7 +380,7 @@ describe('useTandaStore', () => {
 
   it('resetData wipes to initial state', () => {
     const { result } = renderHook(() => useTandaStore())
-    act(() => result.current.updateParticipant(1, { name:'Edy' }))
+    act(() => result.current.updateParticipant(1, { name:'Alex' }))
     act(() => result.current.resetData())
     expect(result.current.store.participants[0].name).toBe('')
     expect(result.current.store.config.initialized).toBe(false)
@@ -388,9 +388,9 @@ describe('useTandaStore', () => {
 
   it('persists to localStorage', () => {
     const { result } = renderHook(() => useTandaStore())
-    act(() => result.current.updateParticipant(1, { name:'Edy' }))
+    act(() => result.current.updateParticipant(1, { name:'Alex' }))
     const saved = JSON.parse(localStorage.getItem('tanda_data'))
-    expect(saved.participants[0].name).toBe('Edy')
+    expect(saved.participants[0].name).toBe('Alex')
   })
 })
 ```
@@ -454,14 +454,14 @@ import { describe, it, expect } from 'vitest'
 import { buildSmsUrl, buildWhatsAppUrl } from '../utils/messaging'
 describe('messaging', () => {
   it('buildSmsUrl has correct recipient and body', () => {
-    const url = buildSmsUrl('(510) 230-1571', 'Edy', '(555) 010-0002')
-    expect(url).toMatch(/^sms:5102301571/)
-    expect(url).toContain('Edy')
+    const url = buildSmsUrl('(555) 010-0100', 'Alex', '(555) 010-0002')
+    expect(url).toMatch(/^sms:5550100100/)
+    expect(url).toContain('Alex')
     expect(url).toContain('5550100002')
   })
   it('buildWhatsAppUrl prefixes country code', () => {
-    const url = buildWhatsAppUrl('(510) 230-1571', 'Edy', '(555) 010-0002')
-    expect(url).toMatch(/^https:\/\/wa\.me\/15102301571/)
+    const url = buildWhatsAppUrl('(555) 010-0100', 'Alex', '(555) 010-0002')
+    expect(url).toMatch(/^https:\/\/wa\.me\/15550100100/)
   })
 })
 ```
