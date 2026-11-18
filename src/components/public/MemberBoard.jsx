@@ -1,5 +1,5 @@
 // Private member page. Reads get_member_board only — never the payments table —
-// and refetches on a timer (and on an empty realtime signal) so a mark-paid shows up.
+// and refetches on a timer and when the tab regains focus, so a mark-paid shows up.
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { LABELS } from '../../data/labels'
