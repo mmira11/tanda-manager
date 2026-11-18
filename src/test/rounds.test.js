@@ -246,6 +246,13 @@ describe('validateSchedule / isValidTimeZone (N11)', () => {
     expect(validateSchedule([r(2, '2030-01-04', '2030-01-05'), r(1, '2030-01-18', '2030-01-19')]))
       .toMatch(/Round 2 collects on or before round 1/)
   })
+  it('rejects payout dates that do not rise with the round number', () => {
+    // Collect dates are in order, but round 1 pays out after round 2 does.
+    expect(validateSchedule([r(1, '2030-01-04', '2030-01-30'), r(2, '2030-01-18', '2030-01-19')]))
+      .toMatch(/Round 2 pays out on or before round 1/)
+    expect(validateSchedule([r(1, '2030-01-04', '2030-01-19'), r(2, '2030-01-18', '2030-01-19')]))
+      .toMatch(/Round 2 pays out on or before round 1/)
+  })
   it('knows real IANA zones from made-up ones', () => {
     expect(isValidTimeZone('America/Los_Angeles')).toBe(true)
     expect(isValidTimeZone('America/New_York')).toBe(true)
