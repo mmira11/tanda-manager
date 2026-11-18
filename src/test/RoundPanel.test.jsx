@@ -193,6 +193,26 @@ describe('rounds are not tied to the member count (N9)', () => {
   })
 })
 
+describe('more rounds than members (N9)', () => {
+  it('renders a 2-member, 3-round cycle where one member receives twice', async () => {
+    const db = seedCycle({ names: ['Ada', 'Bea'], contribution: 50 })
+    db.rounds.push({
+      id: 'round-3', cycle_id: 'cycle-1', round_number: 3, collect_date: '2026-07-10', payout_date: '2026-07-11',
+      recipient_member_id: 'member-1', payout_sent: false, payout_sent_at: null, notes: '',
+    })
+    db.payments.push(
+      { id: 'pay-r3-m1', round_id: 'round-3', member_id: 'member-1', amount: 50, paid_at: null, source: null },
+      { id: 'pay-r3-m2', round_id: 'round-3', member_id: 'member-2', amount: 50, paid_at: null, source: null },
+    )
+    fake = installFakeSupabase({ db })
+    await setup('Round 3 of 3')
+
+    expect(screen.getByText('Ada receives')).toBeTruthy()
+    expect(screen.getByText('$100')).toBeTruthy()
+    expect(screen.getByText('$0 collected · $100 remaining')).toBeTruthy()
+  })
+})
+
 describe('History → Edit', () => {
   it('jumps from a history card into that round', async () => {
     const user = await setup()

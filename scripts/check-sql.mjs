@@ -432,6 +432,43 @@ function assertRoundsNotMembers(database) {
   console.log(`${database}: an uneven import is accepted and progress counts only the round's payment rows`)
 }
 
+// N9 follow-up: three members, three rounds, but Ana receives twice (rounds 2 and 3) and
+// Cy never does. Round 3 is listed first so it is stored first: the old unordered
+// "limit 1" would have shown Ana round 3's date instead of her next payout (round 2).
+function assertUnevenRounds(database) {
+  const plan = {
+    cycle: {
+      name: 'Twice Demo', start_date: '2098-09-04', interval_days: 14, contribution: 20,
+      timezone: 'America/Los_Angeles', archived_at: '2098-12-01T00:00:00Z',
+    },
+    members: [
+      { slot: 1, display_first_name: 'Ana', access_token: 'twice-token-ana-0001' },
+      { slot: 2, display_first_name: 'Beto', access_token: 'twice-token-beto-001' },
+      { slot: 3, display_first_name: 'Cy', access_token: 'twice-token-cy-00001' },
+    ],
+    rounds: [
+      { round_number: 3, collect_date: '2098-10-02', payout_date: '2098-10-03', recipientSlot: 1 },
+      { round_number: 1, collect_date: '2098-09-04', payout_date: '2098-09-05', recipientSlot: 2 },
+      { round_number: 2, collect_date: '2098-09-18', payout_date: '2098-09-19', recipientSlot: 1 },
+    ],
+    payments: [1, 2, 3].flatMap(roundNumber => [1, 2, 3].map(slot => ({ roundNumber, slot, amount: 20 }))),
+  }
+  const summary = JSON.parse(psqlText(database, callImport(plan)).trim().split('\n').filter(Boolean).pop())
+  if (summary.members !== 3 || summary.rounds !== 3 || summary.payments !== 9) {
+    throw new Error(`${database}: uneven-recipient import summary was ${JSON.stringify(summary)}`)
+  }
+  const board = token => JSON.parse(psqlText(database, `select get_member_board('${token}');`).trim().split('\n').pop())
+  const ana = board('twice-token-ana-0001')
+  if (ana.me.payout_date !== '2098-09-19') throw new Error(`${database}: Ana's next payout should be round 2, got ${ana.me.payout_date}`)
+  if (ana.rounds.map(r => `${r.number}:${r.recipient_first_name}`).join(',') !== '1:Beto,2:Ana,3:Ana') {
+    throw new Error(`${database}: rounds list was ${JSON.stringify(ana.rounds)}`)
+  }
+  const cy = board('twice-token-cy-00001')
+  if (cy.me.payout_date !== null) throw new Error(`${database}: Cy has no payout round, got ${cy.me.payout_date}`)
+  if (cy.progress.length !== 3) throw new Error(`${database}: Cy's board progress should list 3 payers, got ${cy.progress.length}`)
+  console.log(`${database}: a member paid out twice sees their next payout; a member with none still gets a board`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -445,6 +482,7 @@ assertLinkRevokeExpiry(fresh)
 assertSoftDeleteReorder(fresh)
 assertScheduleValidation(fresh)
 assertRoundsNotMembers(fresh)
+assertUnevenRounds(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -458,6 +496,7 @@ assertLinkRevokeExpiry(legacy)
 assertSoftDeleteReorder(legacy)
 assertScheduleValidation(legacy)
 assertRoundsNotMembers(legacy)
+assertUnevenRounds(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
