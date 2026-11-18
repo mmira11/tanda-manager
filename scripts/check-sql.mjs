@@ -382,6 +382,20 @@ function assertScheduleValidation(database) {
     delete from public.rounds where cycle_id = '${cycle}' and round_number = 3;
   `)
 
+  // 011: payout dates must rise with the round number too (create, update).
+  mustFail('round 3 paying out before round 2', `
+    insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id)
+    values ('${cycle}', 3, '2099-07-17', '2099-07-04', ${maria});
+  `, /rounds_payout_on_or_after_collect|out of payout order/)
+  mustFail('round 3 paying out on round 2 payout day', `
+    insert into public.rounds (cycle_id, round_number, collect_date, payout_date, recipient_member_id)
+    values ('${cycle}', 3, '2099-07-04', '2099-07-04', ${maria});
+  `, /out of date order|out of payout order/)
+  mustFail('moving round 1 payout after round 2 payout', `
+    update public.rounds set payout_date = '2099-07-20'
+    where cycle_id = '${cycle}' and round_number = 1;
+  `, /out of payout order/)
+
   mustFail('made-up time zone', `update public.cycles set timezone = 'Mars/Olympus_Mons' where id = '${cycle}';`, /Unknown time zone/)
   mustFail('null time zone', `update public.cycles set timezone = null where id = '${cycle}';`, /Unknown time zone|null value/)
   psqlText(database, `update public.cycles set timezone = 'America/New_York' where id = '${cycle}';`)

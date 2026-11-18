@@ -157,6 +157,7 @@ export function validateSchedule(rounds) {
     if (r.payoutDate < r.collectDate) return `Round ${r.round} pays out before it collects`
     const prev = ordered[i - 1]
     if (prev && r.collectDate <= prev.collectDate) return `Round ${r.round} collects on or before round ${prev.round}`
+    if (prev && r.payoutDate <= prev.payoutDate) return `Round ${r.round} pays out on or before round ${prev.round}`
   }
   return null
 }

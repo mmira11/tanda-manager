@@ -57,6 +57,11 @@ describe('buildImportPlan schedule checks (N11)', () => {
     bad.rounds[1].payoutDate = '2025-03-20'
     expect(() => buildImportPlan(bad, { contribution: 40 })).toThrow(/Round 2 pays out before it collects/)
   })
+  it('refuses a backup whose payout dates are out of order', () => {
+    const bad = backup()
+    bad.rounds[0].payoutDate = '2025-03-25' // round 1 pays out after round 2 (Mar 22)
+    expect(() => buildImportPlan(bad, { contribution: 40 })).toThrow(/Round 2 pays out on or before round 1/)
+  })
   it('refuses a backup whose rounds are out of date order', () => {
     const bad = backup()
     bad.rounds[1].collectDate = '2025-03-07'
