@@ -3,8 +3,28 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, renderHook, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
-  parseZelleEmail, normalizeName, matchMember, roundFor, scanEmails, verifySender, senderDomain,
+  parseZelleEmail, normalizeName, matchMember, roundFor, scanEmails, verifySender, senderDomain, googleAuthResults,
 } from '../../supabase/functions/_shared/zelle.js'
+
+describe('second security review: planted headers and parser tricks', () => {
+  const ok = 'mx.google.com; dkim=pass header.d=bank.example; dmarc=pass header.from=notify.bank.example'
+  it('uses only the topmost header, and only if Gmail wrote it', () => {
+    expect(googleAuthResults([ok, 'evil; dmarc=pass header.from=notify.bank.example'])).toBe(ok)
+    expect(googleAuthResults(['attacker.example; dmarc=pass header.from=notify.bank.example', ok])).toBe('')
+    expect(verifySender({ from: 'Bank <a@notify.bank.example>', authResults: 'evil; dmarc=pass header.from=notify.bank.example' }, ['bank.example']).ok).toBe(false)
+  })
+  it('reads the DKIM domain after the last @ and requires it to match the From domain', () => {
+    const tricked = 'mx.google.com; dkim=pass header.i=bank.example@evil.example; dmarc=fail header.from=notify.bank.example'
+    expect(verifySender({ from: 'Bank <a@notify.bank.example>', authResults: tricked }, ['bank.example', 'evil.example']).ok).toBe(false)
+    const otherAllowed = 'mx.google.com; dkim=pass header.d=other.example; dmarc=fail header.from=notify.bank.example'
+    expect(verifySender({ from: 'Bank <a@notify.bank.example>', authResults: otherAllowed }, ['bank.example', 'other.example']).ok).toBe(false)
+  })
+  it('accepts exactly one From address', () => {
+    expect(senderDomain('<x@evil.example>, alerts@bank.example')).toBeNull()
+    expect(senderDomain('"a@b" <alerts@bank.example>')).toBeNull()
+    expect(senderDomain('alerts@bank.example')).toBe('bank.example')
+  })
+})
 
 // A made-up bank domain and the headers Gmail would add for a genuine message from it.
 const BANK = ['bank.example']

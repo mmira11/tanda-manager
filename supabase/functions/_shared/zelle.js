@@ -111,13 +111,29 @@ export function roundFor(receivedAt, rounds, timeZone = 'America/Los_Angeles') {
 }
 
 // The domain part of a From header: 'Bank <alerts@notify.bank.example>' → 'notify.bank.example'.
+// Exactly one mailbox, or null: 'Bank <a@b.example>' or 'a@b.example'. Anything with a second
+// address ('<x@evil.example>, a@bank.example') or an '@' in the display name is rejected.
 export function senderDomain(from) {
-  const match = String(from || '').match(/@([a-z0-9.-]+\.[a-z]{2,})\s*>?\s*$/i)
+  const text = String(from || '').trim()
+  if ((text.match(/@/g) || []).length !== 1) return null
+  const match = text.match(/^(?:[^<>,]*<\s*)?[^\s<>@,]+@([a-z0-9.-]+\.[a-z]{2,})\s*>?$/i)
   return match ? match[1].toLowerCase() : null
 }
 
 function inAllowlist(domain, allowedDomains) {
   return Boolean(domain) && allowedDomains.some(d => domain === d || domain.endsWith(`.${d}`))
+}
+
+// Gmail prepends its own Authentication-Results header (authserv-id mx.google.com). Senders can
+// add their own copies further down, so only the topmost one, and only if Gmail wrote it, counts.
+export function googleAuthResults(headerValues) {
+  const first = String((headerValues || [])[0] || '').trim()
+  return /^mx\.google\.com\b/i.test(first) ? first : ''
+}
+
+// The signing domain is aligned when it equals the From domain or is a parent of it.
+function aligned(signer, fromDomain) {
+  return Boolean(signer) && (fromDomain === signer || fromDomain.endsWith(`.${signer}`))
 }
 
 // Only trust an email that comes from an allowed bank domain AND that Gmail authenticated for
@@ -129,9 +145,15 @@ export function verifySender({ from, authResults }, allowedDomains) {
   const domain = senderDomain(from)
   if (!inAllowlist(domain, allowed)) return { ok: false, reason: 'domain_not_allowed', domain }
   const results = String(authResults || '').toLowerCase()
+  if (!/^mx\.google\.com\b/.test(results)) return { ok: false, reason: 'not_authenticated', domain }
   const dmarc = [...results.matchAll(/dmarc=pass[^;]*?header\.from=([a-z0-9.-]+)/g)].map(m => m[1])
-  const dkim = [...results.matchAll(/dkim=pass[^;]*?header\.(?:d|i)=@?([a-z0-9.-]+)/g)].map(m => m[1])
-  const authenticated = dmarc.some(d => d === domain) || dkim.some(d => inAllowlist(d, allowed))
+  // DKIM identity as a domain only: header.d=<domain>, or the part after the last '@' of header.i.
+  const dkim = [
+    ...[...results.matchAll(/dkim=pass[^;]*?header\.d=([a-z0-9.-]+)/g)].map(m => m[1]),
+    ...[...results.matchAll(/dkim=pass[^;]*?header\.i=[^;\s]*@([a-z0-9.-]+)/g)].map(m => m[1]),
+  ]
+  const authenticated = dmarc.some(d => d === domain)
+    || dkim.some(d => inAllowlist(d, allowed) && aligned(d, domain))
   if (!authenticated) return { ok: false, reason: 'not_authenticated', domain }
   return { ok: true, domain }
 }

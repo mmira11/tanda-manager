@@ -20,7 +20,7 @@
 // The function log carries counts only. The preview (names, amounts) goes only to the caller.
 // Deploy with: supabase functions deploy scan-zelle-email --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { scanEmails } from '../_shared/zelle.js'
+import { googleAuthResults, scanEmails } from '../_shared/zelle.js'
 import { timingSafeEqual } from '../_shared/reminders.js'
 
 type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[]; headers?: { name: string; value: string }[] }
@@ -85,8 +85,8 @@ async function fetchEmails(token: string, query: string) {
     emails.push({
       id,
       from: header('from')[0] ?? '',
-      // Gmail adds Authentication-Results (SPF/DKIM/DMARC) for every message it receives.
-      authResults: header('authentication-results').join('; '),
+      // Only Gmail's own topmost Authentication-Results counts; senders can plant extra copies.
+      authResults: googleAuthResults(header('authentication-results')),
       subject: header('subject')[0] ?? '',
       text, html,
       receivedAt: new Date(Number(msg.internalDate)).toISOString(),
