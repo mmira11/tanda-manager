@@ -258,6 +258,19 @@ function assertLinkRevokeExpiry(database) {
   if (board('member-token-maria1') !== 't') throw new Error(`${database}: revoking Rosa broke Maria's link`)
   psqlText(database, `update public.members set token_revoked_at = null, access_token = 'member-token-rosa02' where access_token = 'member-token-rosa01';`)
   if (board('member-token-rosa02') !== 't') throw new Error(`${database}: regenerated link does not work`)
+  notFound('member-token-rosa01') // the pre-reissue link stays dead
+
+  // Reissue without revoking first (what Regenerate link does): the new link works, the old one dies.
+  psqlText(database, `
+    insert into public.cycles (id, name, start_date, contribution, status) values
+      ('dddddddd-0000-0000-0000-000000000004', 'Reissue Demo', '2097-04-01', 10, 'draft');
+    insert into public.members (cycle_id, slot, display_first_name, access_token) values
+      ('dddddddd-0000-0000-0000-000000000004', 1, 'Uma', 'reissue-token-old001');
+  `)
+  if (board('reissue-token-old001') !== 't') throw new Error(`${database}: link did not work before reissue`)
+  psqlText(database, `update public.members set access_token = 'reissue-token-new001', token_revoked_at = null where access_token = 'reissue-token-old001';`)
+  if (board('reissue-token-new001') !== 't') throw new Error(`${database}: reissued link does not work`)
+  notFound('reissue-token-old001')
 
   psqlText(database, `
     insert into public.cycles (id, name, start_date, contribution, status, archived_at) values
