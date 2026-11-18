@@ -165,8 +165,10 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
         if (!member) return fail('That member is not in this cycle')
         const payment = tables.payments.find(p => p.round_id === review.round_id && p.member_id === args.p_member)
         if (!payment) return fail('That member has no payment for this round')
-        payment.paid_at = payment.paid_at || review.received_at
-        payment.source = 'auto'
+        if (Number(review.amount) !== Number(payment.amount)) {
+          return fail('The Zelle amount does not match this payment; mark it by hand instead')
+        }
+        if (!payment.paid_at) Object.assign(payment, { paid_at: review.received_at, source: 'auto' })
         Object.assign(review, { status: 'matched', suggested_member_id: args.p_member, resolved_at: new Date().toISOString() })
         if (!tables.payer_aliases.some(a => a.member_id === args.p_member && a.alias_name === review.sender_name)) {
           tables.payer_aliases.push({ id: `alias-${nextId++}`, member_id: args.p_member, alias_name: review.sender_name })

@@ -586,7 +586,29 @@ function assertZelleConfirm(database) {
       || '|' || (select count(*) from public.payer_aliases a join public.members m on m.id = a.member_id where m.access_token = 'zelle-token-tess-001');
   `).trim()
   if (untouched !== 'pending|0') throw new Error(`${database}: a failed confirm left changes: ${untouched}`)
-  console.log(`${database}: confirm_zelle_match pays only the chosen member, once, and rolls back on failure`)
+
+  // Security review follow-ups: exact amount only, a round from this cycle only, and a payment
+  // already marked by hand keeps its manual source.
+  const rosa = `(select id from public.members where access_token = 'member-token-rosa02')`
+  const round2 = `(select id from public.rounds where cycle_id = '${cycle}' and round_number = 2)`
+  psqlText(database, `
+    update public.payments set paid_at = '2099-07-03T17:00:00Z', source = 'manual' where round_id = ${round2} and member_id = ${rosa};
+    insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, received_at, sender_name, amount) values
+      ('eeeeeeee-0000-0000-0000-000000000003', '${cycle}', ${round1}, 'gmail-fake-003', '2099-06-01T20:00:00Z', 'Rosa Demo', 50),
+      ('eeeeeeee-0000-0000-0000-000000000004', '${cycle}', ${round2}, 'gmail-fake-004', '2099-07-03T20:00:00Z', 'Rosa Demo', 100),
+      ('eeeeeeee-0000-0000-0000-000000000005', '${cycle}', (select id from public.rounds where cycle_id <> '${cycle}' limit 1),
+       'gmail-fake-005', '2099-07-03T20:00:00Z', 'Rosa Demo', 100);
+  `)
+  mustFail('matching a different amount', `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000003', ${rosa});`, /does not match/)
+  mustFail('matching a round from another cycle', `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000005', ${rosa});`, /no round in its cycle/)
+  psqlText(database, `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000004', ${rosa});`)
+  const kept = psqlText(database, `
+    select (select source || '@' || to_char(paid_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI') from public.payments where round_id = ${round2} and member_id = ${rosa})
+      || '|' || (select status from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000003')
+      || '|' || (select coalesce(paid_at::text, 'unpaid') from public.payments where round_id = ${round1} and member_id = ${rosa});
+  `).trim()
+  if (kept !== 'manual@2099-07-03T17:00|pending|unpaid') throw new Error(`${database}: amount/manual checks gave ${kept}`)
+  console.log(`${database}: confirm_zelle_match pays only the chosen member, once, at the exact amount, and rolls back on failure`)
 }
 
 const fresh = 'tanda_sql_fresh'

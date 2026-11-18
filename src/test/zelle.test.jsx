@@ -3,8 +3,33 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, renderHook, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
-  parseZelleEmail, normalizeName, matchMember, roundFor, scanEmails,
+  parseZelleEmail, normalizeName, matchMember, roundFor, scanEmails, verifySender, senderDomain,
 } from '../../supabase/functions/_shared/zelle.js'
+
+// A made-up bank domain and the headers Gmail would add for a genuine message from it.
+const BANK = ['bank.example']
+const FROM = 'Fake Bank <alerts@notify.bank.example>'
+const AUTH = 'mx.google.com; dkim=pass header.i=@bank.example header.s=s1; spf=pass smtp.mailfrom=notify.bank.example; dmarc=pass (p=REJECT) header.from=notify.bank.example'
+const genuine = { from: FROM, authResults: AUTH }
+
+describe('verifySender (anyone can send "Ana sent you $150")', () => {
+  it('accepts an allowlisted domain that Gmail authenticated', () => {
+    expect(senderDomain(FROM)).toBe('notify.bank.example')
+    expect(verifySender(genuine, BANK)).toEqual({ ok: true, domain: 'notify.bank.example' })
+    expect(verifySender({ from: FROM, authResults: 'mx.google.com; dkim=pass header.d=bank.example' }, BANK).ok).toBe(true)
+  })
+  it('rejects other domains, look-alikes, missing allowlists, and failed authentication', () => {
+    expect(verifySender({ from: 'Ana <ana@mail.example>', authResults: AUTH }, BANK)).toMatchObject({ ok: false, reason: 'domain_not_allowed' })
+    expect(verifySender({ from: 'Bank <alerts@bank.example.evil.example>', authResults: AUTH }, BANK)).toMatchObject({ ok: false, reason: 'domain_not_allowed' })
+    expect(verifySender({ from: 'Bank <alerts@notbank.example>', authResults: AUTH }, BANK)).toMatchObject({ ok: false, reason: 'domain_not_allowed' })
+    expect(verifySender(genuine, [])).toMatchObject({ ok: false, reason: 'no_allowlist' })
+    expect(verifySender({ from: FROM, authResults: 'mx.google.com; dkim=fail header.i=@bank.example; dmarc=fail header.from=notify.bank.example' }, BANK))
+      .toMatchObject({ ok: false, reason: 'not_authenticated' })
+    // DKIM passed, but for someone else's domain: a spoofed From with a valid signature from elsewhere.
+    expect(verifySender({ from: FROM, authResults: 'mx.google.com; dkim=pass header.d=evil.example; dmarc=fail header.from=notify.bank.example' }, BANK))
+      .toMatchObject({ ok: false, reason: 'not_authenticated' })
+  })
+})
 import NeedsReviewCard from '../components/admin/NeedsReviewCard'
 import { LABELS } from '../data/labels'
 import { installFakeSupabase, seedCycle } from './fakeSupabase'
@@ -92,17 +117,18 @@ describe('scanEmails', () => {
   const cycle = { id: 'c1', contribution: 150, timezone: 'America/Los_Angeles' }
   const rounds = [{ id: 'r1', round_number: 1, payout_date: '2026-06-13' }]
   const emails = [
-    { id: 'g1', subject: 'Ana Prueba sent you $150.00', receivedAt: at },
-    { id: 'g2', subject: 'Zoe Nadie sent you $150.00', receivedAt: at },
-    { id: 'g3', subject: 'Your monthly statement', receivedAt: at },
-    { id: 'g4', subject: 'Ana Prueba sent you $150.00', receivedAt: at },
+    { id: 'g1', ...genuine, subject: 'Ana Prueba sent you $150.00', receivedAt: at },
+    { id: 'g2', ...genuine, subject: 'Zoe Nadie sent you $150.00', receivedAt: at },
+    { id: 'g3', ...genuine, subject: 'Your monthly statement', receivedAt: at },
+    { id: 'g4', ...genuine, subject: 'Ana Prueba sent you $150.00', receivedAt: at },
+    { id: 'g5', from: 'Ana <ana@mail.example>', authResults: 'dkim=pass header.d=mail.example', subject: 'Ana Prueba sent you $150.00', receivedAt: at },
   ]
 
   it('dry run writes nothing and returns counts plus a preview for the caller', async () => {
     const insert = vi.fn()
-    const result = await scanEmails({ emails, cycle, rounds, members, aliases: [], existingIds: new Set(['g4']), dryRun: true, insert })
+    const result = await scanEmails({ emails, cycle, rounds, members, aliases: [], existingIds: new Set(['g4']), dryRun: true, insert, allowedDomains: BANK })
     expect(insert).not.toHaveBeenCalled()
-    expect(result.counts).toEqual({ seen: 4, parsed: 2, unparsed: 1, alreadyQueued: 1, queued: 2, suggested: 1, unmatched: 1 })
+    expect(result.counts).toEqual({ seen: 5, unverified: 1, parsed: 2, unparsed: 1, alreadyQueued: 1, queued: 2, suggested: 1, unmatched: 1 })
     expect(result.preview).toEqual([
       { round: 1, sender: 'Ana Prueba', amount: 150, suggested: 'Ana', reason: 'first_name' },
       { round: 1, sender: 'Zoe Nadie', amount: 150, suggested: null, reason: 'no_match' },
@@ -112,12 +138,21 @@ describe('scanEmails', () => {
 
   it('a real run queues pending_review rows only, never payments', async () => {
     const rows = []
-    const result = await scanEmails({ emails: emails.slice(0, 2), cycle, rounds, members, aliases: [], existingIds: new Set(), dryRun: false, insert: async row => rows.push(row) })
+    const result = await scanEmails({ emails: emails.slice(0, 2), cycle, rounds, members, aliases: [], existingIds: new Set(), dryRun: false, insert: async row => rows.push(row), allowedDomains: BANK })
     expect(result.preview).toBeUndefined()
     expect(rows).toHaveLength(2)
     expect(rows.every(row => row.status === 'pending' && row.round_id === 'r1')).toBe(true)
-    expect(rows[0]).toMatchObject({ gmail_message_id: 'g1', suggested_member_id: 'm1', sender_name: 'Ana Prueba', amount: 150 })
+    expect(rows[0]).toMatchObject({ gmail_message_id: 'g1', email_from: 'notify.bank.example', suggested_member_id: 'm1', sender_name: 'Ana Prueba', amount: 150 })
     expect(Object.keys(rows[0])).not.toContain('paid_at')
+  })
+
+  it('queues nothing from unverified senders, and nothing at all without an allowlist', async () => {
+    const insert = vi.fn()
+    const spoof = await scanEmails({ emails: [emails[4]], cycle, rounds, members, aliases: [], existingIds: new Set(), dryRun: false, insert, allowedDomains: BANK })
+    const noList = await scanEmails({ emails: emails.slice(0, 2), cycle, rounds, members, aliases: [], existingIds: new Set(), dryRun: false, insert, allowedDomains: [] })
+    expect(insert).not.toHaveBeenCalled()
+    expect(spoof.counts).toMatchObject({ unverified: 1, queued: 0 })
+    expect(noList.counts).toMatchObject({ unverified: 2, queued: 0 })
   })
 })
 
@@ -161,6 +196,29 @@ describe('Match and Not tanda on the Needs-review card', () => {
     expect(fake.tables.pending_review[0]).toMatchObject({ status: 'matched', suggested_member_id: 'member-1' })
     expect(fake.tables.payer_aliases).toEqual([expect.objectContaining({ member_id: 'member-1', alias_name: 'Ana Prueba' })])
     expect(result.current.pendingReview).toHaveLength(0)
+  })
+
+  it('refuses a Match whose amount is not the payment amount, and keeps a hand-marked payment as is', async () => {
+    const db = seedCycle({ names: ['Ana', 'Beto'], contribution: 150 })
+    db.payments.find(p => p.round_id === 'round-1' && p.member_id === 'member-2').paid_at = '2026-06-12T18:00:00.000Z'
+    db.payments.find(p => p.round_id === 'round-1' && p.member_id === 'member-2').source = 'manual'
+    db.pending_review = [
+      { id: 'rv3', cycle_id: 'cycle-1', round_id: 'round-1', status: 'pending', sender_name: 'Ana Prueba', amount: 75, received_at: at },
+      { id: 'rv4', cycle_id: 'cycle-1', round_id: 'round-1', status: 'pending', sender_name: 'Beto Ejemplo', amount: 150, received_at: at },
+    ]
+    const fake = installFakeSupabase({ db })
+    const { result } = renderHook(() => useCycleStore())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    await act(() => result.current.confirmMatch('rv3', 'member-1'))
+    expect(result.current.error).toMatch(/does not match/)
+    expect(fake.tables.payments.find(p => p.round_id === 'round-1' && p.member_id === 'member-1').paid_at).toBeNull()
+    expect(fake.tables.pending_review.find(r => r.id === 'rv3').status).toBe('pending')
+
+    await act(() => result.current.confirmMatch('rv4', 'member-2'))
+    expect(fake.tables.payments.find(p => p.round_id === 'round-1' && p.member_id === 'member-2'))
+      .toMatchObject({ paid_at: '2026-06-12T18:00:00.000Z', source: 'manual' })
+    expect(fake.tables.pending_review.find(r => r.id === 'rv4').status).toBe('matched')
   })
 
   it('dismissReview marks it not tanda without paying anyone', async () => {

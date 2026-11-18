@@ -110,14 +110,43 @@ export function roundFor(receivedAt, rounds, timeZone = 'America/Los_Angeles') {
   return ordered.find(r => r.payout_date >= day) || ordered[ordered.length - 1]
 }
 
-// One scan. emails: [{ id, subject, text, html, receivedAt }] from Gmail.
+// The domain part of a From header: 'Bank <alerts@notify.bank.example>' → 'notify.bank.example'.
+export function senderDomain(from) {
+  const match = String(from || '').match(/@([a-z0-9.-]+\.[a-z]{2,})\s*>?\s*$/i)
+  return match ? match[1].toLowerCase() : null
+}
+
+function inAllowlist(domain, allowedDomains) {
+  return Boolean(domain) && allowedDomains.some(d => domain === d || domain.endsWith(`.${d}`))
+}
+
+// Only trust an email that comes from an allowed bank domain AND that Gmail authenticated for
+// that domain (DMARC pass for the From domain, or DKIM pass signed by an allowed domain).
+// Anyone can send a message that says "Ana sent you $150"; this keeps those out of review.
+export function verifySender({ from, authResults }, allowedDomains) {
+  const allowed = (allowedDomains || []).map(d => String(d).trim().toLowerCase()).filter(Boolean)
+  if (!allowed.length) return { ok: false, reason: 'no_allowlist' }
+  const domain = senderDomain(from)
+  if (!inAllowlist(domain, allowed)) return { ok: false, reason: 'domain_not_allowed', domain }
+  const results = String(authResults || '').toLowerCase()
+  const dmarc = [...results.matchAll(/dmarc=pass[^;]*?header\.from=([a-z0-9.-]+)/g)].map(m => m[1])
+  const dkim = [...results.matchAll(/dkim=pass[^;]*?header\.(?:d|i)=@?([a-z0-9.-]+)/g)].map(m => m[1])
+  const authenticated = dmarc.some(d => d === domain) || dkim.some(d => inAllowlist(d, allowed))
+  if (!authenticated) return { ok: false, reason: 'not_authenticated', domain }
+  return { ok: true, domain }
+}
+
+// One scan. emails: [{ id, from, authResults, subject, text, html, receivedAt }] from Gmail.
+// Emails that are not from an allowed, authenticated bank domain are counted and skipped.
 // insert(row) writes one pending_review row (ignored when gmail_message_id already exists).
 // In a dry run nothing is written and `preview` lists what would be queued, for the caller only.
-export async function scanEmails({ emails, cycle, rounds, members, aliases, existingIds, dryRun, insert }) {
-  const counts = { seen: emails.length, parsed: 0, unparsed: 0, alreadyQueued: 0, queued: 0, suggested: 0, unmatched: 0 }
+export async function scanEmails({ emails, cycle, rounds, members, aliases, existingIds, dryRun, insert, allowedDomains }) {
+  const counts = { seen: emails.length, unverified: 0, parsed: 0, unparsed: 0, alreadyQueued: 0, queued: 0, suggested: 0, unmatched: 0 }
   const preview = []
   for (const email of emails) {
     if (existingIds.has(email.id)) { counts.alreadyQueued += 1; continue }
+    const sender = verifySender(email, allowedDomains)
+    if (!sender.ok) { counts.unverified += 1; continue }
     const parsed = parseZelleEmail(email)
     if (!parsed) { counts.unparsed += 1; continue }
     counts.parsed += 1
@@ -129,6 +158,7 @@ export async function scanEmails({ emails, cycle, rounds, members, aliases, exis
       cycle_id: cycle.id,
       round_id: round?.id ?? null,
       gmail_message_id: email.id,
+      email_from: sender.domain,
       received_at: new Date(parsed.receivedAt).toISOString(),
       sender_name: parsed.senderName,
       amount: parsed.amount,

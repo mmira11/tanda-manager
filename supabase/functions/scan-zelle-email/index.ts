@@ -6,6 +6,9 @@
 //   GMAIL_CLIENT_ID, GMAIL_CLIENT_SECRET, GMAIL_REFRESH_TOKEN
 //                          OAuth client + refresh token for the receiving inbox, granted only
 //                          https://www.googleapis.com/auth/gmail.readonly
+//   ZELLE_SENDER_DOMAINS   required: bank domain(s) the Zelle notices come from, comma-separated.
+//                          Emails from other domains, or that fail Gmail's DKIM/DMARC check for
+//                          that domain, are skipped and counted as "unverified".
 //   ZELLE_GMAIL_QUERY      optional Gmail search; default 'subject:zelle'
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase inside Edge Functions.
 //
@@ -76,9 +79,18 @@ async function fetchEmails(token: string, query: string) {
     const res = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, { headers })
     if (!res.ok) throw new Error(`Gmail get failed (${res.status})`)
     const msg = await res.json()
-    const subject = msg.payload?.headers?.find((h: { name: string }) => h.name.toLowerCase() === 'subject')?.value ?? ''
+    const headers = (msg.payload?.headers ?? []) as { name: string; value: string }[]
+    const header = (name: string) => headers.filter(h => h.name.toLowerCase() === name).map(h => h.value)
     const { text, html } = collect(msg.payload ?? {}, { text: '', html: '' })
-    emails.push({ id, subject, text, html, receivedAt: new Date(Number(msg.internalDate)).toISOString() })
+    emails.push({
+      id,
+      from: header('from')[0] ?? '',
+      // Gmail adds Authentication-Results (SPF/DKIM/DMARC) for every message it receives.
+      authResults: header('authentication-results').join('; '),
+      subject: header('subject')[0] ?? '',
+      text, html,
+      receivedAt: new Date(Number(msg.internalDate)).toISOString(),
+    })
   }
   return emails
 }
@@ -88,6 +100,9 @@ Deno.serve(async (req) => {
   if (!secret || !timingSafeEqual(req.headers.get('x-cron-secret') ?? '', secret)) {
     return new Response('forbidden', { status: 403 })
   }
+  // Required: the bank domain(s) Zelle notices come from, comma-separated. Without it, refuse.
+  const allowedDomains = (Deno.env.get('ZELLE_SENDER_DOMAINS') ?? '').split(',').map(d => d.trim()).filter(Boolean)
+  if (!allowedDomains.length) return new Response('ZELLE_SENDER_DOMAINS is not set', { status: 500 })
   const body = await req.json().catch(() => ({}))
   const dryRun = body?.dryRun !== false
   const dateOk = (v: unknown) => v == null || /^\d{4}\/\d{2}\/\d{2}$/.test(String(v))
@@ -121,7 +136,7 @@ Deno.serve(async (req) => {
   const existingIds = new Set(existing.map(r => r.gmail_message_id))
 
   const result = await scanEmails({
-    emails, cycle, rounds, members, aliases, existingIds, dryRun,
+    emails, cycle, rounds, members, aliases, existingIds, dryRun, allowedDomains,
     insert: async (row: Record<string, unknown>) => {
       check(await db.from('pending_review').upsert(row, { onConflict: 'gmail_message_id', ignoreDuplicates: true }))
     },

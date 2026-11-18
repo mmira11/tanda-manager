@@ -9,6 +9,8 @@ begin;
 alter table public.pending_review add column if not exists gmail_message_id text;
 alter table public.pending_review add column if not exists round_id uuid references public.rounds (id) on delete cascade;
 alter table public.pending_review add column if not exists match_reason text;
+-- The verified bank domain the email came from (only allowlisted, DKIM/DMARC-passing senders are queued).
+alter table public.pending_review add column if not exists email_from text;
 create unique index if not exists pending_review_gmail_message_id on public.pending_review (gmail_message_id);
 
 -- Confirm a review: mark the chosen member paid for the review's round (paid_at = when the
@@ -22,8 +24,9 @@ security invoker
 set search_path = public
 as $$
 declare
-  v_review public.pending_review%rowtype;
-  v_member public.members%rowtype;
+  v_review  public.pending_review%rowtype;
+  v_member  public.members%rowtype;
+  v_payment public.payments%rowtype;
 begin
   select * into v_review from public.pending_review where id = p_review for update;
   if not found then
@@ -32,8 +35,9 @@ begin
   if v_review.status <> 'pending' then
     raise exception 'This item was already handled' using errcode = '22023';
   end if;
-  if v_review.round_id is null then
-    raise exception 'This item has no round to apply it to' using errcode = '22023';
+  if v_review.round_id is null
+     or not exists (select 1 from public.rounds where id = v_review.round_id and cycle_id = v_review.cycle_id) then
+    raise exception 'This item has no round in its cycle to apply it to' using errcode = '22023';
   end if;
 
   select * into v_member from public.members
@@ -42,11 +46,22 @@ begin
     raise exception 'That member is not in this cycle' using errcode = '22023';
   end if;
 
-  update public.payments
-  set paid_at = coalesce(paid_at, v_review.received_at), source = 'auto'
-  where round_id = v_review.round_id and member_id = p_member;
+  select * into v_payment from public.payments
+  where round_id = v_review.round_id and member_id = p_member
+  for update;
   if not found then
     raise exception 'That member has no payment for this round' using errcode = '22023';
+  end if;
+  -- Only an exact amount can be confirmed here; partial or combined payments are marked by hand.
+  if v_review.amount is distinct from v_payment.amount then
+    raise exception 'The Zelle amount does not match this payment; mark it by hand instead' using errcode = '22023';
+  end if;
+
+  -- Already marked paid by hand: keep that record as it is.
+  if v_payment.paid_at is null then
+    update public.payments
+    set paid_at = v_review.received_at, source = 'auto'
+    where id = v_payment.id;
   end if;
 
   update public.pending_review
