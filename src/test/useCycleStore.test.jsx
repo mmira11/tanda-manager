@@ -143,4 +143,16 @@ describe('useCycleStore', () => {
     expect(result.current.store.rounds[0].payments[1]).toBe(false)
     expect(fake.tables.payments.every(p => p.paid_at === null)).toBe(true)
   })
+
+  it('Build reminder list skips members with no payment row in the round (N9)', async () => {
+    // Collection day for round 1 is 2026-06-12; 12:30 PM in Los Angeles is the noon window.
+    const db = seedCycle({ names: ['Ana', 'Beto', 'Cata'], contribution: 50 })
+    db.payments = db.payments.filter(p => !(p.round_id === 'round-1' && p.member_id === 'member-3')) // Cata sits out round 1
+    const { fake, result } = await loaded(db)
+
+    await act(() => result.current.buildReminderList(new Date('2026-06-12T19:30:00Z')))
+
+    expect(fake.tables.reminder_log.map(r => r.member_id).sort()).toEqual(['member-1', 'member-2'])
+    expect(fake.tables.reminder_log.every(r => r.round_id === 'round-1' && r.kind === 'friday_noon')).toBe(true)
+  })
 })

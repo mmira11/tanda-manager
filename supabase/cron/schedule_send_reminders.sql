@@ -1,7 +1,9 @@
--- Schedule send-reminders every hour (Phase 4). Run once in the Supabase SQL editor, only after:
---   1. migration 013 is applied,
+-- Schedule send-reminders every hour. Run once in the Supabase SQL editor, only after:
+--   1. migration 017 is applied (013 creates the log; 017 adds the queue),
 --   2. send-reminders is deployed:  supabase functions deploy send-reminders --no-verify-jwt
---   3. its secrets are set (CRON_SECRET, REMINDERS_DRY_RUN=true, Twilio keys), and
+--   3. CRON_SECRET is set. Queue mode is the default and does not call Twilio.
+--      Set REMINDERS_DRY_RUN=true only to preview without writing queued rows.
+--      Twilio sends only when reminder_settings.channel = 'twilio' and REMINDERS_DRY_RUN=false.
 --   4. two Vault secrets exist (values are typed in the dashboard, never committed):
 --        select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/send-reminders', 'tanda_reminders_url');
 --        select vault.create_secret('<same value as CRON_SECRET>', 'tanda_cron_secret');

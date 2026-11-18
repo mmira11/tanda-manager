@@ -527,6 +527,120 @@ function assertReminderTables(database) {
   console.log(`${database}: reminder_log logs each window once; opt-outs need E.164; non-admins see neither`)
 }
 
+// Queue mode (017): channel column, queued status, and admin-only read/update.
+// Uses the Familia Demo cycle from assertArchiveLock. Fake data only.
+function assertReminderQueue(database) {
+  const insert = `
+    insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel)
+    select r.cycle_id, r.id, r.recipient_member_id, 'friday_evening', r.collect_date, false, 'queued', 'queue'
+    from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
+    on conflict (round_id, member_id, kind, dry_run) do nothing
+    returning id;`
+  const ids = sql => psqlText(database, sql).split('\n').filter(line => /^[0-9a-f-]{36}$/.test(line.trim()))
+  const first = ids(insert)
+  const second = ids(insert)
+  if (first.length !== 1 || second.length !== 0) {
+    throw new Error(`${database}: queued reminder dedupe failed (${first.length}, ${second.length})`)
+  }
+  const id = first[0].trim()
+
+  const columns = psqlText(database, `
+    select (select count(*) from information_schema.columns
+              where table_schema = 'public' and table_name = 'reminder_log' and column_name = 'channel')
+      || ',' || (select count(*) from information_schema.columns
+              where table_schema = 'public' and table_name = 'reminder_settings' and column_name = 'channel');
+  `).trim()
+  if (columns !== '1,1') throw new Error(`${database}: channel columns missing (${columns})`)
+
+  const badStatus = psqlFails(database, `
+    insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel)
+    select r.cycle_id, r.id, r.recipient_member_id, 'thursday_all', r.collect_date, false, 'banana', 'queue'
+    from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1;
+  `)
+  if (!/check constraint/.test(badStatus)) throw new Error(`${database}: a bad reminder status was stored: ${badStatus}`)
+  const badChannel = psqlFails(database, `
+    insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel)
+    select r.cycle_id, r.id, r.recipient_member_id, 'thursday_all', r.collect_date, false, 'queued', 'sms'
+    from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1;
+  `)
+  if (!/check constraint/.test(badChannel)) throw new Error(`${database}: a bad reminder channel was stored: ${badChannel}`)
+
+  const seen = psqlText(database, `
+    set role authenticated;
+    select count(*) from public.reminder_log;
+  `).trim().split('\n').pop()
+  if (seen !== '0') throw new Error(`${database}: a non-admin could read reminder_log (${seen})`)
+
+  const updated = psqlText(database, `
+    set role authenticated;
+    with upd as (
+      update public.reminder_log set status = 'sent' where id = '${id}' returning id
+    )
+    select count(*) from upd;
+  `).trim().split('\n').pop()
+  if (updated !== '0') throw new Error(`${database}: a non-admin updated reminder_log (${updated})`)
+  const stillQueued = psqlText(database, `select status from public.reminder_log where id = '${id}';`).trim()
+  if (stillQueued !== 'queued') throw new Error(`${database}: reminder status changed to ${stillQueued}`)
+
+  const denied = psqlFails(database, `
+    set role authenticated;
+    select public.set_reminder_log_status('${id}', 'sent');
+  `)
+  if (!/not allowed/.test(denied)) throw new Error(`${database}: non-admin status change failed for the wrong reason: ${denied}`)
+  const deniedEnqueue = psqlFails(database, `
+    set role authenticated;
+    select public.enqueue_reminders('[]'::jsonb);
+  `)
+  if (!/not allowed/.test(deniedEnqueue)) throw new Error(`${database}: non-admin enqueue failed for the wrong reason: ${deniedEnqueue}`)
+
+  const defs = psqlText(database, `
+    select pg_get_functiondef('public.set_reminder_log_status(uuid, text)'::regprocedure)
+      || pg_get_functiondef('public.enqueue_reminders(jsonb)'::regprocedure);
+  `)
+  if (!/security definer/i.test(defs) || !/search_path/i.test(defs)) {
+    throw new Error(`${database}: reminder RPCs must be security definer with search_path`)
+  }
+  const grants = psqlText(database, `
+    select has_function_privilege('anon', 'public.enqueue_reminders(jsonb)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.enqueue_reminders(jsonb)', 'execute')::text
+      || has_function_privilege('anon', 'public.set_reminder_log_status(uuid, text)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.set_reminder_log_status(uuid, text)', 'execute')::text;
+  `).trim()
+  if (grants !== 'falsetruefalsetrue') throw new Error(`${database}: reminder RPC grants are ${grants}`)
+
+  const marked = psqlText(database, `
+    insert into auth.users (id) values ('11111111-1111-1111-1111-111111111111') on conflict do nothing;
+    insert into public.admins (user_id, email)
+    values ('11111111-1111-1111-1111-111111111111', 'admin@example.com')
+    on conflict (user_id) do nothing;
+    create or replace function auth.uid() returns uuid language sql stable as $$
+      select '11111111-1111-1111-1111-111111111111'::uuid $$;
+    set role authenticated;
+    select public.set_reminder_log_status('${id}'::uuid, 'sent');
+    select public.enqueue_reminders((
+      select jsonb_build_array(jsonb_build_object(
+        'cycle_id', r.cycle_id, 'round_id', r.id, 'member_id', r.recipient_member_id,
+        'kind', 'thursday_all', 'local_date', r.collect_date))
+      from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
+    ));
+    select public.enqueue_reminders((
+      select jsonb_build_array(jsonb_build_object(
+        'cycle_id', r.cycle_id, 'round_id', r.id, 'member_id', r.recipient_member_id,
+        'kind', 'thursday_all', 'local_date', r.collect_date))
+      from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
+    ));
+  `).trim().split('\n').filter(line => line.trim() !== '')
+  const enqueued = marked.filter(line => /^\d+$/.test(line.trim())).map(line => line.trim())
+  if (enqueued.join(',') !== '1,0') throw new Error(`${database}: admin enqueue dedupe returned ${enqueued.join(',')}`)
+  psqlText(database, `
+    reset role;
+    create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+  `)
+  const status = psqlText(database, `select status from public.reminder_log where id = '${id}';`).trim()
+  if (status !== 'sent') throw new Error(`${database}: admin could not mark a reminder sent (${status})`)
+  console.log(`${database}: reminder queue dedupes; non-admins cannot read or update; admins can mark sent`)
+}
+
 // Phase 5: a detected Zelle payment only becomes paid through confirm_zelle_match, which is
 // all-or-nothing. Uses Familia Demo (Maria and Rosa, payment rows in both rounds). Fake data only.
 function assertZelleConfirm(database) {
@@ -852,6 +966,7 @@ assertNoAnonRealtime(fresh)
 assertReminderTables(fresh)
 assertZelleConfirm(fresh)
 assertArchivedZelleLock(fresh)
+assertReminderQueue(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -870,6 +985,7 @@ assertNoAnonRealtime(legacy)
 assertReminderTables(legacy)
 assertZelleConfirm(legacy)
 assertArchivedZelleLock(legacy)
+assertReminderQueue(legacy)
 
 console.log('c) schema.sql alone, compared with both migrated databases')
 const baseline = 'tanda_sql_baseline'

@@ -154,27 +154,123 @@ export async function verifyTwilioSignature(authToken, url, params, header) {
   return timingSafeEqual(await twilioSignature(authToken, url, params), header)
 }
 
+// queue is the default and sends nothing. twilio is the old paid path, off unless chosen.
+export function resolveChannel(settings, override) {
+  const forced = String(override ?? '').trim().toLowerCase()
+  const raw = forced || String(settings?.channel ?? '').trim().toLowerCase() || 'queue'
+  return raw === 'twilio' ? 'twilio' : 'queue'
+}
+
+// What this cycle should do for a due window.
+// hasDryRunEnv matches the Edge Function: the queue runs unless REMINDERS_DRY_RUN=true,
+// and Twilio stays a dry run unless that secret is "false". Tests that only pass dryRun
+// keep the older switch (false means perform the channel's action).
+export function reminderAction({ channel = 'queue', enabled = false, dryRun = true, dryRunEnv, hasDryRunEnv = false } = {}) {
+  const resolved = resolveChannel({ channel })
+  if (enabled !== true) return 'dry_run'
+  if (hasDryRunEnv) {
+    if (resolved === 'twilio') return isDryRun(dryRunEnv) ? 'dry_run' : 'twilio'
+    return String(dryRunEnv ?? '').trim().toLowerCase() === 'true' ? 'dry_run' : 'queue'
+  }
+  if (dryRun !== false) return 'dry_run'
+  return resolved
+}
+
+// Replaying { "now": ISO } is only for an explicit dry run, or Twilio's default dry run.
+export function allowReminderReplay(channel, dryRunEnv) {
+  if (String(dryRunEnv ?? '').trim().toLowerCase() === 'true') return true
+  return resolveChannel({}, channel) === 'twilio' && isDryRun(dryRunEnv)
+}
+
+// The window that has already opened for this round and has not been replaced by the next one.
+// dueWindow is the exact hour the cron writes rows. This stays open afterwards so the admin
+// can still work the list, or build it by hand if that hour was missed.
+export function activeReminderWindow(clock, round, settings = {}) {
+  const s = { ...DEFAULT_SETTINGS, ...settings }
+  const dayBefore = addDaysIso(round.collect_date, -1)
+  const thu = hourOf(s.thursday_all_at)
+  const noon = hourOf(s.friday_noon_at)
+  const eve = hourOf(s.friday_evening_at)
+  if (clock.date === dayBefore) return clock.hour >= thu ? 'thursday_all' : null
+  if (clock.date === round.collect_date) {
+    if (clock.hour >= eve) return 'friday_evening'
+    if (clock.hour >= noon) return 'friday_noon'
+    return 'thursday_all'
+  }
+  return null
+}
+
+export function openReminder(clock, rounds, settings) {
+  const s = { ...DEFAULT_SETTINGS, ...(settings || {}) }
+  const round = [...(rounds || [])]
+    .filter(item => item?.collect_date && activeReminderWindow(clock, item, s))
+    .sort((a, b) => String(a.collect_date).localeCompare(String(b.collect_date))
+      || (a.round_number || 0) - (b.round_number || 0))[0]
+  if (!round) return { window: null, round: null }
+  return { window: activeReminderWindow(clock, round, s), round }
+}
+
+// Rows the manual "Build reminder list now" button inserts. Same people as the cron.
+export function planReminderQueue({ now, cycle, settings, rounds, members, payments, optedOut }) {
+  const s = { ...DEFAULT_SETTINGS, ...(settings || {}) }
+  const clock = localClock(now, s.timezone)
+  const { window, round } = openReminder(clock, rounds, s)
+  if (!window || !round) return { window: null, localDate: clock.date, rows: [] }
+  const { send } = recipients({ window, round, members, payments, optedOut: optedOut || new Set() })
+  return {
+    window,
+    localDate: clock.date,
+    roundId: round.id,
+    rows: send.map(({ member }) => ({
+      cycle_id: cycle.id,
+      round_id: round.id,
+      member_id: member.id,
+      kind: window,
+      local_date: clock.date,
+    })),
+  }
+}
+
+// Channel dispatcher. queue returns without calling out. twilio uses sendSms.
+export async function dispatchReminder({ channel, to, body, sendSms }) {
+  const resolved = resolveChannel({}, channel)
+  if (resolved !== 'twilio') return { channel: 'queue' }
+  if (typeof sendSms !== 'function') {
+    throw Object.assign(new Error('Twilio sender is not configured'), { code: 'config' })
+  }
+  const sid = await sendSms(to, body)
+  return { channel: 'twilio', sid }
+}
+
 // One run of the hourly job.
 //   cycles:  [{ cycle, settings, templates, rounds, members, payments }] for active cycles
 //   optedOut: Set of E.164 phones
 //   log.claim(row) → id when this member/window/round/mode is new, null when already logged
 //   log.finish(id, { status, twilio_sid, error }); log.optOut(phone)
 //   sendSms(to, body) → Twilio message SID; throws an error with .code on failure
-// A cycle only sends for real when dryRun is false AND reminder_settings.enabled is true.
+//   channel: optional REMINDER_CHANNEL override ("twilio" or "queue")
+// Queue is the default: one reminder_log row per recipient, status queued, no external send.
+// Twilio runs only when the channel is twilio and that path is not in dry run.
+// A cycle with reminder_settings.enabled not true stays a dry run either way.
 // Returns a summary with first names only (no phones) for the function log.
-export async function runReminders({ now, dryRun, cycles, optedOut, log, sendSms }) {
+export async function runReminders({
+  now, dryRun, dryRunEnv, hasDryRunEnv = false, channel: channelOverride, cycles, optedOut, log, sendSms,
+}) {
   const summary = []
   for (const { cycle, settings, templates, rounds, members, payments } of cycles) {
     const s = { ...DEFAULT_SETTINGS, ...(settings || {}) }
     const clock = localClock(now, s.timezone)
-    const live = !dryRun && s.enabled === true
+    const channel = resolveChannel(s, channelOverride)
+    const action = reminderAction({
+      channel, enabled: s.enabled === true, dryRun, dryRunEnv, hasDryRunEnv,
+    })
     for (const round of rounds) {
       const window = dueWindow(clock, round, s)
       if (!window) continue
       const { send, skipped } = recipients({ window, round, members, payments, optedOut })
       const entry = {
-        cycle: cycle.name, round: round.round_number, window, localDate: clock.date,
-        mode: live ? 'live' : 'dry_run', texted: [], alreadyLogged: [], failed: [],
+        cycle: cycle.name, round: round.round_number, window, localDate: clock.date, channel,
+        mode: action === 'twilio' ? 'live' : action, texted: [], queued: [], alreadyLogged: [], failed: [],
         skipped: skipped.map(({ member, reason }) => `${member.display_first_name} (${reason})`),
       }
       for (const { member, to } of send) {
@@ -182,16 +278,18 @@ export async function runReminders({ now, dryRun, cycles, optedOut, log, sendSms
         if (optedOut.has(to)) { entry.skipped.push(`${member.display_first_name} (opted_out)`); continue }
         const id = await log.claim({
           cycle_id: cycle.id, round_id: round.id, member_id: member.id, kind: window,
-          local_date: clock.date, dry_run: !live, status: live ? 'sending' : 'dry_run',
+          local_date: clock.date, dry_run: action === 'dry_run', channel,
+          status: action === 'queue' ? 'queued' : action === 'twilio' ? 'sending' : 'dry_run',
         })
         if (!id) { entry.alreadyLogged.push(member.display_first_name); continue }
-        if (!live) { entry.texted.push(member.display_first_name); continue }
+        if (action === 'dry_run') { entry.texted.push(member.display_first_name); continue }
+        if (action === 'queue') { entry.queued.push(member.display_first_name); continue }
         const body = renderMessage(templates || [], window, {
           firstName: member.display_first_name, amount: cycle.contribution, zelle: cycle.zelle_destination,
         })
         try {
-          const sid = await sendSms(to, body)
-          await log.finish(id, { status: 'sent', twilio_sid: sid })
+          const result = await dispatchReminder({ channel: 'twilio', to, body, sendSms })
+          await log.finish(id, { status: 'sent', twilio_sid: result.sid })
           entry.texted.push(member.display_first_name)
         } catch (error) {
           // 21610: Twilio already has this number as unsubscribed. Record it so we stop trying.

@@ -16,14 +16,16 @@ const DEFAULTS = {
   members: { phone: null, language_pref: 'en' },
   rounds: { payout_sent: false, payout_sent_at: null, notes: '' },
   payments: { paid_at: null, source: null },
-  reminder_settings: { timezone: 'America/Los_Angeles', enabled: false },
+  reminder_settings: { timezone: 'America/Los_Angeles', enabled: false, channel: 'queue' },
+  reminder_log: { dry_run: false, status: 'queued', channel: 'queue' },
   reminder_templates: {},
 }
 
 export function installFakeSupabase({ session = null, isAdmin = false, db = {}, failOn = null } = {}) {
   const tables = {
     cycles: [], members: [], rounds: [], payments: [],
-    reminder_settings: [], reminder_templates: [], pending_review: [], payer_aliases: [],
+    reminder_settings: [], reminder_templates: [], reminder_log: [], sms_opt_outs: [],
+    pending_review: [], payer_aliases: [],
     ...structuredClone(db),
   }
   let nextId = 1000
@@ -33,7 +35,7 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
   function cascade(table, removed) {
     const ids = removed.map(r => r.id)
     if (table === 'cycles') {
-      for (const t of ['members', 'rounds', 'reminder_settings', 'reminder_templates']) {
+      for (const t of ['members', 'rounds', 'reminder_settings', 'reminder_templates', 'reminder_log']) {
         cascade(t, take(t, r => ids.includes(r.cycle_id)))
       }
     }
@@ -182,6 +184,33 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
         if (!tables.payer_aliases.some(a => a.member_id === args.p_member && a.alias_name === review.sender_name)) {
           tables.payer_aliases.push({ id: `alias-${nextId++}`, member_id: args.p_member, alias_name: review.sender_name })
         }
+        return { data: null, error: null }
+      }
+      if (name === 'enqueue_reminders') {
+        const rows = Array.isArray(args?.p_rows) ? args.p_rows : null
+        if (!rows) return { data: null, error: { message: 'expected a list of reminders' } }
+        let inserted = 0
+        for (const row of rows) {
+          if (!['thursday_all', 'friday_noon', 'friday_evening'].includes(row.kind)) {
+            return { data: null, error: { message: 'invalid reminder window' } }
+          }
+          const existing = tables.reminder_log.find(item => item.round_id === row.round_id
+            && item.member_id === row.member_id && item.kind === row.kind && item.dry_run === false)
+          if (existing) continue
+          tables.reminder_log.push({
+            id: `reminder_log-${nextId++}`, ...row, dry_run: false, status: 'queued', channel: 'queue',
+          })
+          inserted += 1
+        }
+        return { data: inserted, error: null }
+      }
+      if (name === 'set_reminder_log_status') {
+        if (!['sent', 'skipped'].includes(args?.p_status)) {
+          return { data: null, error: { message: 'invalid reminder status' } }
+        }
+        const row = tables.reminder_log.find(item => item.id === args.p_id && item.status === 'queued')
+        if (!row) return { data: null, error: { message: 'reminder not queued' } }
+        row.status = args.p_status
         return { data: null, error: null }
       }
       if (name === 'swap_payout_order') {

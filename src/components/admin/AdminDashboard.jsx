@@ -12,6 +12,7 @@ import DashboardView from './DashboardView'
 import PaymentSheet from './PaymentSheet'
 import TabBar from '../ui/TabBar'
 import { LangProvider } from '../../context/LangContext'
+import { buildReminderView } from '../../utils/reminderQueue'
 
 function readLang() {
   try {
@@ -25,11 +26,13 @@ function readLang() {
 export default function AdminDashboard({ email, onNewCycle }) {
   const {
     store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment,
-    confirmMatch, dismissReview,
+    confirmMatch, dismissReview, reminderMeta, buildReminderList, markReminders,
   } = useStore()
   const [tab, setTab] = useState('dashboard')
   const [lang, setLang] = useState(readLang)
   const [confirmArchive, setConfirmArchive] = useState(false)
+  const [reminderNotice, setReminderNotice] = useState('')
+  const [reminderBuilding, setReminderBuilding] = useState(false)
   const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
   const [sheetSlot, setSheetSlot] = useState(null)
   const [now, setNow] = useState(() => new Date())
@@ -54,6 +57,36 @@ export default function AdminDashboard({ email, onNewCycle }) {
   const payoutDay = current ? getDayName(current.payoutDate, dateLocale(lang)) : ''
   const deadline = current ? deadlineOnDate(current.collectDate, store.config.timezone).getTime() : null
   const countdownLabel = deadline ? compactCountdown(getCountdownTo(deadline, now)) : ''
+  const queue = buildReminderView({
+    now,
+    timezone: store.config.timezone,
+    settings: reminderMeta.settings,
+    rounds: store.rounds,
+    participants: store.participants,
+    queued: reminderMeta.queued,
+    templates: reminderMeta.templates,
+    contribution: store.config.contribution,
+    zelle: store.config.organizerPhone,
+  })
+  const windowLabel = {
+    thursday_all: t.reminderThursday,
+    friday_noon: t.reminderNoon,
+    friday_evening: t.reminderEvening,
+  }[queue.window] || ''
+
+  async function onBuildReminders() {
+    setReminderBuilding(true)
+    setReminderNotice('')
+    try {
+      const plan = await buildReminderList(now)
+      if (!plan?.window) setReminderNotice(t.noReminderWindow)
+      else if (!plan.rows?.length) setReminderNotice(t.noReminderRecipients)
+    } catch {
+      // buildReminderList already surfaces the message.
+    } finally {
+      setReminderBuilding(false)
+    }
+  }
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30000)
@@ -72,7 +105,7 @@ export default function AdminDashboard({ email, onNewCycle }) {
   }
 
   const tabs = [
-    { id: 'dashboard', label: t.tabDashboard, icon: 'home' },
+    { id: 'dashboard', label: t.tabDashboard, icon: 'home', badge: queue.count },
     { id: 'members', label: t.tabMembers, icon: 'members' },
     { id: 'schedule', label: t.tabSchedule, icon: 'rounds' },
     { id: 'settings', label: t.tabSettings, icon: 'settings' },
@@ -149,6 +182,15 @@ export default function AdminDashboard({ email, onNewCycle }) {
             onDismissReview={dismissReview}
             readOnly={readOnly}
             onSelectMember={member => setSheetSlot(member.slot)}
+            reminderItems={queue.items}
+            reminderWindowLabel={windowLabel}
+            reminderCollectDate={queue.collectDate}
+            onMarkSent={id => markReminders([id], 'sent')}
+            onSkipReminder={id => markReminders([id], 'skipped')}
+            onMarkAllReminders={ids => markReminders(ids, 'sent')}
+            onBuildReminders={onBuildReminders}
+            reminderBuilding={reminderBuilding}
+            reminderNotice={reminderNotice}
           />
         )}
         {tab === 'members' && <RosterEditor readOnly={readOnly} />}

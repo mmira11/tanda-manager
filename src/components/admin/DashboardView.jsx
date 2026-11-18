@@ -3,6 +3,8 @@ import LangToggle from '../ui/LangToggle'
 import ProgressRing from './ProgressRing'
 import MemberAvatarGrid from './MemberAvatarGrid'
 import NeedsReviewCard from './NeedsReviewCard'
+import ReminderQueueCard, { BuildReminderButton } from './ReminderQueueCard'
+import { actionableReminders } from '../../utils/reminderQueue'
 
 export default function DashboardView({
   t,
@@ -29,7 +31,17 @@ export default function DashboardView({
   onDismissReview,
   readOnly,
   onSelectMember,
+  reminderItems,
+  reminderWindowLabel,
+  reminderCollectDate,
+  onMarkSent,
+  onSkipReminder,
+  onMarkAllReminders,
+  onBuildReminders,
+  reminderBuilding,
+  reminderNotice,
 }) {
+  const reminderCount = actionableReminders(reminderItems).length
   return (
     <div className="space-y-4">
       <header className="flex items-center gap-3">
@@ -42,6 +54,26 @@ export default function DashboardView({
         </div>
         <LangToggle lang={lang} onToggle={onToggleLang} tone="dark" label={t.toggleLanguage} />
       </header>
+
+      {!readOnly && (
+        reminderCount > 0 ? (
+          <ReminderQueueCard
+            t={t}
+            items={reminderItems}
+            windowLabel={reminderWindowLabel}
+            zelle={zelle}
+            collectDate={reminderCollectDate || collectDate}
+            contribution={contribution}
+            onMarkSent={onMarkSent}
+            onSkip={onSkipReminder}
+            onMarkAll={onMarkAllReminders}
+            onBuild={onBuildReminders}
+            building={reminderBuilding}
+          />
+        ) : (
+          <BuildReminderButton t={t} onBuild={onBuildReminders} building={reminderBuilding} notice={reminderNotice} />
+        )
+      )}
 
       <section className="bg-panel rounded-3xl border border-white/10 px-4 py-6">
         <ProgressRing value={paid} max={total} label={t.paidOf(paid, total)}>

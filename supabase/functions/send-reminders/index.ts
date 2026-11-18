@@ -1,16 +1,20 @@
 // send-reminders: called every hour by pg_cron (supabase/cron/schedule_send_reminders.sql).
-// Decides in Los Angeles time whether a reminder window is due, and either logs who would be
-// texted (dry run, the default) or sends through Twilio.
+// Decides in Los Angeles time whether a reminder window is due, then hands the row to the
+// channel dispatcher. The default channel is queue: one reminder_log row per person, no
+// external send. Twilio is still here, and stays off unless reminder_settings.channel is
+// twilio (or REMINDER_CHANNEL=twilio) and REMINDERS_DRY_RUN is exactly "false".
 //
 // Function secrets (supabase secrets set …), never in the repo or the frontend:
 //   CRON_SECRET          shared with the cron job (x-cron-secret header)
-//   REMINDERS_DRY_RUN    anything but "false" means dry run (default)
+//   REMINDERS_DRY_RUN    queue: "true" previews without queueing. Twilio: anything but "false" is a dry run.
+//   REMINDER_CHANNEL     optional "twilio" to force Twilio for every cycle. Default queue.
 //   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_MESSAGING_SERVICE_SID or TWILIO_FROM_NUMBER
+//     only used when a cycle actually sends through Twilio
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase inside Edge Functions.
-// Live sends also need reminder_settings.enabled = true for that cycle.
+// Queue rows and Twilio sends also need reminder_settings.enabled = true for that cycle.
 // Deploy with: supabase functions deploy send-reminders --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { isDryRun, runReminders, timingSafeEqual } from '../_shared/reminders.js'
+import { allowReminderReplay, reminderAction, resolveChannel, runReminders, timingSafeEqual } from '../_shared/reminders.js'
 
 function check<T>({ data, error }: { data: T; error: unknown }): T {
   if (error) throw error
@@ -23,10 +27,15 @@ Deno.serve(async (req) => {
     return new Response('forbidden', { status: 403 })
   }
 
-  const dryRun = isDryRun(Deno.env.get('REMINDERS_DRY_RUN'))
+  const channel = Deno.env.get('REMINDER_CHANNEL')
+  const dryRunEnv = Deno.env.get('REMINDERS_DRY_RUN')
+  const reportedChannel = resolveChannel({}, channel)
+  const dryRun = reminderAction({
+    channel: reportedChannel, enabled: true, hasDryRunEnv: true, dryRunEnv,
+  }) === 'dry_run'
   const body = await req.json().catch(() => ({}))
-  // A dry run may replay another moment (for example a whole payment week) with { "now": ISO }.
-  const now = dryRun && body?.now ? new Date(body.now) : new Date()
+  // An explicit dry run may replay another moment (for example a whole payment week) with { "now": ISO }.
+  const now = allowReminderReplay(channel, dryRunEnv) && body?.now ? new Date(body.now) : new Date()
   if (Number.isNaN(now.getTime())) return new Response('bad now', { status: 400 })
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
@@ -69,6 +78,7 @@ Deno.serve(async (req) => {
     },
   }
 
+  // Twilio transport. The dispatcher in runReminders calls this only for channel twilio.
   async function sendSms(to: string, text: string) {
     const sid = Deno.env.get('TWILIO_ACCOUNT_SID')
     const token = Deno.env.get('TWILIO_AUTH_TOKEN')
@@ -88,8 +98,10 @@ Deno.serve(async (req) => {
     return json.sid as string
   }
 
-  const summary = await runReminders({ now, dryRun, cycles, optedOut, log, sendSms })
+  const summary = await runReminders({
+    now, dryRunEnv, hasDryRunEnv: true, channel, cycles, optedOut, log, sendSms,
+  })
   // First names and windows only; no phone numbers in the function log.
-  console.log(JSON.stringify({ at: now.toISOString(), dryRun, summary }))
-  return Response.json({ dryRun, summary })
+  console.log(JSON.stringify({ at: now.toISOString(), channel: reportedChannel, dryRun, summary }))
+  return Response.json({ channel: reportedChannel, dryRun, summary })
 })

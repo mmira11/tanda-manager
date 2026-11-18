@@ -6,6 +6,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 import { addDays, buildRounds, isValidTimeZone } from '../utils/rounds'
 import { buildImportPlan, newAccessToken, writeImport } from '../utils/importBackup'
+import { planReminderQueue } from '../utils/reminderQueue'
+
+const EMPTY_REMINDERS = { settings: null, templates: [], queued: [], optedOut: [] }
 
 function check({ data, error }) {
   if (error) throw error
@@ -66,12 +69,15 @@ export function useCycleStore() {
   const [store, setStore] = useState(null)
   const [cycles, setCycles] = useState([])
   const [pendingReview, setPendingReview] = useState([])
+  const [reminderMeta, setReminderMeta] = useState(EMPTY_REMINDERS)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const storeRef = useRef(null)
+  const reminderRef = useRef(EMPTY_REMINDERS)
   const selectedIdRef = useRef(null)
   const requestRef = useRef(0)
   storeRef.current = store
+  reminderRef.current = reminderMeta
 
   const load = useCallback(async (preferredId) => {
     const request = ++requestRef.current
@@ -85,6 +91,7 @@ export function useCycleStore() {
         selectedIdRef.current = null
         setStore(null)
         setPendingReview([])
+        setReminderMeta(EMPTY_REMINDERS)
         return
       }
       selectedIdRef.current = cycleSummary.id
@@ -93,13 +100,18 @@ export function useCycleStore() {
         selectedIdRef.current = null
         setStore(null)
         setPendingReview([])
+        setReminderMeta(EMPTY_REMINDERS)
         return
       }
-      const [members, rounds] = await Promise.all([
+      const [members, rounds, settingsRows, templates, queued, optOuts] = await Promise.all([
         supabase.from('members').select('id, slot, display_first_name, phone, access_token, token_revoked_at, removed_at')
           .eq('cycle_id', cycle.id).order('slot').then(check),
         supabase.from('rounds').select('*')
           .eq('cycle_id', cycle.id).order('round_number').then(check),
+        supabase.from('reminder_settings').select('*').eq('cycle_id', cycle.id).then(check),
+        supabase.from('reminder_templates').select('kind, lang, body').eq('cycle_id', cycle.id).then(check),
+        supabase.from('reminder_log').select('*').eq('cycle_id', cycle.id).eq('status', 'queued').then(check),
+        supabase.from('sms_opt_outs').select('phone_e164').then(check),
       ])
       const payments = rounds.length
         ? check(await supabase.from('payments').select('round_id, member_id, paid_at')
@@ -112,6 +124,12 @@ export function useCycleStore() {
       if (request !== requestRef.current) return
       setStore(toStore(cycle, members, rounds, payments))
       setPendingReview(reviews)
+      setReminderMeta({
+        settings: settingsRows[0] || null,
+        templates,
+        queued,
+        optedOut: optOuts.map(row => row.phone_e164),
+      })
     } catch (e) {
       if (request !== requestRef.current) return
       setError(e.message || String(e))
@@ -367,10 +385,62 @@ export function useCycleStore() {
       }).eq('id', reviewId)),
   ), [run])
 
+  const buildReminderList = useCallback(async (now = new Date()) => {
+    const s = storeRef.current
+    if (!s || s.config.status === 'archived') return { window: null, rows: [] }
+    const meta = reminderRef.current
+    const plan = planReminderQueue({
+      now,
+      cycle: { id: s.config.cycleId },
+      settings: { ...(meta.settings || {}), timezone: meta.settings?.timezone || s.config.timezone },
+      rounds: s.rounds.map(round => ({ id: round.id, round_number: round.round, collect_date: round.collectDate })),
+      members: s.participants.map(person => ({
+        id: person.id, display_first_name: person.name, phone: person.phone, removed_at: null,
+      })),
+      // Only members with a payment row in that round (N9): someone not paying a round is not reminded.
+      payments: s.rounds.flatMap(round => s.participants
+        .filter(person => Object.prototype.hasOwnProperty.call(round.payments || {}, person.slot))
+        .map(person => ({
+          round_id: round.id,
+          member_id: person.id,
+          paid_at: round.payments[person.slot] ? 'paid' : null,
+        }))),
+      optedOut: new Set(meta.optedOut || []),
+    })
+    if (!plan.window || plan.rows.length === 0) return plan
+    try {
+      check(await supabase.rpc('enqueue_reminders', { p_rows: plan.rows }))
+      await load()
+      return plan
+    } catch (e) {
+      setError(e.message || String(e))
+      throw e
+    }
+  }, [load])
+
+  const markReminders = useCallback(async (ids, status) => {
+    const done = []
+    try {
+      for (const id of ids) {
+        check(await supabase.rpc('set_reminder_log_status', { p_id: id, p_status: status }))
+        done.push(id)
+      }
+    } catch (e) {
+      setError(e.message || String(e))
+      await load()
+      return
+    }
+    const finished = new Set(done)
+    setReminderMeta(meta => ({ ...meta, queued: meta.queued.filter(row => !finished.has(row.id)) }))
+  }, [load])
+
   return {
     store,
     cycles,
     pendingReview,
+    reminderMeta,
+    buildReminderList,
+    markReminders,
     confirmMatch,
     dismissReview,
     loading,
