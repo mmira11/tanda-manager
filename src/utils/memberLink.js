@@ -17,6 +17,11 @@ export function forgetMemberToken(token) {
   try { if (localStorage.getItem(SAVED_KEY) === token) localStorage.removeItem(SAVED_KEY) } catch { /* private mode */ }
 }
 
+// "Not you?" on a shared phone or tablet: drop whatever link this device remembers.
+export function forgetThisDevice() {
+  try { localStorage.removeItem(SAVED_KEY) } catch { /* private mode */ }
+}
+
 export function memberLink(token) {
   const base = import.meta.env.BASE_URL || '/'
   const prefix = base.endsWith('/') ? base : `${base}/`

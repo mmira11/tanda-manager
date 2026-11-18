@@ -92,6 +92,20 @@ describe('home-screen icon opens the member board', () => {
     expect(screen.getByText(LABELS.en.useLinkTitle)).toBeTruthy()
   })
 
+  it('"Forget this phone" on the Profile tab clears the saved link and shows the landing page', async () => {
+    const user = userEvent.setup()
+    supabase.rpc.mockResolvedValue({ data: board(), error: null })
+    renderApp(`/m/${TOKEN}`)
+    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN)
+
+    await user.click(screen.getByRole('button', { name: /Profile/ }))
+    await user.click(screen.getByText('Forget this phone'))
+
+    expect(localStorage.getItem('tanda_member_token')).toBeNull()
+    expect(screen.getByText(LABELS.en.useLinkTitle)).toBeTruthy()
+  })
+
   it('shows the normal landing page on a phone that never opened a link', () => {
     renderApp('/')
     expect(screen.getByText(LABELS.en.useLinkTitle)).toBeTruthy()
