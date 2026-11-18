@@ -47,7 +47,7 @@ function getCollectDayName(collectDate, locale = 'en-US') {
   return new Date(collectDate + 'T12:00:00').toLocaleDateString(locale, { weekday: 'long' })
 }
 
-// Admin screens are English only, but texts to the family always carry both languages.
+// Admin screens are English only, but texts to members always carry both languages.
 export function bilingual(en, es) {
   return `${en}\n\n${es}`
 }
