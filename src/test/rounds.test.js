@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getCurrentRound, clampRound, getPaidCount, formatDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatCollectionCountdown, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds, validateSchedule, isValidTimeZone } from '../utils/rounds'
+import { getCurrentRound, clampRound, getPaidCount, formatDate, formatZonedDate, getTandaSpan, formatSpanLabel, isTandaComplete, isPayoutWindow, getCountdownTo, deadlineOnDate, formatCollectionCountdown, formatRelativeTime, resolveMySlot, addDays, buildRounds, historyRounds, validateSchedule, isValidTimeZone } from '../utils/rounds'
 
 // The 2026 schedule (12 rounds, every 14 days from Jun 12, payout the next day).
 const ROUND_SCHEDULE = buildRounds('2026-06-12', 14, 12).map(r => ({
@@ -91,6 +91,19 @@ describe('formatDate', () => {
     expect(result).toContain('12')
     expect(result.toLowerCase()).toContain('jun')
     expect(result).not.toContain('Fri')
+  })
+
+  it('formats a timestamp as the Los Angeles day', () => {
+    // 06:30 UTC on Jun 13 is 11:30 PM on Jun 12 in Los Angeles.
+    const en = formatZonedDate('2026-06-13T06:30:00Z', 'en-US', 'America/Los_Angeles')
+    expect(en).toContain('Jun')
+    expect(en).toContain('12')
+    expect(en).toContain('2026')
+    expect(en).not.toContain('13')
+    const es = formatZonedDate('2026-06-13T06:30:00Z', 'es-US', 'America/Los_Angeles')
+    expect(es).toContain('12')
+    expect(es.toLowerCase()).toContain('jun')
+    expect(es).not.toContain('Fri')
   })
 })
 

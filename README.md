@@ -45,13 +45,16 @@ React 18 · Vite 5 · React Router v6 · Tailwind CSS · Supabase (Postgres, Aut
 
 ## What's next
 
-Reminders still go out by hand through `sms:` links. The schema already has `payer_aliases`, `reminder_settings`, `reminder_templates`, and `pending_review` for the next step:
-- Scheduled reminders sent server-side
-- Matching incoming Zelle emails to members automatically, with anything unclear landing in the Needs-review card
+Nudges on the dashboard still open the phone's SMS app. Scheduled reminders and Zelle detection run as Supabase Edge Functions, described below. A detected Zelle payment stays in Needs review until you press Match.
 
 ## Supabase setup
 
-1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `011`). Each migration is safe to run more than once.
+1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `015`). Each migration is safe to run more than once.
+   - `013` — reminder log and SMS opt-outs
+   - `014` — Zelle `pending_review` rows and `confirm_zelle_match`
+   - `015` — the round the admin picked, an optional dismiss reason, and `round_timing` (`early`, `on_time`, `after_deadline`, `late`)
+
+Apply `014` before `015`. `015` replaces the two-argument `confirm_zelle_match` from `014`.
 2. **Turn on email sign-in.** Under Authentication → Providers, enable Email. The app sends magic links only and won't create new users (`shouldCreateUser: false`), so create your own user under Authentication → Users.
 3. **Allow the redirect URLs.** Under Authentication → URL Configuration, add every address you'll sign in from, including the `/tanda-manager/` base path:
    - `http://localhost:5173/tanda-manager/admin`
@@ -63,6 +66,61 @@ Reminders still go out by hand through `sms:` links. The schema already has `pay
 5. **Add your keys locally.** Copy `.env.example` to `.env.local` and fill in `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from Project Settings → API. `.env.local` is gitignored.
 
 Never put the service-role key in a `VITE_` variable or in frontend code. The only thing that uses it is the optional `scripts/import-backup.mjs`, which reads it from `.env.local`. Importing a backup from Admin → Settings doesn't need it.
+
+## Edge functions
+
+These are separate from the static site. Deploy them with the Supabase CLI after the migrations they need. Set secrets with `supabase secrets set`. They stay out of the repo and out of any `VITE_` variable. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided inside Edge Functions.
+
+### send-reminders
+
+Needs migration `013`. Decides in America/Los_Angeles whether a reminder window is due, then logs the dry run or sends through Twilio.
+
+```bash
+supabase functions deploy send-reminders --no-verify-jwt
+supabase secrets set \
+  CRON_SECRET=... \
+  REMINDERS_DRY_RUN=true \
+  TWILIO_ACCOUNT_SID=... \
+  TWILIO_AUTH_TOKEN=... \
+  TWILIO_MESSAGING_SERVICE_SID=...
+```
+
+`TWILIO_FROM_NUMBER` can stand in for `TWILIO_MESSAGING_SERVICE_SID`. Keep `REMINDERS_DRY_RUN` set to anything other than `false` until a dry run looks right. Then run `supabase/cron/schedule_send_reminders.sql` in the SQL editor. That file turns on `pg_cron` and `pg_net` and reads two Vault secrets (`tanda_reminders_url`, `tanda_cron_secret`). It is safe to run more than once. It is not a migration: CI's Postgres has no `pg_cron`.
+
+### twilio-inbound
+
+Twilio's "A message comes in" webhook. STOP opts that sender out of reminders. START opts them back in. Every request needs a valid Twilio signature.
+
+```bash
+supabase functions deploy twilio-inbound --no-verify-jwt
+supabase secrets set \
+  TWILIO_AUTH_TOKEN=... \
+  TWILIO_INBOUND_PUBLIC_URL=https://<project-ref>.supabase.co/functions/v1/twilio-inbound
+```
+
+`TWILIO_INBOUND_PUBLIC_URL` has to be the webhook URL configured in Twilio. The signature is checked against that exact string.
+
+### scan-zelle-email
+
+Needs migrations `014` and `015`. Reads Zelle "you received" mail with the Gmail read-only scope and queues Needs review. It never marks anyone paid.
+
+```bash
+supabase functions deploy scan-zelle-email --no-verify-jwt
+supabase secrets set \
+  CRON_SECRET=... \
+  GMAIL_CLIENT_ID=... \
+  GMAIL_CLIENT_SECRET=... \
+  GMAIL_REFRESH_TOKEN=... \
+  ZELLE_SENDER_DOMAINS=bank.example
+```
+
+`CRON_SECRET` is the same value send-reminders uses. `ZELLE_GMAIL_QUERY` is optional (default `subject:zelle`). `ZELLE_SENDER_DOMAINS` is required: comma-separated bank domains. Mail from any other domain, or that fails Gmail's DKIM/DMARC check for that domain, is skipped.
+
+The Google OAuth client has to be set to **In production**. A client left in Testing expires its refresh token after 7 days, and the scan stops until you authorize the inbox again. The scope is only `https://www.googleapis.com/auth/gmail.readonly`.
+
+With no `after` date, the search starts 7 days before the cycle's first collection date and runs through today. That bound is what keeps the fetch under its 1,000-message cap. Mail dated before the window is counted as `out_of_window` and is not assigned to a round. With no `cycleId`, the only active cycle is scanned. If two cycles are active, the one with the earliest `start_date` is used and the response reports that choice (`cycleChoice: earliest_start_date`).
+
+Schedule it by running `supabase/cron/schedule_scan_zelle_email.sql` in the SQL editor. The job runs every 30 minutes across Thursday–Saturday America/Los_Angeles; the file comments list the UTC times, because `pg_cron` is UTC. It posts `{"dryRun":false}`. The function still treats a missing `dryRun` as a dry run. The script is safe to run more than once. It expects a Vault secret `tanda_zelle_url` plus the same `tanda_cron_secret` as reminders.
 
 ## Running it locally
 

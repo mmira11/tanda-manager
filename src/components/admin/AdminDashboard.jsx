@@ -23,7 +23,10 @@ function readLang() {
 }
 
 export default function AdminDashboard({ email, onNewCycle }) {
-  const { store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment } = useStore()
+  const {
+    store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment,
+    confirmMatch, dismissReview,
+  } = useStore()
   const [tab, setTab] = useState('dashboard')
   const [lang, setLang] = useState(readLang)
   const [confirmArchive, setConfirmArchive] = useState(false)
@@ -138,6 +141,12 @@ export default function AdminDashboard({ email, onNewCycle }) {
             zelle={store.config.organizerPhone}
             collectDate={current?.collectDate}
             reviews={pendingReview}
+            participants={store.participants}
+            rounds={store.rounds}
+            locale={dateLocale(lang)}
+            timeZone={store.config.timezone}
+            onMatchReview={confirmMatch}
+            onDismissReview={dismissReview}
             readOnly={readOnly}
             onSelectMember={member => setSheetSlot(member.slot)}
           />

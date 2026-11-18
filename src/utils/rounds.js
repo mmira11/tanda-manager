@@ -30,6 +30,19 @@ export function formatDate(iso, locale = 'en-US') {
   })
 }
 
+// A timestamp (not a date-only string) as a calendar day in the cycle's time zone.
+export function formatZonedDate(iso, locale = 'en-US', timeZone = DEFAULT_TIME_ZONE) {
+  const date = new Date(iso)
+  if (!iso || Number.isNaN(date.getTime())) return ''
+  return date.toLocaleDateString(locale, {
+    timeZone,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function getDayName(iso, locale = 'en-US') {
   return new Date(iso + 'T12:00:00').toLocaleDateString(locale, { weekday: 'long' })
 }

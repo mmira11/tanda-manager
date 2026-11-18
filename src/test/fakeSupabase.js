@@ -23,7 +23,7 @@ const DEFAULTS = {
 export function installFakeSupabase({ session = null, isAdmin = false, db = {}, failOn = null } = {}) {
   const tables = {
     cycles: [], members: [], rounds: [], payments: [],
-    reminder_settings: [], reminder_templates: [], pending_review: [],
+    reminder_settings: [], reminder_templates: [], pending_review: [], payer_aliases: [],
     ...structuredClone(db),
   }
   let nextId = 1000
@@ -155,6 +155,32 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
     rpc: vi.fn(async (name, args) => {
       if (name === 'is_admin') return { data: isAdmin, error: null }
       if (name === 'import_cycle') return importCycle(args.p_plan)
+      if (name === 'confirm_zelle_match') {
+        // Mirrors migrations 014 and 015: the admin's round, if any, replaces the stored one.
+        // Then mark that member paid for the review's round, close the review, save the alias.
+        const fail = message => ({ data: null, error: { message } })
+        const review = tables.pending_review.find(r => r.id === args.p_review)
+        if (!review) return fail('Review not found')
+        if (review.status !== 'pending') return fail('This item was already handled')
+        if (args.p_round) {
+          const round = tables.rounds.find(r => r.id === args.p_round && r.cycle_id === review.cycle_id)
+          if (!round) return fail('That round is not in this cycle')
+          review.round_id = args.p_round
+        }
+        const member = tables.members.find(m => m.id === args.p_member && m.cycle_id === review.cycle_id && !m.removed_at)
+        if (!member) return fail('That member is not in this cycle')
+        const payment = tables.payments.find(p => p.round_id === review.round_id && p.member_id === args.p_member)
+        if (!payment) return fail('That member has no payment for this round')
+        if (Number(review.amount) !== Number(payment.amount)) {
+          return fail('The Zelle amount does not match this payment; mark it by hand instead')
+        }
+        if (!payment.paid_at) Object.assign(payment, { paid_at: review.received_at, source: 'auto' })
+        Object.assign(review, { status: 'matched', suggested_member_id: args.p_member, resolved_at: new Date().toISOString() })
+        if (!tables.payer_aliases.some(a => a.member_id === args.p_member && a.alias_name === review.sender_name)) {
+          tables.payer_aliases.push({ id: `alias-${nextId++}`, member_id: args.p_member, alias_name: review.sender_name })
+        }
+        return { data: null, error: null }
+      }
       if (name === 'swap_payout_order') {
         // Mirrors migration 008: swap slots and payout rounds together, or change nothing.
         const a = tables.members.find(m => m.id === args.p_a)

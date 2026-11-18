@@ -21,6 +21,12 @@ export default function DashboardView({
   zelle,
   collectDate,
   reviews,
+  participants,
+  rounds,
+  locale,
+  timeZone,
+  onMatchReview,
+  onDismissReview,
   readOnly,
   onSelectMember,
 }) {
@@ -66,7 +72,17 @@ export default function DashboardView({
         onSelect={onSelectMember}
       />
 
-      <NeedsReviewCard items={reviews} t={t} />
+      <NeedsReviewCard
+        items={reviews}
+        t={t}
+        participants={participants}
+        rounds={rounds}
+        locale={locale}
+        timeZone={timeZone}
+        readOnly={readOnly}
+        onMatch={onMatchReview}
+        onDismiss={onDismissReview}
+      />
     </div>
   )
 }
