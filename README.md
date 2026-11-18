@@ -12,6 +12,8 @@ I'm part of a 12-person tanda: each round, every member contributes a fixed amou
 
 **Private member page** (`/m/:token`, no login): each member gets their own link. It shows whether they've paid this round, when they get paid out and how much, days left until the 6 PM collection cutoff, group progress by first name, every round in the schedule, and a Copy Zelle button. English and Spanish.
 
+The phone remembers a member's link once it loads, so an icon added to the home screen (which opens `/`) goes straight back to their page. A link that stops working is forgotten. **Not you? → Forget this phone** on the Profile tab clears it on a shared phone or tablet.
+
 **Admin dashboard** (`/admin`, email magic link): the organizer can:
 - Create a cycle from a name, start date, days between rounds, contribution, and members in payout order. The rounds and one payment row per member per round are generated from that.
 - Mark each member paid for any round. It saves right away.
