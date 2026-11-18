@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { memberLink } from '../../utils/memberLink'
-import { buildGroupSmsUrl, organizerFallback } from '../../utils/messaging'
-import { useLang } from '../../context/LangContext'
+import { bilingual, buildGroupSmsUrl, organizerFallback } from '../../utils/messaging'
 import { formatMoney } from '../../utils/money'
 
 function hasPaymentHistory(store, slot) {
@@ -114,6 +113,16 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
               {copied ? 'Copied' : 'Copy personal link'}
             </button>
           )}
+          {!participant.linkRevoked && (
+            <a
+              href={`${memberLink(participant.accessToken)}?preview=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-gold-700 border border-gold-200 rounded-lg px-2 py-1 hover:bg-gold-50"
+            >
+              View as member
+            </a>
+          )}
           {!readOnly && (
             <button
               type="button"
@@ -164,7 +173,6 @@ function ParticipantRow({ participant, editMode, isFirst, isLast, store, readOnl
 
 export default function RosterEditor({ readOnly = false }) {
   const { store, addMember } = useStore()
-  const { lang } = useLang()
   const [editMode, setEditMode] = useState(false)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newName, setNewName] = useState('')
@@ -274,7 +282,11 @@ export default function RosterEditor({ readOnly = false }) {
       {(() => {
         const withPhone = store.participants.filter(p => p.phone?.trim())
         const orgPhone = store.config?.organizerPhone || ''
-        const body = `Welcome to ${store.config.name}! 🎉 Collection is every ${store.config.intervalDays} days — please send ${formatMoney(store.config.contribution)} to ${orgPhone || organizerFallback(lang)} via Zelle on collection day. Looking forward to a great tanda with everyone!`
+        const money = formatMoney(store.config.contribution)
+        const body = bilingual(
+          `Welcome to ${store.config.name}! 🎉 Collection is every ${store.config.intervalDays} days — please send ${money} to ${orgPhone || organizerFallback('en')} via Zelle on collection day. Looking forward to a great tanda with everyone!`,
+          `¡Bienvenidos a ${store.config.name}! 🎉 El cobro es cada ${store.config.intervalDays} días — por favor envía ${money} a ${orgPhone || organizerFallback('es')} por Zelle el día de cobro. ¡Qué gusto hacer esta tanda juntos!`,
+        )
         const groupUrl = buildGroupSmsUrl(withPhone, body)
         return (
           <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">

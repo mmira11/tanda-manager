@@ -3,7 +3,7 @@ import { useStore } from '../../context/StoreContext'
 import { useLang } from '../../context/LangContext'
 import { formatMoney } from '../../utils/money'
 import { getCurrentRound, clampRound, getPaidCount, formatDate, getDayName, deadlineOnDate, getCountdownTo, formatCollectionCountdown, inRound } from '../../utils/rounds'
-import { buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
+import { bilingual, buildSmsUrl, buildGroupSmsUrl, buildReminderBody, buildTimedReminderSmsUrl, buildTimedReminderWhatsAppUrl } from '../../utils/messaging'
 import PaymentRow from './PaymentRow'
 
 // Notes save when the field loses focus, so typing doesn't write to the database per keystroke.
@@ -35,7 +35,7 @@ function RoundNotes({ notes, onSave, readOnly }) {
 
 export default function RoundPanel({ selectedRound, onSelectRound, readOnly = false }) {
   const { store, togglePayout, updateRoundNotes, assignRecipient } = useStore()
-  const { lang, locale } = useLang()
+  const { locale } = useLang()
   const { participants, rounds } = store
   const currentRound = getCurrentRound(rounds)
   const round = rounds.find(r => r.round === clampRound(selectedRound, rounds))
@@ -59,7 +59,10 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
   if (unpaidWithPhone.length === 1) {
     reminderUrl = buildSmsUrl(unpaidWithPhone[0].phone, unpaidWithPhone[0].name, orgPhone, round.collectDate, contribution)
   } else if (unpaidWithPhone.length >= 2) {
-    const body = buildReminderBody(round.round, formatDate(round.collectDate, locale), orgPhone, contribution, lang)
+    const body = bilingual(
+      buildReminderBody(round.round, formatDate(round.collectDate, locale), orgPhone, contribution, 'en'),
+      buildReminderBody(round.round, formatDate(round.collectDate, 'es-US'), orgPhone, contribution, 'es'),
+    )
     reminderUrl = buildGroupSmsUrl(unpaidWithPhone, body)
   }
 
@@ -133,7 +136,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
           <div className="bg-gold-50 rounded-xl p-3">
             <p className="text-xs text-gray-500 font-medium">Collect {getDayName(round.collectDate, locale)}</p>
             <p className="font-semibold text-gray-900 text-sm mt-0.5">{formatDate(round.collectDate, locale)}</p>
-            {isCurrent && <CollectionCountdown collectDate={round.collectDate} timeZone={timeZone} />}
+            {isCurrent && !readOnly && <CollectionCountdown collectDate={round.collectDate} timeZone={timeZone} />}
           </div>
           <div className="bg-gold-50 rounded-xl p-3">
             <p className="text-xs text-gray-500 font-medium">Pay Out {getDayName(round.payoutDate, locale)}</p>
@@ -157,7 +160,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
           </p>
         </div>
 
-        {isCurrent && !allPaid && (
+        {isCurrent && !allPaid && !readOnly && (
           <a
             href={reminderUrl ?? undefined}
             onClick={!reminderUrl ? e => e.preventDefault() : undefined}
@@ -202,7 +205,7 @@ export default function RoundPanel({ selectedRound, onSelectRound, readOnly = fa
         </div>
       </div>
 
-      {isCurrent && (
+      {isCurrent && !readOnly && (
       <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-100">
         <h3 className="font-semibold text-gray-900 mb-3">Reminders</h3>
         <div className="space-y-2">

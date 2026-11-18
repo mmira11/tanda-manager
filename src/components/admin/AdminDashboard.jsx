@@ -14,22 +14,12 @@ import TabBar from '../ui/TabBar'
 import { LangProvider } from '../../context/LangContext'
 import { buildReminderView } from '../../utils/reminderQueue'
 
-function readLang() {
-  try {
-    const value = localStorage.getItem('tanda_lang')
-    return value === 'es' || value === 'en' ? value : 'en'
-  } catch {
-    return 'en'
-  }
-}
-
 export default function AdminDashboard({ email, onNewCycle }) {
   const {
     store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment,
     confirmMatch, dismissReview, reminderMeta, buildReminderList, markReminders,
   } = useStore()
   const [tab, setTab] = useState('dashboard')
-  const [lang, setLang] = useState(readLang)
   const [confirmArchive, setConfirmArchive] = useState(false)
   const [reminderNotice, setReminderNotice] = useState('')
   const [reminderBuilding, setReminderBuilding] = useState(false)
@@ -39,7 +29,9 @@ export default function AdminDashboard({ email, onNewCycle }) {
   const hasActive = cycles.some(cycle => cycle.status === 'active')
   const viewingActive = store.config.status === 'active'
   const readOnly = store.config.status === 'archived'
-  const t = LABELS[lang] || LABELS.en
+  // The organizer's screens are English only. Texts sent to members stay bilingual.
+  const lang = 'en'
+  const t = LABELS.en
   const current = getCurrentRound(store.rounds)
   const payers = inRound(current, store.participants)
   const stats = paymentStats(
@@ -93,12 +85,6 @@ export default function AdminDashboard({ email, onNewCycle }) {
     return () => clearInterval(id)
   }, [])
 
-  function toggleLang() {
-    const next = lang === 'en' ? 'es' : 'en'
-    try { localStorage.setItem('tanda_lang', next) } catch { /* private mode */ }
-    setLang(next)
-  }
-
   const editRound = (roundNum) => {
     setSelectedRound(roundNum)
     setTab('schedule')
@@ -121,10 +107,6 @@ export default function AdminDashboard({ email, onNewCycle }) {
             <h2 id="archive-title" className="font-semibold text-stone-50">Archive this cycle?</h2>
             <p className="text-sm text-stone-300 mt-1">
               Payments and the roster will be locked. You can still view history, then start a new cycle.
-            </p>
-            <h3 className="font-semibold text-stone-50 mt-3">¿Archivar este ciclo?</h3>
-            <p className="text-sm text-stone-300 mt-1">
-              Los pagos y la lista quedarán bloqueados. Podrás ver el historial y luego empezar un ciclo nuevo.
             </p>
             <div className="flex gap-2 mt-4">
               <button
@@ -159,8 +141,6 @@ export default function AdminDashboard({ email, onNewCycle }) {
         {tab === 'dashboard' && (
           <DashboardView
             t={t}
-            lang={lang}
-            onToggleLang={toggleLang}
             cycleName={store.config.name}
             roundLabel={current ? t.roundOf(current.round, store.rounds.length) : ''}
             collectedLabel={formatMoney(stats.collected)}
@@ -184,7 +164,6 @@ export default function AdminDashboard({ email, onNewCycle }) {
             onSelectMember={member => setSheetSlot(member.slot)}
             reminderItems={queue.items}
             reminderWindowLabel={windowLabel}
-            reminderCollectDate={queue.collectDate}
             onMarkSent={id => markReminders([id], 'sent')}
             onSkipReminder={id => markReminders([id], 'skipped')}
             onMarkAllReminders={ids => markReminders(ids, 'sent')}
@@ -222,7 +201,6 @@ export default function AdminDashboard({ email, onNewCycle }) {
             {hasActive && (
               <p className="text-xs text-stone-400">
                 Archive the active cycle before starting another.
-                {' '}Archiva el ciclo activo antes de empezar otro.
               </p>
             )}
             <div className="flex gap-2">

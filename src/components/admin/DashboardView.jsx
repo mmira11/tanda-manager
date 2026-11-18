@@ -1,5 +1,4 @@
 import Logo from '../ui/Logo'
-import LangToggle from '../ui/LangToggle'
 import ProgressRing from './ProgressRing'
 import MemberAvatarGrid from './MemberAvatarGrid'
 import NeedsReviewCard from './NeedsReviewCard'
@@ -8,8 +7,6 @@ import { actionableReminders } from '../../utils/reminderQueue'
 
 export default function DashboardView({
   t,
-  lang,
-  onToggleLang,
   cycleName,
   roundLabel,
   collectedLabel,
@@ -33,7 +30,6 @@ export default function DashboardView({
   onSelectMember,
   reminderItems,
   reminderWindowLabel,
-  reminderCollectDate,
   onMarkSent,
   onSkipReminder,
   onMarkAllReminders,
@@ -52,7 +48,6 @@ export default function DashboardView({
             {roundLabel && <span className="block text-xs font-semibold text-stone-400">{roundLabel}</span>}
           </h1>
         </div>
-        <LangToggle lang={lang} onToggle={onToggleLang} tone="dark" label={t.toggleLanguage} />
       </header>
 
       {!readOnly && (
@@ -61,9 +56,6 @@ export default function DashboardView({
             t={t}
             items={reminderItems}
             windowLabel={reminderWindowLabel}
-            zelle={zelle}
-            collectDate={reminderCollectDate || collectDate}
-            contribution={contribution}
             onMarkSent={onMarkSent}
             onSkip={onSkipReminder}
             onMarkAll={onMarkAllReminders}

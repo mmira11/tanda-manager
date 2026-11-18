@@ -1,4 +1,4 @@
-import { buildSmsUrl, buildWhatsAppUrl, isValidUsPhone } from '../../utils/messaging'
+import { isValidUsPhone, smsUrlWithBody, whatsAppUrlWithBody } from '../../utils/messaging'
 import { actionableReminders } from '../../utils/reminderQueue'
 
 const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint'
@@ -25,9 +25,6 @@ export default function ReminderQueueCard({
   t,
   items,
   windowLabel,
-  zelle,
-  collectDate,
-  contribution,
   onMarkSent,
   onSkip,
   onMarkAll,
@@ -53,45 +50,48 @@ export default function ReminderQueueCard({
         </span>
       </div>
 
-      <ul className="space-y-2">
+      <ul className="divide-y divide-white/10 rounded-2xl border border-white/10">
         {items.map(item => {
-          const smsUrl = !item.paid && isValidUsPhone(item.phone)
-            ? buildSmsUrl(item.phone, item.name, zelle || '', collectDate, contribution)
-            : null
-          const waUrl = !item.paid && isValidUsPhone(item.phone)
-            ? buildWhatsAppUrl(item.phone, item.name, zelle || '', collectDate, contribution)
-            : null
+          const canSend = !item.paid && isValidUsPhone(item.phone)
+          const smsUrl = canSend ? smsUrlWithBody(item.phone, item.message) : null
+          const waUrl = canSend ? whatsAppUrlWithBody(item.phone, item.message) : null
           return (
-            <li key={item.id} className={`rounded-2xl border border-white/10 p-3 ${item.paid ? 'opacity-60' : ''}`}>
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-sm font-semibold text-stone-50">{item.name}</p>
-                {item.paid && (
+            <li key={item.id} className={`px-3 py-2.5 ${item.paid ? 'opacity-50' : ''}`}>
+              <div className="flex items-center gap-2">
+                <p className="min-w-0 flex-1 truncate text-sm font-semibold text-stone-50">{item.name}</p>
+                {item.paid ? (
                   <span className="shrink-0 rounded-full bg-white/10 text-stone-300 text-xs font-semibold px-2 py-1">{t.paidState}</span>
+                ) : (
+                  <div className="flex shrink-0 gap-1.5">
+                    {smsUrl && (
+                      <a href={smsUrl} onClick={() => onMarkSent?.(item.id)} className={`${tap} border border-white/15 text-stone-50`} aria-label={t.reminderSms(item.name)}>
+                        SMS
+                      </a>
+                    )}
+                    {waUrl && (
+                      <a
+                        href={waUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => onMarkSent?.(item.id)}
+                        className={`${tap} bg-mint text-ink`}
+                        aria-label={t.reminderWhatsApp(item.name)}
+                      >
+                        WhatsApp
+                      </a>
+                    )}
+                    <button type="button" onClick={() => onSkip?.(item.id)} className={`${tap} text-stone-400`} aria-label={t.skipReminder(item.name)}>
+                      {t.skip}
+                    </button>
+                  </div>
                 )}
               </div>
-              <p className="mt-1 text-xs leading-relaxed text-stone-300 whitespace-pre-wrap break-words">{item.message}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {smsUrl && (
-                  <a href={smsUrl} onClick={() => onMarkSent?.(item.id)} className={`${tap} border border-white/15 text-stone-50`} aria-label={t.reminderSms(item.name)}>
-                    SMS
-                  </a>
-                )}
-                {waUrl && (
-                  <a
-                    href={waUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => onMarkSent?.(item.id)}
-                    className={`${tap} bg-mint text-ink`}
-                    aria-label={t.reminderWhatsApp(item.name)}
-                  >
-                    WhatsApp
-                  </a>
-                )}
-                <button type="button" onClick={() => onSkip?.(item.id)} className={`${tap} border border-white/15 text-stone-200`} aria-label={t.skipReminder(item.name)}>
-                  {t.skip}
-                </button>
-              </div>
+              {!item.paid && (
+                <details className="mt-1">
+                  <summary className="cursor-pointer text-xs font-semibold text-stone-400 min-h-8 flex items-center">Show message</summary>
+                  <p className="mt-1 text-xs leading-relaxed text-stone-300 whitespace-pre-wrap break-words">{item.message}</p>
+                </details>
+              )}
             </li>
           )
         })}
