@@ -397,11 +397,14 @@ export function useCycleStore() {
       members: s.participants.map(person => ({
         id: person.id, display_first_name: person.name, phone: person.phone, removed_at: null,
       })),
-      payments: s.rounds.flatMap(round => s.participants.map(person => ({
-        round_id: round.id,
-        member_id: person.id,
-        paid_at: round.payments?.[person.slot] ? 'paid' : null,
-      }))),
+      // Only members with a payment row in that round (N9): someone not paying a round is not reminded.
+      payments: s.rounds.flatMap(round => s.participants
+        .filter(person => Object.prototype.hasOwnProperty.call(round.payments || {}, person.slot))
+        .map(person => ({
+          round_id: round.id,
+          member_id: person.id,
+          paid_at: round.payments[person.slot] ? 'paid' : null,
+        }))),
       optedOut: new Set(meta.optedOut || []),
     })
     if (!plan.window || plan.rows.length === 0) return plan
