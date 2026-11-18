@@ -103,8 +103,8 @@ function assertArchiveLock(database) {
     select count(*) from pg_policies
     where schemaname = 'public' and policyname like '%when_archived';
   `).trim())
-  if (count !== 6) {
-    throw new Error(`${database}: expected 6 archived-cycle policies, found ${count}`)
+  if (count !== 10) {
+    throw new Error(`${database}: expected 10 archived-cycle policies, found ${count}`)
   }
   const deadline = psqlText(database, `
     select pg_get_functiondef('public.get_member_board(text)'::regprocedure);
@@ -158,7 +158,7 @@ function assertArchiveLock(database) {
   if (dumped.includes('5550100199') || dumped.includes('member-token')) {
     throw new Error(`${database}: get_member_board exposed a phone or token`)
   }
-  console.log(`${database}: 6 archive policies, member board keeps Zelle, rounds, and the same grants`)
+  console.log(`${database}: 10 archive policies, member board keeps Zelle, rounds, and the same grants`)
 }
 
 // Runs SQL that must fail. Returns psql's error text; throws if it succeeded.
@@ -766,6 +766,188 @@ function assertZelleConfirm(database) {
   console.log(`${database}: confirm_zelle_match pays only the chosen member, once, at the exact amount, for the round the admin picked`)
 }
 
+// Migration 016: an archived cycle refuses Match before any payment write, and an admin
+// cannot dismiss a review or edit payer aliases. Viewing the cycle and unarchiving it stay
+// allowed. Uses Familia Demo after assertZelleConfirm. Fake names only.
+function assertArchivedZelleLock(database) {
+  const cycle = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const rosa = `(select id from public.members where access_token = 'member-token-rosa02')`
+  const round1 = `(select id from public.rounds where cycle_id = '${cycle}' and round_number = 1)`
+  const review = 'eeeeeeee-0000-0000-0000-000000000008'
+  const mustFail = (label, sql, pattern) => {
+    const error = psqlFails(database, sql)
+    if (!pattern.test(error)) throw new Error(`${database}: ${label} failed for the wrong reason: ${error}`)
+  }
+
+  const before = psqlText(database, `
+    select coalesce(paid_at::text, 'unpaid') from public.payments
+    where round_id = ${round1} and member_id = ${rosa};
+  `).trim()
+  if (before !== 'unpaid') throw new Error(`${database}: Rosa's round 1 was already paid (${before})`)
+
+  psqlText(database, `
+    insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, received_at, sender_name, amount, email_from)
+    values ('${review}', '${cycle}', ${round1}, 'gmail-fake-008', '2099-06-01T21:00:00Z', 'Rosa Queued', 100, 'alerts@bank.example');
+    insert into auth.users (id) values ('ffffffff-0000-0000-0000-0000000000a1') on conflict do nothing;
+    insert into public.admins (user_id, email)
+    values ('ffffffff-0000-0000-0000-0000000000a1', 'admin@example.com')
+    on conflict (user_id) do nothing;
+    create or replace function auth.uid() returns uuid language sql stable as $$
+      select 'ffffffff-0000-0000-0000-0000000000a1'::uuid
+    $$;
+  `)
+
+  // While the cycle is active, the same admin can update a review and save an alias.
+  psqlText(database, `
+    set role authenticated;
+    update public.pending_review set email_from = 'alerts@notify.bank.example' where id = '${review}';
+    insert into public.payer_aliases (member_id, alias_name) values (${rosa}, 'Rosa Bank');
+  `)
+
+  psqlText(database, `
+    create or replace function public.test_payment_touch() returns trigger language plpgsql as $$
+    begin
+      raise exception 'payment was touched';
+    end $$;
+    create trigger test_payment_touch before update on public.payments
+      for each row execute function public.test_payment_touch();
+    update public.cycles set status = 'archived' where id = '${cycle}';
+  `)
+
+  mustFail('matching a payment on an archived cycle', `
+    select public.confirm_zelle_match('${review}', ${rosa}, ${round1});
+  `, /cycle is archived/)
+  const untouched = psqlText(database, `
+    select (select coalesce(paid_at::text, 'unpaid') from public.payments where round_id = ${round1} and member_id = ${rosa})
+      || '|' || (select status || '|' || round_id::text from public.pending_review where id = '${review}')
+      || '|' || (select count(*) from public.payer_aliases where member_id = ${rosa} and alias_name = 'Rosa Queued');
+  `).trim()
+  const roundId = psqlText(database, `select ${round1};`).trim()
+  if (untouched !== `unpaid|pending|${roundId}|0`) {
+    throw new Error(`${database}: archived Match changed rows (${untouched})`)
+  }
+
+  mustFail('dismissing a review on an archived cycle', `
+    set role authenticated;
+    update public.pending_review set status = 'ignored', dismiss_reason = 'not tanda' where id = '${review}';
+  `, /row-level security policy .*for table "pending_review"/)
+  mustFail('updating a payer alias on an archived cycle', `
+    set role authenticated;
+    update public.payer_aliases set alias_name = 'Rosa Renamed' where member_id = ${rosa} and alias_name = 'Rosa Bank';
+  `, /row-level security policy .*for table "payer_aliases"/)
+  mustFail('inserting a payer alias on an archived cycle', `
+    set role authenticated;
+    insert into public.payer_aliases (member_id, alias_name) values (${rosa}, 'Rosa Other');
+  `, /row-level security policy .*for table "payer_aliases"/)
+
+  const deleted = psqlText(database, `
+    set role authenticated;
+    with gone as (
+      delete from public.payer_aliases
+      where member_id = ${rosa} and alias_name = 'Rosa Bank'
+      returning 1
+    )
+    select count(*) from gone;
+  `).trim().split('\n').filter(Boolean).pop()
+  if (deleted !== '0') throw new Error(`${database}: delete removed ${deleted} alias rows on an archived cycle`)
+
+  const visible = psqlText(database, `
+    set role authenticated;
+    select (select status from public.cycles where id = '${cycle}')
+      || '|' || (select status from public.pending_review where id = '${review}')
+      || '|' || (select count(*) from public.payer_aliases where member_id = ${rosa} and alias_name = 'Rosa Bank');
+  `).trim().split('\n').filter(Boolean).pop()
+  if (visible !== 'archived|pending|1') {
+    throw new Error(`${database}: archived cycle was hidden or a write slipped through (${visible})`)
+  }
+
+  const reopened = psqlText(database, `
+    set role authenticated;
+    update public.cycles set status = 'active' where id = '${cycle}';
+    select status from public.cycles where id = '${cycle}';
+  `).trim().split('\n').filter(Boolean).pop()
+  if (reopened !== 'active') throw new Error(`${database}: unarchive did not stick (${reopened})`)
+
+  psqlText(database, `
+    drop trigger test_payment_touch on public.payments;
+    drop function public.test_payment_touch();
+    set role authenticated;
+    update public.pending_review set dismiss_reason = 'kept' where id = '${review}';
+  `)
+  psqlText(database, `select public.confirm_zelle_match('${review}', ${rosa});`)
+  const paid = psqlText(database, `
+    select source from public.payments where round_id = ${round1} and member_id = ${rosa} and paid_at is not null;
+  `).trim()
+  if (paid !== 'auto') throw new Error(`${database}: Match after unarchive did not pay (${paid})`)
+
+  psqlText(database, `
+    create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+  `)
+  console.log(`${database}: archived Match, dismiss, and aliases are blocked; the cycle can still be viewed and unarchived`)
+}
+
+// Columns, the gmail id index, confirm_zelle_match, and the archive policies for these
+// tables. schema.sql alone and both migrated databases should describe the same objects.
+function zelleCatalog(database) {
+  const rows = psqlText(database, `
+    select kind || '|' || detail from (
+      select 10 as ord, a.attnum as sub, 'column' as kind,
+        a.attname || '|' || format_type(a.atttypid, a.atttypmod) || '|' || a.attnotnull
+          || '|' || coalesce(pg_get_expr(ad.adbin, ad.adrelid), '') as detail
+      from pg_attribute a
+      join pg_class c on c.oid = a.attrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      left join pg_attrdef ad on ad.adrelid = a.attrelid and ad.adnum = a.attnum
+      where n.nspname = 'public' and c.relname = 'pending_review'
+        and a.attnum > 0 and not a.attisdropped
+      union all
+      select 20, 0, 'index', indexname || '|' || indexdef
+      from pg_indexes
+      where schemaname = 'public' and tablename = 'pending_review'
+      union all
+      select 30, 0, 'constraint', conname || '|' || pg_get_constraintdef(oid)
+      from pg_constraint
+      where conrelid = 'public.pending_review'::regclass
+      union all
+      select 40, 0, 'policy', tablename || '|' || policyname || '|' || permissive || '|' || roles::text
+        || '|' || cmd || '|' || coalesce(qual, '') || '|' || coalesce(with_check, '')
+      from pg_policies
+      where schemaname = 'public' and tablename in ('pending_review', 'payer_aliases')
+      union all
+      select 50, 0, 'routine',
+        p.proname || '|' || pg_get_function_identity_arguments(p.oid) || '|' || p.prosecdef::text
+          || '|' || coalesce(p.proconfig::text, '') || '|' || coalesce(p.proacl::text, '')
+          || '|' || (
+            select count(*) from pg_proc q
+            join pg_namespace nq on nq.oid = q.pronamespace
+            where nq.nspname = 'public' and q.proname = 'confirm_zelle_match'
+          )::text
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname = 'confirm_zelle_match'
+    ) s
+    order by ord, sub, detail;
+  `).trim()
+  const fn = psqlText(database, `
+    select pg_get_functiondef('public.confirm_zelle_match(uuid,uuid,uuid)'::regprocedure);
+  `).trim()
+  return `${rows}\n-- function --\n${fn}\n`
+}
+
+function assertZelleCatalogMatch(schemaOnly, migratedFresh, migratedLegacy) {
+  const base = zelleCatalog(schemaOnly)
+  const freshCat = zelleCatalog(migratedFresh)
+  const legacyCat = zelleCatalog(migratedLegacy)
+  if (base !== freshCat || base !== legacyCat) {
+    const clip = text => text.split('\n').slice(0, 40).join('\n')
+    throw new Error(
+      'pending_review / confirm_zelle_match differ between schema.sql and migrations-in-order\n'
+      + `--- schema.sql only ---\n${clip(base)}\n--- fresh + migrations ---\n${clip(freshCat)}\n--- legacy + migrations ---\n${clip(legacyCat)}`,
+    )
+  }
+  console.log('schema.sql matches migrations-in-order for pending_review, confirm_zelle_match, and the archive policies')
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -783,6 +965,7 @@ assertUnevenRounds(fresh)
 assertNoAnonRealtime(fresh)
 assertReminderTables(fresh)
 assertZelleConfirm(fresh)
+assertArchivedZelleLock(fresh)
 assertReminderQueue(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
@@ -801,7 +984,14 @@ assertUnevenRounds(legacy)
 assertNoAnonRealtime(legacy)
 assertReminderTables(legacy)
 assertZelleConfirm(legacy)
+assertArchivedZelleLock(legacy)
 assertReminderQueue(legacy)
 
+console.log('c) schema.sql alone, compared with both migrated databases')
+const baseline = 'tanda_sql_baseline'
+recreate(baseline)
+applyFile(baseline, join(root, 'supabase', 'schema.sql'))
+assertZelleCatalogMatch(baseline, fresh, legacy)
+
 rmSync(scratch, { recursive: true, force: true })
-console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
+console.log('SQL ok: fresh schema + migrations x2, legacy schema + 003 onward (002 skipped) x2, and schema.sql matches those objects')

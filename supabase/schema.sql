@@ -104,7 +104,7 @@ create table public.reminder_templates (
   unique (cycle_id, kind, lang)
 );
 
--- Unmatched or ambiguous Zelle emails (wired in Week 3)
+-- Detected Zelle emails waiting for Match. Nothing here is paid until confirm_zelle_match.
 create table public.pending_review (
   id uuid primary key default gen_random_uuid(),
   cycle_id uuid not null references public.cycles (id) on delete cascade,
@@ -115,8 +115,18 @@ create table public.pending_review (
   status text not null default 'pending'
     check (status in ('pending', 'matched', 'ignored')),
   suggested_member_id uuid references public.members (id),
-  resolved_at timestamptz
+  resolved_at timestamptz,
+  gmail_message_id text,
+  round_id uuid references public.rounds (id) on delete cascade,
+  match_reason text,
+  email_from text,
+  round_timing text,
+  dismiss_reason text,
+  constraint pending_review_round_timing_check
+    check (round_timing is null or round_timing in ('early', 'on_time', 'after_deadline', 'late'))
 );
+
+create unique index pending_review_gmail_message_id on public.pending_review (gmail_message_id);
 
 -- RLS
 alter table public.admins            enable row level security;
@@ -190,6 +200,113 @@ create policy payments_no_delete_when_archived on public.payments
       where r.id = round_id
     ), '') is distinct from 'archived'
   );
+
+-- pending_review (dismiss is an update) and payer_aliases use the same lock.
+-- The cycles row is not locked: an archived cycle can still be viewed and unarchived.
+create policy pending_review_no_write_when_archived on public.pending_review
+  as restrictive for all to authenticated
+  using (true)
+  with check (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
+create policy pending_review_no_delete_when_archived on public.pending_review
+  as restrictive for delete to authenticated
+  using (coalesce((select c.status from public.cycles c where c.id = cycle_id), '') is distinct from 'archived');
+
+create policy payer_aliases_no_write_when_archived on public.payer_aliases
+  as restrictive for all to authenticated
+  using (true)
+  with check (
+    coalesce((
+      select c.status from public.members m
+      join public.cycles c on c.id = m.cycle_id
+      where m.id = member_id
+    ), '') is distinct from 'archived'
+  );
+create policy payer_aliases_no_delete_when_archived on public.payer_aliases
+  as restrictive for delete to authenticated
+  using (
+    coalesce((
+      select c.status from public.members m
+      join public.cycles c on c.id = m.cycle_id
+      where m.id = member_id
+    ), '') is distinct from 'archived'
+  );
+
+-- Confirm a review: mark the chosen member paid for the chosen round (paid_at = when the
+-- email arrived, source = 'auto' because it was detected), close the review, and remember
+-- the sender name as that member's payer alias. p_round, when set, is the round the admin
+-- picked and replaces the round the scan stored.
+-- An archived cycle raises 'cycle is archived' before any payment row is locked or written.
+-- SECURITY INVOKER: admin RLS still applies. The archive check is in the function because a
+-- policy error is not this message, and table owners bypass RLS.
+create or replace function public.confirm_zelle_match(p_review uuid, p_member uuid, p_round uuid default null)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_review  public.pending_review%rowtype;
+  v_member  public.members%rowtype;
+  v_payment public.payments%rowtype;
+begin
+  select * into v_review from public.pending_review where id = p_review for update;
+  if not found then
+    raise exception 'Review not found' using errcode = 'P0002';
+  end if;
+  if v_review.status <> 'pending' then
+    raise exception 'This item was already handled' using errcode = '22023';
+  end if;
+  -- Archived cycles stay readable and can be unarchived. Match must not change a payment.
+  if coalesce((select status from public.cycles where id = v_review.cycle_id), '') = 'archived' then
+    raise exception 'cycle is archived' using errcode = '22023';
+  end if;
+
+  if p_round is not null then
+    if not exists (select 1 from public.rounds where id = p_round and cycle_id = v_review.cycle_id) then
+      raise exception 'That round is not in this cycle' using errcode = '22023';
+    end if;
+    update public.pending_review set round_id = p_round where id = p_review;
+    v_review.round_id := p_round;
+  end if;
+
+  if v_review.round_id is null
+     or not exists (select 1 from public.rounds where id = v_review.round_id and cycle_id = v_review.cycle_id) then
+    raise exception 'This item has no round in its cycle to apply it to' using errcode = '22023';
+  end if;
+
+  select * into v_member from public.members
+  where id = p_member and cycle_id = v_review.cycle_id and removed_at is null;
+  if not found then
+    raise exception 'That member is not in this cycle' using errcode = '22023';
+  end if;
+
+  select * into v_payment from public.payments
+  where round_id = v_review.round_id and member_id = p_member
+  for update;
+  if not found then
+    raise exception 'That member has no payment for this round' using errcode = '22023';
+  end if;
+  -- Only an exact amount can be confirmed here; partial or combined payments are marked by hand.
+  if v_review.amount is distinct from v_payment.amount then
+    raise exception 'The Zelle amount does not match this payment; mark it by hand instead' using errcode = '22023';
+  end if;
+
+  -- Already marked paid by hand: keep that record as it is.
+  if v_payment.paid_at is null then
+    update public.payments
+    set paid_at = v_review.received_at, source = 'auto'
+    where id = v_payment.id;
+  end if;
+
+  update public.pending_review
+  set status = 'matched', suggested_member_id = p_member, resolved_at = now()
+  where id = p_review;
+
+  insert into public.payer_aliases (member_id, alias_name)
+  values (p_member, v_review.sender_name)
+  on conflict (member_id, alias_name) do nothing;
+end;
+$$;
 
 -- Members never read tables directly. They call this RPC with their secret token.
 -- Returns only: their status, their payout date, current/last round, first names
@@ -318,6 +435,7 @@ revoke execute on all functions in schema public from PUBLIC, anon;
 grant usage on schema public to anon, authenticated;
 grant execute on function public.get_member_board(text) to anon, authenticated;
 grant execute on function public.is_admin() to authenticated;
+grant execute on function public.confirm_zelle_match(uuid, uuid, uuid) to authenticated;
 -- table grants for authenticated are still gated by the admin_* policies
 grant select, insert, update, delete on
   public.admins, public.cycles, public.members, public.payer_aliases,
