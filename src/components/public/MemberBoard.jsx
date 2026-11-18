@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { LABELS } from '../../data/labels'
 import { useMemberBoard } from '../../hooks/useMemberBoard'
+import { forgetMemberToken, rememberMemberToken } from '../../utils/memberLink'
 import MemberExperience from './MemberExperience'
 
 function savedLang() {
@@ -65,6 +66,12 @@ export default function MemberBoard() {
   const { board, status } = useMemberBoard(token)
   const [lang, setLang] = useState(() => savedLang() || 'en')
   usePrivateHead()
+
+  // So a home-screen icon (which opens the start page) can find this member's board again.
+  useEffect(() => {
+    if (status === 'ready') rememberMemberToken(token)
+    if (status === 'notfound') forgetMemberToken(token)
+  }, [status, token])
 
   useEffect(() => {
     if (savedLang() || !board?.me?.language_pref) return

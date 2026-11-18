@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MemberBoard from '../components/public/MemberBoard'
 import MemberLinkNotice from '../components/public/MemberLinkNotice'
 import { supabase } from '../lib/supabase'
+import { LABELS } from '../data/labels'
 
 vi.mock('../lib/supabase', () => ({
   supabase: {
@@ -54,6 +55,48 @@ function renderBoard(token = TOKEN) {
     </MemoryRouter>,
   )
 }
+
+describe('home-screen icon opens the member board', () => {
+  function renderApp(path) {
+    return render(
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/" element={<MemberLinkNotice />} />
+          <Route path="/m/:token" element={<MemberBoard />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  it('remembers a working link, and the start page goes back to it', async () => {
+    supabase.rpc.mockResolvedValue({ data: board(), error: null })
+    const first = renderBoard()
+    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN)
+    first.unmount()
+
+    renderApp('/') // what a home-screen icon opens
+    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(supabase.rpc).toHaveBeenLastCalledWith('get_member_board', { p_token: TOKEN })
+  })
+
+  it('forgets a link that stopped working, so the start page shows the normal message', async () => {
+    localStorage.setItem('tanda_member_token', TOKEN)
+    supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'not found' } })
+    const first = renderApp('/')
+    expect(await screen.findByText('Link not found')).toBeTruthy()
+    expect(localStorage.getItem('tanda_member_token')).toBeNull()
+    first.unmount()
+
+    renderApp('/')
+    expect(screen.getByText(LABELS.en.useLinkTitle)).toBeTruthy()
+  })
+
+  it('shows the normal landing page on a phone that never opened a link', () => {
+    renderApp('/')
+    expect(screen.getByText(LABELS.en.useLinkTitle)).toBeTruthy()
+  })
+})
 
 afterEach(() => {
   vi.useRealTimers()

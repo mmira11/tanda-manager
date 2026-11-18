@@ -1,7 +1,8 @@
 // Landing page. The old public roster lived here; members now open /m/:token.
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { LABELS } from '../../data/labels'
+import { savedMemberToken } from '../../utils/memberLink'
 
 export default function MemberLinkNotice() {
   const [lang, setLang] = useState(() => {
@@ -14,6 +15,10 @@ export default function MemberLinkNotice() {
     try { localStorage.setItem('tanda_lang', next) } catch { /* private mode */ }
     setLang(next)
   }
+
+  // Opened from a home-screen icon on a phone that already opened its member link.
+  const saved = savedMemberToken()
+  if (saved) return <Navigate to={`/m/${encodeURIComponent(saved)}`} replace />
 
   return (
     <div className="min-h-screen bg-cream flex items-center justify-center p-4">
