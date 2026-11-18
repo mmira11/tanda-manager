@@ -500,6 +500,31 @@ function assertNoAnonRealtime(database) {
   console.log(`${database}: no table publishes realtime changes and anon can't read payments, members, rounds, or cycles`)
 }
 
+// Phase 4: the reminder log keeps one row per member, window, round, and mode; opt-outs need
+// a real E.164 phone; signed-in non-admins see nothing. Fake data only.
+function assertReminderTables(database) {
+  const insert = `
+    insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status)
+    select r.cycle_id, r.id, r.recipient_member_id, 'friday_noon', r.collect_date, true, 'dry_run'
+    from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
+    on conflict (round_id, member_id, kind, dry_run) do nothing
+    returning id;`
+  const first = psqlText(database, insert).trim().split('\n').filter(Boolean).length
+  const second = psqlText(database, insert).trim().split('\n').filter(Boolean).length
+  if (first !== 1 || second !== 0) throw new Error(`${database}: reminder_log dedupe failed (${first}, ${second})`)
+
+  const badPhone = psqlFails(database, `insert into public.sms_opt_outs (phone_e164) values ('5550100002');`)
+  if (!/check constraint/.test(badPhone)) throw new Error(`${database}: a non-E.164 opt-out was accepted: ${badPhone}`)
+  psqlText(database, `insert into public.sms_opt_outs (phone_e164, keyword) values ('+15550100002', 'STOP') on conflict do nothing;`)
+
+  const seen = psqlText(database, `
+    set role authenticated;
+    select (select count(*) from public.reminder_log) || ',' || (select count(*) from public.sms_opt_outs);
+  `).trim().split('\n').pop()
+  if (seen !== '0,0') throw new Error(`${database}: a non-admin could read reminder rows (${seen})`)
+  console.log(`${database}: reminder_log logs each window once; opt-outs need E.164; non-admins see neither`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -515,6 +540,7 @@ assertScheduleValidation(fresh)
 assertRoundsNotMembers(fresh)
 assertUnevenRounds(fresh)
 assertNoAnonRealtime(fresh)
+assertReminderTables(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -530,6 +556,7 @@ assertScheduleValidation(legacy)
 assertRoundsNotMembers(legacy)
 assertUnevenRounds(legacy)
 assertNoAnonRealtime(legacy)
+assertReminderTables(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
