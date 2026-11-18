@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, act, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MemberBoard from '../components/public/MemberBoard'
@@ -72,7 +72,8 @@ describe('home-screen icon opens the member board', () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     const first = renderBoard()
     expect(await screen.findByText('Pending')).toBeTruthy()
-    expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN)
+    // The link is saved in an effect after the board shows; wait for it rather than racing it.
+    await waitFor(() => expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN))
     first.unmount()
 
     renderApp('/') // what a home-screen icon opens
@@ -85,7 +86,7 @@ describe('home-screen icon opens the member board', () => {
     supabase.rpc.mockResolvedValue({ data: null, error: { code: 'P0002', message: 'not found' } })
     const first = renderApp('/')
     expect(await screen.findByText('Link not found')).toBeTruthy()
-    expect(localStorage.getItem('tanda_member_token')).toBeNull()
+    await waitFor(() => expect(localStorage.getItem('tanda_member_token')).toBeNull())
     first.unmount()
 
     renderApp('/')
@@ -97,7 +98,7 @@ describe('home-screen icon opens the member board', () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     renderApp(`/m/${TOKEN}`)
     expect(await screen.findByText('Pending')).toBeTruthy()
-    expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN)
+    await waitFor(() => expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN))
 
     await user.click(screen.getByRole('button', { name: /Profile/ }))
     await user.click(screen.getByText('Forget this phone'))
