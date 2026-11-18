@@ -21,6 +21,9 @@ export default function DashboardView({
   zelle,
   collectDate,
   reviews,
+  participants,
+  onMatchReview,
+  onDismissReview,
   readOnly,
   onSelectMember,
 }) {
@@ -66,7 +69,14 @@ export default function DashboardView({
         onSelect={onSelectMember}
       />
 
-      <NeedsReviewCard items={reviews} t={t} />
+      <NeedsReviewCard
+        items={reviews}
+        t={t}
+        participants={participants}
+        readOnly={readOnly}
+        onMatch={onMatchReview}
+        onDismiss={onDismissReview}
+      />
     </div>
   )
 }

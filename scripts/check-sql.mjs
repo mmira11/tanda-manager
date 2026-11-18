@@ -527,6 +527,68 @@ function assertReminderTables(database) {
   console.log(`${database}: reminder_log logs each window once; opt-outs need E.164; non-admins see neither`)
 }
 
+// Phase 5: a detected Zelle payment only becomes paid through confirm_zelle_match, which is
+// all-or-nothing. Uses Familia Demo (Maria and Rosa, payment rows in both rounds). Fake data only.
+function assertZelleConfirm(database) {
+  const cycle = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const maria = `(select id from public.members where access_token = 'member-token-maria1')`
+  const round1 = `(select id from public.rounds where cycle_id = '${cycle}' and round_number = 1)`
+  const mustFail = (label, sql, pattern) => {
+    const error = psqlFails(database, sql)
+    if (!pattern.test(error)) throw new Error(`${database}: ${label} failed for the wrong reason: ${error}`)
+  }
+
+  const grants = psqlText(database, `
+    select has_function_privilege('anon', 'public.confirm_zelle_match(uuid, uuid)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.confirm_zelle_match(uuid, uuid)', 'execute')::text;
+  `).trim()
+  if (grants !== 'falsetrue') throw new Error(`${database}: confirm_zelle_match grants are ${grants}`)
+
+  psqlText(database, `
+    insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, received_at, sender_name, amount, raw_subject, suggested_member_id, match_reason)
+    values ('eeeeeeee-0000-0000-0000-000000000001', '${cycle}', ${round1}, 'gmail-fake-001', '2099-06-01T19:00:00Z',
+            'Maria Demo', 100, 'Maria Demo sent you $100.00', ${maria}, 'first_name');
+  `)
+  mustFail('queueing the same email twice', `
+    insert into public.pending_review (cycle_id, gmail_message_id, sender_name) values ('${cycle}', 'gmail-fake-001', 'Maria Demo');
+  `, /pending_review_gmail_message_id/)
+
+  const paidBefore = psqlText(database, `select count(*) from public.payments where round_id = ${round1} and paid_at is not null;`).trim()
+  if (paidBefore !== '0') throw new Error(`${database}: queueing a review paid someone (${paidBefore})`)
+
+  psqlText(database, `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000001', ${maria});`)
+  const after = psqlText(database, `
+    select (select string_agg(p.source || '@' || to_char(p.paid_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI'), ',')
+              from public.payments p where p.round_id = ${round1} and p.paid_at is not null)
+      || '|' || (select status from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000001')
+      || '|' || (select count(*) from public.payer_aliases where member_id = ${maria} and alias_name = 'Maria Demo');
+  `).trim()
+  if (after !== 'auto@2099-06-01T19:00|matched|1') throw new Error(`${database}: confirm result was ${after}`)
+
+  mustFail('matching the same item twice', `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000001', ${maria});`, /already handled/)
+  psqlText(database, `
+    insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, sender_name, amount)
+    values ('eeeeeeee-0000-0000-0000-000000000002', '${cycle}', ${round1}, 'gmail-fake-002', 'Tess Demo', 100);
+    insert into public.members (cycle_id, slot, display_first_name, access_token)
+    values ('${cycle}', 99, 'Tess', 'zelle-token-tess-001');
+  `)
+  mustFail('matching someone from another cycle', `
+    select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000002',
+      (select id from public.members where access_token = 'expiry-token-recent1'));
+  `, /not in this cycle/)
+  // Tess has no payment row in round 1: the whole confirm must roll back.
+  mustFail('matching a member with no payment row', `
+    select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000002',
+      (select id from public.members where access_token = 'zelle-token-tess-001'));
+  `, /no payment for this round/)
+  const untouched = psqlText(database, `
+    select (select status from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000002')
+      || '|' || (select count(*) from public.payer_aliases a join public.members m on m.id = a.member_id where m.access_token = 'zelle-token-tess-001');
+  `).trim()
+  if (untouched !== 'pending|0') throw new Error(`${database}: a failed confirm left changes: ${untouched}`)
+  console.log(`${database}: confirm_zelle_match pays only the chosen member, once, and rolls back on failure`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -543,6 +605,7 @@ assertRoundsNotMembers(fresh)
 assertUnevenRounds(fresh)
 assertNoAnonRealtime(fresh)
 assertReminderTables(fresh)
+assertZelleConfirm(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -559,6 +622,7 @@ assertRoundsNotMembers(legacy)
 assertUnevenRounds(legacy)
 assertNoAnonRealtime(legacy)
 assertReminderTables(legacy)
+assertZelleConfirm(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')

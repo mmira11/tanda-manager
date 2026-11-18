@@ -106,7 +106,7 @@ export function useCycleStore() {
             .in('round_id', rounds.map(r => r.id)))
         : []
       const reviews = check(await supabase.from('pending_review')
-        .select('id, sender_name, amount, raw_subject, status, received_at')
+        .select('id, sender_name, amount, raw_subject, status, received_at, suggested_member_id, round_id, match_reason')
         .eq('cycle_id', cycle.id)
         .eq('status', 'pending'))
       if (request !== requestRef.current) return
@@ -345,10 +345,24 @@ export function useCycleStore() {
     await load(cycle.id)
   }, [load])
 
+  // Phase 5: the admin confirms a detected Zelle payment. confirm_zelle_match (migration 014)
+  // marks that member paid for the review's round, closes the review, and saves the alias.
+  const confirmMatch = useCallback((reviewId, memberId) => run(null, async () => {
+    check(await supabase.rpc('confirm_zelle_match', { p_review: reviewId, p_member: memberId }))
+  }), [run])
+
+  const dismissReview = useCallback((reviewId) => run(
+    null,
+    async () => check(await supabase.from('pending_review')
+      .update({ status: 'ignored', resolved_at: new Date().toISOString() }).eq('id', reviewId)),
+  ), [run])
+
   return {
     store,
     cycles,
     pendingReview,
+    confirmMatch,
+    dismissReview,
     loading,
     error,
     clearError: () => setError(''),
