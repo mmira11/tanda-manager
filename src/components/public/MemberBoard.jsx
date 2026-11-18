@@ -1,10 +1,10 @@
 // Private member page. Reads get_member_board only — never the payments table —
 // and refetches on a timer and when the tab regains focus, so a mark-paid shows up.
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { LABELS } from '../../data/labels'
 import { useMemberBoard } from '../../hooks/useMemberBoard'
-import { forgetMemberToken, rememberMemberToken } from '../../utils/memberLink'
+import { forgetMemberToken, forgetThisDevice, rememberMemberToken } from '../../utils/memberLink'
 import MemberExperience from './MemberExperience'
 
 function savedLang() {
@@ -63,6 +63,7 @@ function boardComplete(board, today = new Date()) {
 
 export default function MemberBoard() {
   const { token } = useParams()
+  const navigate = useNavigate()
   const { board, status } = useMemberBoard(token)
   const [lang, setLang] = useState(() => savedLang() || 'en')
   usePrivateHead()
@@ -104,6 +105,10 @@ export default function MemberBoard() {
       lang={lang}
       onToggleLang={toggleLang}
       complete={boardComplete(board)}
+      onForgetDevice={() => {
+        forgetThisDevice()
+        navigate('/', { replace: true })
+      }}
     />
   )
 }

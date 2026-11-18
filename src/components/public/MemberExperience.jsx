@@ -39,7 +39,7 @@ function CalendarIcon() {
   )
 }
 
-export default function MemberExperience({ board, lang, onToggleLang, complete = false }) {
+export default function MemberExperience({ board, lang, onToggleLang, complete = false, onForgetDevice }) {
   const t = LABELS[lang] || LABELS.en
   const locale = dateLocale(lang)
   const [tab, setTab] = useState('home')
@@ -222,6 +222,15 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
                 {payoutDate ? `${formatDate(payoutDate, locale)} · ${formatMoney(stats.pot)}` : '—'}
               </p>
             </div>
+            {onForgetDevice && (
+              <div className="pt-4 border-t border-stone-100">
+                <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide">{t.notYou}</p>
+                <button type="button" onClick={onForgetDevice} className="mt-2 min-h-11 px-4 rounded-full border border-stone-300 text-stone-700 text-sm font-semibold">
+                  {t.forgetDevice}
+                </button>
+                <p className="mt-2 text-xs text-stone-500">{t.forgetDeviceHint}</p>
+              </div>
+            )}
           </section>
         )}
       </main>
