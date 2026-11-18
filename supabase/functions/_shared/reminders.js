@@ -140,13 +140,18 @@ export async function twilioSignature(authToken, url, params) {
   return btoa(binary)
 }
 
+// Compares two secrets without stopping at the first different character.
+export function timingSafeEqual(a, b) {
+  const x = String(a ?? '')
+  const y = String(b ?? '')
+  let diff = x.length ^ y.length
+  for (let i = 0; i < Math.max(x.length, y.length); i += 1) diff |= (x.charCodeAt(i) || 0) ^ (y.charCodeAt(i) || 0)
+  return diff === 0
+}
+
 export async function verifyTwilioSignature(authToken, url, params, header) {
   if (!authToken || !header) return false
-  const expected = await twilioSignature(authToken, url, params)
-  if (expected.length !== header.length) return false
-  let diff = 0
-  for (let i = 0; i < expected.length; i += 1) diff |= expected.charCodeAt(i) ^ header.charCodeAt(i)
-  return diff === 0
+  return timingSafeEqual(await twilioSignature(authToken, url, params), header)
 }
 
 // One run of the hourly job.
@@ -173,6 +178,8 @@ export async function runReminders({ now, dryRun, cycles, optedOut, log, sendSms
         skipped: skipped.map(({ member, reason }) => `${member.display_first_name} (${reason})`),
       }
       for (const { member, to } of send) {
+        // Re-check: an earlier send in this run may have just found this number unsubscribed.
+        if (optedOut.has(to)) { entry.skipped.push(`${member.display_first_name} (opted_out)`); continue }
         const id = await log.claim({
           cycle_id: cycle.id, round_id: round.id, member_id: member.id, kind: window,
           local_date: clock.date, dry_run: !live, status: live ? 'sending' : 'dry_run',
@@ -188,7 +195,10 @@ export async function runReminders({ now, dryRun, cycles, optedOut, log, sendSms
           entry.texted.push(member.display_first_name)
         } catch (error) {
           // 21610: Twilio already has this number as unsubscribed. Record it so we stop trying.
-          if (String(error?.code) === '21610') await log.optOut(to)
+          if (String(error?.code) === '21610') {
+            optedOut.add(to) // honor it for the rest of this run too (e.g. two members sharing a phone)
+            await log.optOut(to)
+          }
           await log.finish(id, { status: 'failed', error: String(error?.code || error?.message || error) })
           entry.failed.push(member.display_first_name)
         }

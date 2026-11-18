@@ -2,8 +2,18 @@
 import { describe, it, expect, vi } from 'vitest'
 import {
   localClock, dueWindow, recipients, renderMessage, isDryRun, optOutAction, toE164,
-  twilioSignature, verifyTwilioSignature, runReminders,
+  twilioSignature, verifyTwilioSignature, runReminders, timingSafeEqual,
 } from '../../supabase/functions/_shared/reminders.js'
+
+describe('timingSafeEqual (cron secret and Twilio signature)', () => {
+  it('matches only identical strings, including different lengths and empties', () => {
+    expect(timingSafeEqual('test-cron-secret', 'test-cron-secret')).toBe(true)
+    expect(timingSafeEqual('test-cron-secret', 'test-cron-secreT')).toBe(false)
+    expect(timingSafeEqual('test-cron-secret', 'test-cron-secret-longer')).toBe(false)
+    expect(timingSafeEqual('', 'test-cron-secret')).toBe(false)
+    expect(timingSafeEqual(null, '')).toBe(true) // the function also requires CRON_SECRET to be set
+  })
+})
 
 // Collection is Friday 2026-11-20 (PST, UTC-8) and Friday 2026-07-10 (PDT, UTC-7).
 const round = { id: 'r1', round_number: 3, collect_date: '2026-11-20' }
@@ -176,6 +186,27 @@ describe('runReminders', () => {
     })
     expect(sendSms).toHaveBeenCalledTimes(2) // nothing new: Bea already sent, Cal now opted out
     expect(again[0].skipped).toContain('Cal (opted_out)')
+  })
+
+  it('stops texting a number in the same run once Twilio says it is unsubscribed', async () => {
+    // Two members share one fake phone; the first send comes back as 21610.
+    const shared = [
+      { id: 's1', display_first_name: 'Gil', phone: '5550100007' },
+      { id: 's2', display_first_name: 'Hal', phone: '555-010-0007' },
+    ]
+    const sharedPayments = [
+      { round_id: 'r1', member_id: 's1', paid_at: null },
+      { round_id: 'r1', member_id: 's2', paid_at: null },
+    ]
+    const optedOut = new Set()
+    const sendSms = vi.fn(async () => { throw Object.assign(new Error('unsubscribed'), { code: 21610 }) })
+    const summary = await runReminders({
+      now: fridayNoon, dryRun: false, optedOut, log: fakeLog(), sendSms,
+      cycles: [{ cycle, settings: { enabled: true }, templates: [], rounds: [round], members: shared, payments: sharedPayments }],
+    })
+    expect(sendSms).toHaveBeenCalledTimes(1)
+    expect(optedOut.has('+15550100007')).toBe(true)
+    expect(summary[0]).toMatchObject({ failed: ['Gil'], texted: [], skipped: ['Hal (opted_out)'] })
   })
 
   it('does nothing outside a window', async () => {

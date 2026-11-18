@@ -10,7 +10,7 @@
 // Live sends also need reminder_settings.enabled = true for that cycle.
 // Deploy with: supabase functions deploy send-reminders --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { isDryRun, runReminders } from '../_shared/reminders.js'
+import { isDryRun, runReminders, timingSafeEqual } from '../_shared/reminders.js'
 
 function check<T>({ data, error }: { data: T; error: unknown }): T {
   if (error) throw error
@@ -19,7 +19,7 @@ function check<T>({ data, error }: { data: T; error: unknown }): T {
 
 Deno.serve(async (req) => {
   const secret = Deno.env.get('CRON_SECRET')
-  if (!secret || req.headers.get('x-cron-secret') !== secret) {
+  if (!secret || !timingSafeEqual(req.headers.get('x-cron-secret') ?? '', secret)) {
     return new Response('forbidden', { status: 403 })
   }
 
