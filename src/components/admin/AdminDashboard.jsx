@@ -56,7 +56,7 @@ export default function AdminDashboard({ email, onNewCycle }) {
   const recipient = store.participants.find(person => person.slot === current?.recipientSlot)
   const payoutDay = current ? getDayName(current.payoutDate, dateLocale(lang)) : ''
   const deadline = current ? deadlineOnDate(current.collectDate, store.config.timezone).getTime() : null
-  const countdownLabel = deadline ? compactCountdown(getCountdownTo(deadline, now)) : ''
+  const countdownLabel = deadline && !readOnly ? compactCountdown(getCountdownTo(deadline, now)) : ''
   const queue = buildReminderView({
     now,
     timezone: store.config.timezone,

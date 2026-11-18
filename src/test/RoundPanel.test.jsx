@@ -231,3 +231,25 @@ describe('History → Edit', () => {
     expect(screen.queryByText('Round 6')).toBeNull()
   })
 })
+
+describe('archived cycle dashboard', () => {
+  // Two days before round 1's collection (2026-06-12), the active dashboard counts down.
+  const renderOn = async status => {
+    vi.setSystemTime(new Date('2026-06-10T09:00:00'))
+    const db = seedCycle({ names: NAMES.slice(0, 3), contribution: 100 })
+    db.cycles[0].status = status
+    fake = installFakeSupabase({ db })
+    render(<StoreProvider><Loaded /></StoreProvider>)
+    await screen.findByText('Round 1 of 3')
+  }
+
+  it('shows the collection countdown on an active cycle', async () => {
+    await renderOn('active')
+    expect(screen.getByText(/^2d \d+h$/)).toBeTruthy()
+  })
+
+  it('hides the countdown once the cycle is archived', async () => {
+    await renderOn('archived')
+    expect(screen.queryByText(/^\d+d \d+h$|^\d+h \d+m$/)).toBeNull()
+  })
+})
