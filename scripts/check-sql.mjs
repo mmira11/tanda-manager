@@ -509,8 +509,10 @@ function assertReminderTables(database) {
     from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
     on conflict (round_id, member_id, kind, dry_run) do nothing
     returning id;`
-  const first = psqlText(database, insert).trim().split('\n').filter(Boolean).length
-  const second = psqlText(database, insert).trim().split('\n').filter(Boolean).length
+  // psql also prints the "INSERT 0 n" tag, so count only the returned ids.
+  const ids = sql => psqlText(database, sql).split('\n').filter(line => /^[0-9a-f-]{36}$/.test(line.trim())).length
+  const first = ids(insert)
+  const second = ids(insert)
   if (first !== 1 || second !== 0) throw new Error(`${database}: reminder_log dedupe failed (${first}, ${second})`)
 
   const badPhone = psqlFails(database, `insert into public.sms_opt_outs (phone_e164) values ('5550100002');`)
