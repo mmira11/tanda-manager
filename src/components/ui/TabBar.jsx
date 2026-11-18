@@ -34,9 +34,17 @@ export default function TabBar({ tabs, active, onChange, tone = 'light', label }
               type="button"
               onClick={() => onChange(tab.id)}
               aria-current={selected ? 'page' : undefined}
-              className={`flex flex-col items-center justify-center gap-0.5 min-h-14 px-1 text-[11px] font-semibold ${selected ? on : ''}`}
+              aria-label={tab.badge > 0 ? `${tab.label}, ${tab.badge}` : undefined}
+              className={`relative flex flex-col items-center justify-center gap-0.5 min-h-14 px-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint ${selected ? on : ''}`}
             >
-              <Icon name={tab.icon} />
+              <span className="relative">
+                <Icon name={tab.icon} />
+                {tab.badge > 0 && (
+                  <span className="absolute -top-1.5 -right-3 min-w-[1.125rem] h-[1.125rem] px-1 rounded-full bg-amberwarm text-ink text-[10px] font-bold leading-none flex items-center justify-center">
+                    {tab.badge}
+                  </span>
+                )}
+              </span>
               <span>{tab.label}</span>
             </button>
           )

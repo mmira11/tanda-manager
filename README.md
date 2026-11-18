@@ -45,14 +45,15 @@ React 18 · Vite 5 · React Router v6 · Tailwind CSS · Supabase (Postgres, Aut
 
 ## What's next
 
-Nudges on the dashboard still open the phone's SMS app. Scheduled reminders and Zelle detection run as Supabase Edge Functions, described below. A detected Zelle payment stays in Needs review until you press Match.
+Nudges on the dashboard still open the phone's SMS app. The reminder queue below lists who to text at each window, and you send those from your phone with one tap. Zelle detection runs as a Supabase Edge Function. A detected Zelle payment stays in Needs review until you press Match.
 
 ## Supabase setup
 
-1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `015`). Each migration is safe to run more than once.
+1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `017`). Each migration is safe to run more than once.
    - `013` — reminder log and SMS opt-outs
    - `014` — Zelle `pending_review` rows and `confirm_zelle_match`
    - `015` — the round the admin picked, an optional dismiss reason, and `round_timing` (`early`, `on_time`, `after_deadline`, `late`)
+   - `017` — reminder queue (`channel`, `queued` / `skipped`, admin RPCs). Queue mode needs this.
 
 Apply `014` before `015`. `015` replaces the two-argument `confirm_zelle_match` from `014`.
 2. **Turn on email sign-in.** Under Authentication → Providers, enable Email. The app sends magic links only and won't create new users (`shouldCreateUser: false`), so create your own user under Authentication → Users.
@@ -73,19 +74,33 @@ These are separate from the static site. Deploy them with the Supabase CLI after
 
 ### send-reminders
 
-Needs migration `013`. Decides in America/Los_Angeles whether a reminder window is due, then logs the dry run or sends through Twilio.
+Queue mode is the default. No Twilio account is required. At each window the function writes one `reminder_log` row per person (`status = queued`, `channel = queue`) and sends nothing. The dashboard shows **Send reminders now** / **Enviar recordatorios** while that window's list still has someone unpaid. Each row shows the bilingual message plus SMS and WhatsApp buttons. Tapping one opens your phone and marks that row sent. **Mark all done** clears the remaining unpaid rows. **Skip** drops one person. Someone who pays first stays on the card greyed out and is left out of the count.
+
+Windows, in `America/Los_Angeles`: Thursday 9:00 everyone with a phone, Friday 12:00 and Friday 6:00 unpaid only. The same rules live in `supabase/functions/_shared/reminders.js`. The hourly job only writes during that exact hour. **Build reminder list now** on the dashboard uses the open window, so the list still appears if cron did not run. A person is never queued twice for the same round and window.
+
+The old Twilio sender is still in the function. It stays off unless that cycle's `reminder_settings.channel` is `twilio` and `REMINDERS_DRY_RUN` is `false`.
+
+Setup:
+
+1. Run migration `017_reminder_queue.sql` (after `013`).
+2. Deploy the function: `supabase functions deploy send-reminders --no-verify-jwt`
+3. Set `CRON_SECRET` to a long random string. The cron job sends it as `x-cron-secret`.
+4. Run `supabase/cron/schedule_send_reminders.sql` once. It turns on `pg_cron` and `pg_net` and reads two Vault secrets (`tanda_reminders_url`, `tanda_cron_secret`). It is safe to run more than once. It is not a migration: CI's Postgres has no `pg_cron`.
 
 ```bash
 supabase functions deploy send-reminders --no-verify-jwt
-supabase secrets set \
-  CRON_SECRET=... \
-  REMINDERS_DRY_RUN=true \
-  TWILIO_ACCOUNT_SID=... \
-  TWILIO_AUTH_TOKEN=... \
-  TWILIO_MESSAGING_SERVICE_SID=...
+supabase secrets set CRON_SECRET=...
 ```
 
-`TWILIO_FROM_NUMBER` can stand in for `TWILIO_MESSAGING_SERVICE_SID`. Keep `REMINDERS_DRY_RUN` set to anything other than `false` until a dry run looks right. Then run `supabase/cron/schedule_send_reminders.sql` in the SQL editor. That file turns on `pg_cron` and `pg_net` and reads two Vault secrets (`tanda_reminders_url`, `tanda_cron_secret`). It is safe to run more than once. It is not a migration: CI's Postgres has no `pg_cron`.
+To let the hour job fill the list, turn reminders on for the cycle. Until then, use **Build reminder list now**.
+
+```sql
+insert into public.reminder_settings (cycle_id, enabled, channel)
+values ('<cycle-uuid>', true, 'queue')
+on conflict (cycle_id) do update set enabled = true, channel = 'queue';
+```
+
+`REMINDERS_DRY_RUN=true` previews the queue and does not write rows to send. Leave that secret unset for normal queue use. Do not set Twilio keys unless you set `channel` to `twilio`.
 
 ### twilio-inbound
 

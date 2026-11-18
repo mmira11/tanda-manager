@@ -1,8 +1,9 @@
 // Phase 4 reminder logic (supabase/functions/_shared/reminders.js). Fake names and 555-01xx phones only.
 import { describe, it, expect, vi } from 'vitest'
 import {
-  localClock, dueWindow, recipients, renderMessage, isDryRun, optOutAction, toE164,
+  localClock, dueWindow, activeReminderWindow, recipients, renderMessage, isDryRun, optOutAction, toE164,
   twilioSignature, verifyTwilioSignature, runReminders, timingSafeEqual,
+  resolveChannel, reminderAction, dispatchReminder, planReminderQueue,
 } from '../../supabase/functions/_shared/reminders.js'
 
 describe('timingSafeEqual (cron secret and Twilio signature)', () => {
@@ -36,6 +37,16 @@ describe('window selection in Los Angeles time', () => {
   })
   it('follows the cycle reminder_settings times', () => {
     expect(dueWindow(at('2026-11-19T18:00:00Z'), round, { thursday_all_at: '10:00' })).toBe('thursday_all')
+  })
+  it('keeps the latest opened window so the list can be finished after the hour', () => {
+    expect(activeReminderWindow(at('2026-11-19T16:00:00Z'), round)).toBeNull() // Thu 08:00
+    expect(activeReminderWindow(at('2026-11-19T17:00:00Z'), round)).toBe('thursday_all')
+    expect(activeReminderWindow(at('2026-11-19T18:00:00Z'), round)).toBe('thursday_all') // Thu 10:00, past the exact hour
+    expect(activeReminderWindow(at('2026-11-20T17:00:00Z'), round)).toBe('thursday_all') // Fri 09:00
+    expect(activeReminderWindow(at('2026-11-20T20:00:00Z'), round)).toBe('friday_noon')
+    expect(activeReminderWindow(at('2026-11-20T21:00:00Z'), round)).toBe('friday_noon') // Fri 13:00
+    expect(activeReminderWindow(at('2026-11-21T02:00:00Z'), round)).toBe('friday_evening')
+    expect(activeReminderWindow(at('2026-11-21T18:00:00Z'), round)).toBeNull()
   })
 })
 
@@ -134,6 +145,44 @@ const cycle = { id: 'c1', name: 'Demo Tanda', contribution: 150, zelle_destinati
 const fridayNoon = new Date('2026-11-20T20:00:00Z')
 const data = settings => [{ cycle, settings, templates: [], rounds: [round], members, payments }]
 
+describe('channel dispatcher', () => {
+  it('defaults to queue and only calls Twilio when that channel is selected', async () => {
+    const sendSms = vi.fn(async () => 'SM-test')
+    expect(resolveChannel({})).toBe('queue')
+    expect(resolveChannel({ channel: 'TWILIO' })).toBe('twilio')
+    expect(resolveChannel({ channel: 'twilio' }, 'queue')).toBe('queue')
+    expect(resolveChannel({ channel: 'sms' })).toBe('queue')
+    await expect(dispatchReminder({ channel: 'queue', to: '+15550100002', body: 'Hi', sendSms })).resolves.toEqual({ channel: 'queue' })
+    expect(sendSms).not.toHaveBeenCalled()
+    await expect(dispatchReminder({ channel: 'twilio', to: '+15550100002', body: 'Hi', sendSms })).resolves.toEqual({ channel: 'twilio', sid: 'SM-test' })
+    expect(sendSms).toHaveBeenCalledWith('+15550100002', 'Hi')
+  })
+
+  it('queues unless dry-run is explicit, and keeps Twilio off unless it is turned on', () => {
+    expect(reminderAction({ channel: 'queue', enabled: true, hasDryRunEnv: true, dryRunEnv: undefined })).toBe('queue')
+    expect(reminderAction({ channel: 'queue', enabled: true, hasDryRunEnv: true, dryRunEnv: 'true' })).toBe('dry_run')
+    expect(reminderAction({ channel: 'twilio', enabled: true, hasDryRunEnv: true, dryRunEnv: undefined })).toBe('dry_run')
+    expect(reminderAction({ channel: 'twilio', enabled: true, hasDryRunEnv: true, dryRunEnv: 'false' })).toBe('twilio')
+    expect(reminderAction({ channel: 'queue', enabled: false, hasDryRunEnv: true })).toBe('dry_run')
+  })
+})
+
+describe('manual reminder list', () => {
+  it('builds the open window after the exact hour, unpaid members only', () => {
+    const plan = planReminderQueue({
+      now: new Date('2026-11-20T21:00:00Z'), // Fri 13:00 in Los Angeles, noon window still open
+      cycle, settings: { enabled: true }, rounds: [round], members, payments, optedOut: new Set(),
+    })
+    expect(plan.window).toBe('friday_noon')
+    expect(plan.rows.map(row => row.member_id)).toEqual(['m2', 'm3'])
+    expect(plan.rows.every(row => row.kind === 'friday_noon')).toBe(true)
+    const early = planReminderQueue({
+      now: new Date('2026-11-19T16:00:00Z'), cycle, settings: {}, rounds: [round], members, payments, optedOut: new Set(),
+    })
+    expect(early).toMatchObject({ window: null, rows: [] })
+  })
+})
+
 describe('runReminders', () => {
   it('dry run logs who would be texted and the window, and sends nothing', async () => {
     const log = fakeLog()
@@ -172,7 +221,7 @@ describe('runReminders', () => {
       return 'SM-test-1'
     })
     const summary = await runReminders({
-      now: fridayNoon, dryRun: false, cycles: data({ enabled: true }), optedOut: new Set(), log, sendSms,
+      now: fridayNoon, dryRun: false, cycles: data({ enabled: true, channel: 'twilio' }), optedOut: new Set(), log, sendSms,
     })
     expect(sendSms).toHaveBeenCalledTimes(2)
     expect(sendSms.mock.calls[0][0]).toBe('+15550100002')
@@ -182,7 +231,7 @@ describe('runReminders', () => {
     expect(log.rows.map(r => r.status)).toEqual(['sent', 'failed'])
 
     const again = await runReminders({
-      now: fridayNoon, dryRun: false, cycles: data({ enabled: true }), optedOut: new Set(['+15550100003']), log, sendSms,
+      now: fridayNoon, dryRun: false, cycles: data({ enabled: true, channel: 'twilio' }), optedOut: new Set(['+15550100003']), log, sendSms,
     })
     expect(sendSms).toHaveBeenCalledTimes(2) // nothing new: Bea already sent, Cal now opted out
     expect(again[0].skipped).toContain('Cal (opted_out)')
@@ -202,11 +251,51 @@ describe('runReminders', () => {
     const sendSms = vi.fn(async () => { throw Object.assign(new Error('unsubscribed'), { code: 21610 }) })
     const summary = await runReminders({
       now: fridayNoon, dryRun: false, optedOut, log: fakeLog(), sendSms,
-      cycles: [{ cycle, settings: { enabled: true }, templates: [], rounds: [round], members: shared, payments: sharedPayments }],
+      cycles: [{ cycle, settings: { enabled: true, channel: 'twilio' }, templates: [], rounds: [round], members: shared, payments: sharedPayments }],
     })
     expect(sendSms).toHaveBeenCalledTimes(1)
     expect(optedOut.has('+15550100007')).toBe(true)
     expect(summary[0]).toMatchObject({ failed: ['Gil'], texted: [], skipped: ['Hal (opted_out)'] })
+  })
+
+  it('queue mode writes one queued row per recipient and does not double-queue or text', async () => {
+    const log = fakeLog()
+    const sendSms = vi.fn()
+    const first = await runReminders({
+      now: fridayNoon, dryRun: false, cycles: data({ enabled: true }), optedOut: new Set(), log, sendSms,
+    })
+    const second = await runReminders({
+      now: fridayNoon, dryRun: false, cycles: data({ enabled: true }), optedOut: new Set(), log, sendSms,
+    })
+    expect(sendSms).not.toHaveBeenCalled()
+    expect(first[0]).toMatchObject({ mode: 'queue', channel: 'queue', queued: ['Bea', 'Cal'], texted: [] })
+    expect(second[0].queued).toEqual([])
+    expect(second[0].alreadyLogged).toEqual(['Bea', 'Cal'])
+    expect(log.rows).toHaveLength(2)
+    expect(log.rows.map(row => [row.status, row.channel, row.dry_run])).toEqual([
+      ['queued', 'queue', false],
+      ['queued', 'queue', false],
+    ])
+    expect(JSON.stringify(first)).not.toMatch(/555/)
+  })
+
+  it('with the secrets unset, the queue is live and Twilio stays a dry run', async () => {
+    const sendSms = vi.fn(async () => 'SM-test')
+    const log = fakeLog()
+    const queued = await runReminders({
+      now: fridayNoon, hasDryRunEnv: true, dryRunEnv: undefined, dryRun: true,
+      cycles: data({ enabled: true }), optedOut: new Set(), log, sendSms,
+    })
+    expect(queued[0].mode).toBe('queue')
+    expect(log.rows.map(row => row.status)).toEqual(['queued', 'queued'])
+    expect(sendSms).not.toHaveBeenCalled()
+
+    const preview = await runReminders({
+      now: fridayNoon, hasDryRunEnv: true, dryRunEnv: undefined,
+      cycles: data({ enabled: true, channel: 'twilio' }), optedOut: new Set(), log: fakeLog(), sendSms,
+    })
+    expect(preview[0].mode).toBe('dry_run')
+    expect(sendSms).not.toHaveBeenCalled()
   })
 
   it('does nothing outside a window', async () => {
