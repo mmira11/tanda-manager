@@ -61,7 +61,6 @@ export function canNudge(member) {
 function fallbackRounds(board) {
   if (!board || Array.isArray(board)) return []
   const current = board.current_round
-  const me = board.me
   const steps = []
   if (current?.round_number != null) {
     steps.push({
@@ -71,28 +70,14 @@ function fallbackRounds(board) {
       recipient_first_name: current.recipient_first_name || '',
     })
   }
-  const ownNumber = me?.slot
-  const listed = steps.some(step => Number(step.number) === Number(ownNumber))
-  if (me?.payout_date && ownNumber != null && !listed) {
-    steps.push({
-      number: ownNumber,
-      collect_date: null,
-      payout_date: me.payout_date,
-      recipient_first_name: me.display_first_name || '',
-    })
-  } else if (!steps.length && me?.payout_date) {
-    steps.push({
-      number: ownNumber || 1,
-      collect_date: null,
-      payout_date: me.payout_date,
-      recipient_first_name: me.display_first_name || '',
-    })
-  }
+  // A member's slot is not their round number (N9): a member can receive in any round,
+  // more than once, or not at all. Without the rounds list, show only the current round;
+  // the member's own payout date is still shown on the home card from me.payout_date.
   return steps
 }
 
 // Prefer the rounds array from get_member_board. If that migration is not applied
-// yet, keep the current round and this member's payout turn so the stepper is not blank.
+// yet, keep the current round so the stepper is not blank.
 export function memberRoundSteps(rounds, currentRound, board) {
   const provided = Array.isArray(rounds) && rounds.length > 0 ? rounds : fallbackRounds(board)
   const current = currentRound ?? board?.current_round?.round_number ?? null

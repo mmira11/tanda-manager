@@ -101,7 +101,7 @@ describe('member round list', () => {
     ])
   })
 
-  it('falls back to the current round and this member payout when rounds are missing', () => {
+  it('falls back to the current round only, never guessing a round from the slot (N9)', () => {
     const board = {
       current_round: {
         round_number: 3,
@@ -109,13 +109,25 @@ describe('member round list', () => {
         payout_date: '2099-06-02',
         recipient_first_name: 'Luis',
       },
+      // Slot 1, but Maria's payout is in a later round. The fallback used to invent "round 1, past".
       me: { slot: 1, display_first_name: 'Maria', payout_date: '2099-08-20' },
     }
     const steps = memberRoundSteps(undefined, null, board)
     expect(steps.map(step => [step.round, step.name, step.state, step.payoutDate])).toEqual([
-      [1, 'Maria', 'past', '2099-08-20'],
       [3, 'Luis', 'current', '2099-06-02'],
     ])
     expect(memberRoundSteps([], 3, board)).toEqual(steps)
+  })
+
+  it('lists every round when there are more rounds than members (N9)', () => {
+    // Two members, three rounds: Ada receives twice.
+    const rounds = [
+      { number: 1, collect_date: '2099-06-01', payout_date: '2099-06-02', recipient_first_name: 'Ada' },
+      { number: 2, collect_date: '2099-06-15', payout_date: '2099-06-16', recipient_first_name: 'Bea' },
+      { number: 3, collect_date: '2099-06-29', payout_date: '2099-06-30', recipient_first_name: 'Ada' },
+    ]
+    expect(memberRoundSteps(rounds, 2, {}).map(step => [step.round, step.name, step.state])).toEqual([
+      [1, 'Ada', 'past'], [2, 'Bea', 'current'], [3, 'Ada', 'future'],
+    ])
   })
 })
