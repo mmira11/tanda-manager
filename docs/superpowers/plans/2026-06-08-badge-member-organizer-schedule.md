@@ -123,23 +123,23 @@ Append these four tests to the `describe('useTandaStore', ...)` block in `src/te
   it('updates lastModified after any mutation', () => {
     const { result } = renderHook(() => useTandaStore())
     expect(result.current.store.lastModified).toBe(0)
-    act(() => result.current.updateParticipant(1, { name: 'Edy' }))
+    act(() => result.current.updateParticipant(1, { name: 'Alex' }))
     expect(result.current.store.lastModified).toBeGreaterThan(0)
   })
 
   it('addMember adds a 13th participant with correct slot, name, phone', () => {
     const { result } = renderHook(() => useTandaStore())
-    act(() => result.current.addMember('Alice', '5551234567'))
+    act(() => result.current.addMember('Alice', '5550100123'))
     expect(result.current.store.participants).toHaveLength(13)
     const added = result.current.store.participants[12]
     expect(added.slot).toBe(13)
     expect(added.name).toBe('Alice')
-    expect(added.phone).toBe('5551234567')
+    expect(added.phone).toBe('5550100123')
   })
 
   it('addMember appends a round 14 days after the last round and patches all existing rounds', () => {
     const { result } = renderHook(() => useTandaStore())
-    act(() => result.current.addMember('Alice', '5551234567'))
+    act(() => result.current.addMember('Alice', '5550100123'))
     expect(result.current.store.rounds).toHaveLength(13)
     const newRound = result.current.store.rounds[12]
     expect(newRound.round).toBe(13)
