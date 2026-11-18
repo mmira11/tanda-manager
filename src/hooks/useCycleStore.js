@@ -345,9 +345,10 @@ export function useCycleStore() {
     await load(cycle.id)
   }, [load])
 
-  // Phase 5: the admin confirms a detected Zelle payment. confirm_zelle_match (migrations
-  // 014 and 015) marks that member paid for the round the admin picked, closes the review,
-  // and saves the alias. Dismiss sets the row aside and can store a short reason.
+  // Phase 5: the admin confirms a detected Zelle payment. confirm_zelle_match marks that
+  // member paid for the round the admin picked, closes the review, and saves the alias.
+  // Migration 016 refuses an archived cycle before it changes a payment. Dismiss sets the
+  // row aside and can store a short reason.
   const confirmMatch = useCallback((reviewId, memberId, roundId) => run(null, async () => {
     check(await supabase.rpc('confirm_zelle_match', {
       p_review: reviewId,

@@ -156,12 +156,15 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
       if (name === 'is_admin') return { data: isAdmin, error: null }
       if (name === 'import_cycle') return importCycle(args.p_plan)
       if (name === 'confirm_zelle_match') {
-        // Mirrors migrations 014 and 015: the admin's round, if any, replaces the stored one.
-        // Then mark that member paid for the review's round, close the review, save the alias.
+        // Mirrors migrations 014, 015, and 016: an archived cycle fails before any write.
+        // Otherwise the admin's round, if any, replaces the stored one. Then mark that member
+        // paid for the review's round, close the review, and save the alias.
         const fail = message => ({ data: null, error: { message } })
         const review = tables.pending_review.find(r => r.id === args.p_review)
         if (!review) return fail('Review not found')
         if (review.status !== 'pending') return fail('This item was already handled')
+        const cycle = tables.cycles.find(c => c.id === review.cycle_id)
+        if (cycle && cycle.status === 'archived') return fail('cycle is archived')
         if (args.p_round) {
           const round = tables.rounds.find(r => r.id === args.p_round && r.cycle_id === review.cycle_id)
           if (!round) return fail('That round is not in this cycle')
