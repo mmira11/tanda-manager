@@ -31,6 +31,13 @@ end $$;
 create schema if not exists auth;
 create table if not exists auth.users (id uuid primary key);
 create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
+-- Supabase ships an empty supabase_realtime publication; mirror it so the N8 guard is meaningful.
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+end $$;
 `
 
 function psqlArgs(database, tuplesOnly) {
@@ -469,6 +476,30 @@ function assertUnevenRounds(database) {
   console.log(`${database}: a member paid out twice sees their next payout; a member with none still gets a board`)
 }
 
+// N8: an anonymous client can't receive payment or member events. Realtime postgres_changes
+// only exist for tables in the supabase_realtime publication and are filtered by the
+// subscriber's read access, so check both: no app table is published, and anon can't read any.
+function assertNoAnonRealtime(database) {
+  const published = psqlText(database, `
+    select coalesce(string_agg(tablename, ','), '') from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public';
+  `).trim()
+  if (published) throw new Error(`${database}: tables publish realtime changes: ${published}`)
+
+  const exposed = psqlText(database, `
+    select coalesce(string_agg(c.relname, ','), '') from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    where n.nspname = 'public' and c.relkind = 'r'
+      and (not c.relrowsecurity or has_table_privilege('anon', c.oid, 'select'));
+  `).trim()
+  if (exposed) throw new Error(`${database}: anon can read, or RLS is off for: ${exposed}`)
+
+  for (const table of ['payments', 'members', 'rounds', 'cycles']) {
+    const error = psqlFails(database, `set role anon; select count(*) from public.${table};`)
+    if (!/permission denied/.test(error)) throw new Error(`${database}: anon read of ${table} failed for the wrong reason: ${error}`)
+  }
+  console.log(`${database}: no table publishes realtime changes and anon can't read payments, members, rounds, or cycles`)
+}
+
 const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
@@ -483,6 +514,7 @@ assertSoftDeleteReorder(fresh)
 assertScheduleValidation(fresh)
 assertRoundsNotMembers(fresh)
 assertUnevenRounds(fresh)
+assertNoAnonRealtime(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -497,6 +529,7 @@ assertSoftDeleteReorder(legacy)
 assertScheduleValidation(legacy)
 assertRoundsNotMembers(legacy)
 assertUnevenRounds(legacy)
+assertNoAnonRealtime(legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, and legacy schema + 003 onward (002 skipped) x2')
