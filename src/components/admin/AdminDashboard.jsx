@@ -142,6 +142,9 @@ export default function AdminDashboard({ email, onNewCycle }) {
             collectDate={current?.collectDate}
             reviews={pendingReview}
             participants={store.participants}
+            rounds={store.rounds}
+            locale={dateLocale(lang)}
+            timeZone={store.config.timezone}
             onMatchReview={confirmMatch}
             onDismissReview={dismissReview}
             readOnly={readOnly}

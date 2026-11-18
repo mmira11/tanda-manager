@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen, renderHook, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
-  parseZelleEmail, normalizeName, matchMember, roundFor, scanEmails, verifySender, senderDomain, googleAuthResults,
+  parseZelleEmail, normalizeName, matchMember, assignRound, scanEmails, verifySender, senderDomain, googleAuthResults,
+  gmailSearchRange, gmailQuery, pickCycle,
 } from '../../supabase/functions/_shared/zelle.js'
 
 describe('second security review: planted headers and parser tricks', () => {
@@ -115,27 +116,91 @@ describe('matchMember', () => {
   })
 })
 
-describe('roundFor', () => {
+describe('assignRound (collection windows)', () => {
+  // Round 1 collects Jun 12 and pays out Jun 13. Round 2 collects Jun 26 and pays out Jun 27.
+  // Early window opens 7 days before a collect date. Late grace runs 7 days after a payout.
+  // A day in both the previous grace and the next early window goes to the next round.
   const rounds = [
-    { id: 'r1', round_number: 1, payout_date: '2026-06-13' },
-    { id: 'r2', round_number: 2, payout_date: '2026-06-27' },
+    { id: 'r1', round_number: 1, collect_date: '2026-06-12', payout_date: '2026-06-13' },
+    { id: 'r2', round_number: 2, collect_date: '2026-06-26', payout_date: '2026-06-27' },
   ]
-  it('uses the first round paying out on or after the day it arrived', () => {
-    expect(roundFor('2026-06-12T19:30:00Z', rounds).id).toBe('r1')
-    expect(roundFor('2026-06-14T08:00:00Z', rounds).id).toBe('r2') // Jun 14, 1:00 AM in LA
+  const on = (day, time = '19:00:00') => assignRound(`${day}T${time}Z`, rounds)
+
+  it('assigns a payment made early, on collection day, after the deadline, and after payout', () => {
+    expect(on('2026-06-10')).toMatchObject({ round: { id: 'r1' }, timing: 'early' })
+    expect(on('2026-06-05')).toMatchObject({ round: { id: 'r1' }, timing: 'early' }) // first day of the window
+    expect(on('2026-06-12')).toMatchObject({ round: { id: 'r1' }, timing: 'on_time' })
+    expect(on('2026-06-13')).toMatchObject({ round: { id: 'r1' }, timing: 'after_deadline' })
+    expect(on('2026-06-16')).toMatchObject({ round: { id: 'r1' }, timing: 'late' })
+    expect(on('2026-06-22')).toMatchObject({ round: { id: 'r2' }, timing: 'early' })
+    expect(on('2026-06-26')).toMatchObject({ round: { id: 'r2' }, timing: 'on_time' })
+    expect(on('2026-06-27')).toMatchObject({ round: { id: 'r2' }, timing: 'after_deadline' })
+    expect(on('2026-06-30')).toMatchObject({ round: { id: 'r2' }, timing: 'late' })
+    expect(on('2026-07-04')).toMatchObject({ round: { id: 'r2' }, timing: 'late' }) // last grace day
   })
-  it('counts the day in Los Angeles time, not UTC', () => {
-    // 06:30 UTC on Jun 14 is 11:30 PM on Jun 13 in LA: still round 1's payout day.
-    expect(roundFor('2026-06-14T06:30:00Z', rounds).id).toBe('r1')
+
+  it('counts the day in Los Angeles time', () => {
+    // 06:30 UTC on Jun 13 is 11:30 PM on Jun 12 in LA: still round 1's collection day.
+    expect(assignRound('2026-06-13T06:30:00Z', rounds)).toMatchObject({ round: { id: 'r1' }, timing: 'on_time' })
+    // 08:00 UTC on Jun 14 is 1:00 AM on Jun 14 in LA: the day after round 1 paid out, so late for round 1.
+    expect(assignRound('2026-06-14T08:00:00Z', rounds)).toMatchObject({ round: { id: 'r1' }, timing: 'late' })
   })
-  it('falls back to the last round after the schedule ends', () => {
-    expect(roundFor('2026-12-01T00:00:00Z', rounds).id).toBe('r2')
+
+  it('gives an overlap day to the next collection', () => {
+    // Jun 19 is inside round 1's 7-day grace and is the first day of round 2's early window.
+    expect(on('2026-06-19')).toMatchObject({ round: { id: 'r2' }, timing: 'early' })
+  })
+
+  it('does not assign mail from before the window or after the last grace day', () => {
+    expect(on('2026-06-04').timing).toBe('out_of_window')
+    expect(on('2026-06-04').round).toBeNull()
+    expect(on('2026-07-05')).toMatchObject({ round: null, timing: 'out_of_window' })
+    expect(assignRound('2026-06-12T19:00:00Z', []).timing).toBe('out_of_window')
+  })
+})
+
+describe('gmail search window and active-cycle choice', () => {
+  const rounds = [
+    { round_number: 2, collect_date: '2026-06-26', payout_date: '2026-06-27' },
+    { round_number: 1, collect_date: '2026-06-12', payout_date: '2026-06-13' },
+  ]
+
+  it('searches from 7 days before the first collection date through today', () => {
+    // 06:30 UTC on Jun 13 is still Jun 12 in Los Angeles, so "today" is Jun 12 and before: is Jun 13.
+    const bounds = gmailSearchRange({ rounds, now: new Date('2026-06-13T06:30:00Z') })
+    expect(bounds).toEqual({ windowStart: '2026-06-05', after: '2026/06/05', before: '2026/06/13' })
+    expect(gmailQuery('subject:zelle', bounds)).toBe('subject:zelle after:2026/06/05 before:2026/06/13')
+  })
+
+  it('passes a caller date range through as written', () => {
+    const bounds = gmailSearchRange({
+      rounds, now: new Date('2026-06-13T06:30:00Z'), after: '2026/06/01', before: '2026/06/20',
+    })
+    expect(bounds.after).toBe('2026/06/01')
+    expect(bounds.before).toBe('2026/06/20')
+  })
+
+  it('picks the earliest active cycle when more than one is active', () => {
+    const cycles = [
+      { id: 'b', status: 'active', start_date: '2026-08-01' },
+      { id: 'a', status: 'active', start_date: '2026-06-01' },
+    ]
+    expect(pickCycle(cycles)).toMatchObject({
+      cycle: { id: 'a' }, ambiguous: true, choice: 'earliest_start_date', activeCount: 2,
+    })
+    expect(pickCycle(cycles, 'b')).toMatchObject({ cycle: { id: 'b' }, choice: 'requested', ambiguous: false })
+    // Same start date: the smaller id wins, whatever order the rows arrived in.
+    expect(pickCycle([
+      { id: 'm', status: 'active', start_date: '2026-06-01' },
+      { id: 'c', status: 'active', start_date: '2026-06-01' },
+    ]).cycle.id).toBe('c')
+    expect(pickCycle([{ id: 'x', status: 'archived', start_date: '2026-01-01' }]).cycle).toBeNull()
   })
 })
 
 describe('scanEmails', () => {
   const cycle = { id: 'c1', contribution: 150, timezone: 'America/Los_Angeles' }
-  const rounds = [{ id: 'r1', round_number: 1, payout_date: '2026-06-13' }]
+  const rounds = [{ id: 'r1', round_number: 1, collect_date: '2026-06-12', payout_date: '2026-06-13' }]
   const emails = [
     { id: 'g1', ...genuine, subject: 'Ana Prueba sent you $150.00', receivedAt: at },
     { id: 'g2', ...genuine, subject: 'Zoe Nadie sent you $150.00', receivedAt: at },
@@ -148,10 +213,10 @@ describe('scanEmails', () => {
     const insert = vi.fn()
     const result = await scanEmails({ emails, cycle, rounds, members, aliases: [], existingIds: new Set(['g4']), dryRun: true, insert, allowedDomains: BANK })
     expect(insert).not.toHaveBeenCalled()
-    expect(result.counts).toEqual({ seen: 5, unverified: 1, parsed: 2, unparsed: 1, alreadyQueued: 1, queued: 2, suggested: 1, unmatched: 1 })
+    expect(result.counts).toEqual({ seen: 5, unverified: 1, parsed: 2, unparsed: 1, outOfWindow: 0, alreadyQueued: 1, queued: 2, suggested: 1, unmatched: 1 })
     expect(result.preview).toEqual([
-      { round: 1, sender: 'Ana Prueba', amount: 150, suggested: 'Ana', reason: 'first_name' },
-      { round: 1, sender: 'Zoe Nadie', amount: 150, suggested: null, reason: 'no_match' },
+      { round: 1, timing: 'on_time', sender: 'Ana Prueba', amount: 150, suggested: 'Ana', reason: 'first_name' },
+      { round: 1, timing: 'on_time', sender: 'Zoe Nadie', amount: 150, suggested: null, reason: 'no_match' },
     ])
     expect(JSON.stringify(result.counts)).not.toMatch(/Ana|Zoe|150/)
   })
@@ -161,7 +226,7 @@ describe('scanEmails', () => {
     const result = await scanEmails({ emails: emails.slice(0, 2), cycle, rounds, members, aliases: [], existingIds: new Set(), dryRun: false, insert: async row => rows.push(row), allowedDomains: BANK })
     expect(result.preview).toBeUndefined()
     expect(rows).toHaveLength(2)
-    expect(rows.every(row => row.status === 'pending' && row.round_id === 'r1')).toBe(true)
+    expect(rows.every(row => row.status === 'pending' && row.round_id === 'r1' && row.round_timing === 'on_time')).toBe(true)
     expect(rows[0]).toMatchObject({ gmail_message_id: 'g1', email_from: 'notify.bank.example', suggested_member_id: 'm1', sender_name: 'Ana Prueba', amount: 150 })
     expect(Object.keys(rows[0])).not.toContain('paid_at')
   })
@@ -174,12 +239,29 @@ describe('scanEmails', () => {
     expect(spoof.counts).toMatchObject({ unverified: 1, queued: 0 })
     expect(noList.counts).toMatchObject({ unverified: 2, queued: 0 })
   })
+
+  it('reports mail from before the collection window and does not queue it', async () => {
+    const insert = vi.fn()
+    const old = { id: 'old', ...genuine, subject: 'Ana Prueba sent you $150.00', receivedAt: '2026-01-01T19:00:00Z' }
+    const result = await scanEmails({
+      emails: [old], cycle, rounds, members, aliases: [], existingIds: new Set(), dryRun: true, insert, allowedDomains: BANK,
+    })
+    expect(insert).not.toHaveBeenCalled()
+    expect(result.counts).toMatchObject({ parsed: 1, outOfWindow: 1, queued: 0, suggested: 0 })
+    expect(result.preview).toEqual([
+      { round: null, timing: 'out_of_window', sender: 'Ana Prueba', amount: 150, suggested: null, reason: 'out_of_window' },
+    ])
+  })
 })
 
-describe('Match and Not tanda on the Needs-review card', () => {
+describe('Match and Dismiss on the Needs-review card', () => {
   const t = LABELS.en
   const participants = [{ id: 'm1', slot: 1, name: 'Ana' }, { id: 'm2', slot: 2, name: 'Beto' }]
-  const item = { id: 'rv1', sender_name: 'Ana Prueba', amount: 150, suggested_member_id: 'm1', round_id: 'r1' }
+  const rounds = [{ id: 'r1', round: 1 }, { id: 'r2', round: 2 }]
+  const item = {
+    id: 'rv1', sender_name: 'Ana Prueba', amount: 150, suggested_member_id: 'm1', round_id: 'r1',
+    round_timing: 'late', received_at: '2026-06-13T06:30:00.000Z',
+  }
 
   it('pre-selects the suggestion and calls onMatch with the chosen member', async () => {
     const onMatch = vi.fn()
@@ -188,7 +270,55 @@ describe('Match and Not tanda on the Needs-review card', () => {
     expect(screen.getByLabelText('Who paid?').value).toBe('m1')
     await user.selectOptions(screen.getByLabelText('Who paid?'), 'm2')
     await user.click(screen.getByText('Match'))
-    expect(onMatch).toHaveBeenCalledWith('rv1', 'm2')
+    expect(onMatch).toHaveBeenCalledWith('rv1', 'm2', 'r1')
+  })
+
+  it('shows the email date in the cycle time zone and matches the round the admin picks', async () => {
+    const onMatch = vi.fn()
+    const user = userEvent.setup()
+    render(
+      <NeedsReviewCard
+        items={[item]} t={t} participants={participants} rounds={rounds}
+        locale="en-US" timeZone="America/Los_Angeles" onMatch={onMatch} onDismiss={vi.fn()}
+      />,
+    )
+    // 06:30 UTC on Jun 13 is 11:30 PM on Jun 12 in Los Angeles.
+    const detail = screen.getByText(/Jun/)
+    expect(detail.textContent).toContain('12')
+    expect(detail.textContent).toContain('2026')
+    expect(detail.textContent).toContain('Round 1')
+    expect(detail.textContent).toContain('Late')
+    await user.selectOptions(screen.getByLabelText('Round'), 'r2')
+    expect(screen.getByLabelText('Round').value).toBe('r2')
+    expect(detail.textContent).toContain('Round 2')
+    expect(detail.textContent).not.toContain('Late')
+    await user.click(screen.getByText('Match'))
+    expect(onMatch).toHaveBeenCalledWith('rv1', 'm1', 'r2')
+  })
+
+  it('labels Dismiss in Spanish and formats the date for es-US', () => {
+    render(
+      <NeedsReviewCard
+        items={[item]} t={LABELS.es} participants={participants} rounds={rounds}
+        locale="es-US" timeZone="America/Los_Angeles" onMatch={vi.fn()} onDismiss={vi.fn()}
+      />,
+    )
+    expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy()
+    expect(screen.getByLabelText('Motivo (opcional)')).toBeTruthy()
+    const detail = screen.getByText(/12/)
+    expect(detail.textContent.toLowerCase()).toContain('jun')
+    expect(detail.textContent).not.toContain('Fri')
+    expect(detail.textContent).toContain('Ronda 1')
+    expect(detail.textContent).toContain('Tarde')
+  })
+
+  it('passes an optional dismiss reason and pays nobody from the button', async () => {
+    const onDismiss = vi.fn()
+    const user = userEvent.setup()
+    render(<NeedsReviewCard items={[item]} t={t} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={onDismiss} />)
+    await user.type(screen.getByLabelText('Reason (optional)'), 'partial')
+    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(onDismiss).toHaveBeenCalledWith('rv1', 'partial')
   })
 
   it('keeps Match disabled until a member is chosen, and on archived cycles', () => {
@@ -241,14 +371,30 @@ describe('Match and Not tanda on the Needs-review card', () => {
     expect(fake.tables.pending_review.find(r => r.id === 'rv4').status).toBe('matched')
   })
 
-  it('dismissReview marks it not tanda without paying anyone', async () => {
+  it('dismissReview sets the row aside, keeps an optional reason, and pays nobody', async () => {
     const db = seedCycle({ names: ['Ana'], contribution: 150 })
     db.pending_review = [{ id: 'rv2', cycle_id: 'cycle-1', round_id: 'round-1', status: 'pending', sender_name: 'Zoe Nadie', amount: 20, received_at: at }]
     const fake = installFakeSupabase({ db })
     const { result } = renderHook(() => useCycleStore())
     await waitFor(() => expect(result.current.loading).toBe(false))
-    await act(() => result.current.dismissReview('rv2'))
-    expect(fake.tables.pending_review[0].status).toBe('ignored')
+    await act(() => result.current.dismissReview('rv2', 'combined'))
+    expect(fake.tables.pending_review[0]).toMatchObject({ status: 'ignored', dismiss_reason: 'combined' })
     expect(fake.tables.payments.every(p => p.paid_at === null)).toBe(true)
+  })
+
+  it('confirmMatch pays the round the admin picked', async () => {
+    const db = seedCycle({ names: ['Ana', 'Beto'], contribution: 150 })
+    db.pending_review = [{
+      id: 'rv5', cycle_id: 'cycle-1', round_id: 'round-1', status: 'pending', sender_name: 'Ana Prueba',
+      amount: 150, received_at: at, suggested_member_id: 'member-1',
+    }]
+    const fake = installFakeSupabase({ db })
+    const { result } = renderHook(() => useCycleStore())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    await act(() => result.current.confirmMatch('rv5', 'member-1', 'round-2'))
+    expect(fake.tables.payments.find(p => p.round_id === 'round-2' && p.member_id === 'member-1'))
+      .toMatchObject({ paid_at: at, source: 'auto' })
+    expect(fake.tables.payments.find(p => p.round_id === 'round-1' && p.member_id === 'member-1').paid_at).toBeNull()
+    expect(fake.tables.pending_review[0]).toMatchObject({ status: 'matched', round_id: 'round-2' })
   })
 })

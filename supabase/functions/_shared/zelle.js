@@ -101,13 +101,121 @@ function localDate(date, timeZone) {
   return `${get('year')}-${get('month')}-${get('day')}`
 }
 
-// The round a payment received at this moment belongs to: the first round whose payout day
-// (in the cycle's time zone) is on or after the day it arrived, else the last round.
-export function roundFor(receivedAt, rounds, timeZone = 'America/Los_Angeles') {
-  if (!rounds.length) return null
+// Calendar-day math on 'YYYY-MM-DD', in UTC so a DST change cannot shift the day.
+// Duplicated from src/utils/rounds.js: this file is imported by Deno and by Vitest and has no imports.
+function addDays(iso, days) {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// How early a payment can arrive and still belong to the first collection, and how long
+// after a payout it can still be late for that round. The Gmail search uses the same lead.
+export const WINDOW_LEAD_DAYS = 7
+export const LATE_GRACE_DAYS = 7
+
+// Which round a payment belongs to, by collection window (cycle time zone, calendar days).
+//
+// Primary rule: the round whose collect_date is the nearest date on or after the payment
+// day. That covers a payment made early and a payment made on collection day.
+//
+// A payment made after that collection still stays with the round when:
+//   - the day is on or before the round's payout_date ("after_deadline"), or
+//   - the day is after the payout, within LATE_GRACE_DAYS, and still before the next
+//     round's early window (collect_date minus WINDOW_LEAD_DAYS). That one is "late".
+// On a day that falls in both the previous round's grace and the next round's early
+// window, the next round wins. The admin can change the round before pressing Match.
+//
+// A day before the first collect_date minus WINDOW_LEAD_DAYS, or after the last
+// payout_date plus LATE_GRACE_DAYS, is "out_of_window". It is not given to round 1
+// or to the last round.
+//
+// → { round, timing } where timing is early | on_time | after_deadline | late | out_of_window.
+export function assignRound(receivedAt, rounds, timeZone = 'America/Los_Angeles') {
+  const ordered = [...(rounds || [])]
+    .filter(r => r && r.collect_date && r.payout_date)
+    .sort((a, b) => a.round_number - b.round_number)
+  if (!ordered.length || !receivedAt || Number.isNaN(new Date(receivedAt).getTime())) {
+    return { round: null, timing: 'out_of_window' }
+  }
   const day = localDate(new Date(receivedAt), timeZone)
-  const ordered = [...rounds].sort((a, b) => a.round_number - b.round_number)
-  return ordered.find(r => r.payout_date >= day) || ordered[ordered.length - 1]
+  const first = ordered[0]
+  if (day < addDays(first.collect_date, -WINDOW_LEAD_DAYS)) {
+    return { round: null, timing: 'out_of_window' }
+  }
+
+  const upcomingIndex = ordered.findIndex(r => r.collect_date >= day)
+  if (upcomingIndex === -1) {
+    const last = ordered[ordered.length - 1]
+    if (day <= last.payout_date) {
+      return { round: last, timing: day > last.collect_date ? 'after_deadline' : 'on_time' }
+    }
+    if (day <= addDays(last.payout_date, LATE_GRACE_DAYS)) return { round: last, timing: 'late' }
+    return { round: null, timing: 'out_of_window' }
+  }
+
+  const upcoming = ordered[upcomingIndex]
+  const prev = ordered[upcomingIndex - 1]
+  if (prev && day <= prev.payout_date) return { round: prev, timing: 'after_deadline' }
+  if (prev && day > prev.payout_date) {
+    const lateUntil = addDays(prev.payout_date, LATE_GRACE_DAYS)
+    const earlyFrom = addDays(upcoming.collect_date, -WINDOW_LEAD_DAYS)
+    if (day <= lateUntil && day < earlyFrom) return { round: prev, timing: 'late' }
+  }
+  if (day < upcoming.collect_date) return { round: upcoming, timing: 'early' }
+  return { round: upcoming, timing: 'on_time' }
+}
+
+// Default Gmail search bounds. after: includes its day; before: excludes its day, so the
+// default before is the day after today in the cycle's time zone (today's mail is included).
+// A before/after the caller already sent is Gmail's own form and is passed through.
+// windowStart is the first day that may be assigned to a round.
+export function gmailSearchRange({ rounds, timeZone = 'America/Los_Angeles', now = new Date(), after, before } = {}) {
+  const ordered = [...(rounds || [])]
+    .filter(r => r && r.collect_date)
+    .sort((a, b) => a.round_number - b.round_number)
+  const windowStart = ordered.length ? addDays(ordered[0].collect_date, -WINDOW_LEAD_DAYS) : null
+  const today = localDate(now, timeZone)
+  const slash = iso => iso.replace(/-/g, '/')
+  return {
+    windowStart,
+    after: after || (windowStart ? slash(windowStart) : null),
+    before: before || slash(addDays(today, 1)),
+  }
+}
+
+export function gmailQuery(base, bounds) {
+  let query = base || 'subject:zelle'
+  if (bounds?.after) query += ` after:${bounds.after}`
+  if (bounds?.before) query += ` before:${bounds.before}`
+  return query
+}
+
+// Several active cycles must not depend on whichever row the database returns first.
+// With no cycleId, use the earliest start_date, then the smallest id, and say so.
+// → { cycle, ambiguous, choice, activeCount }
+export function pickCycle(cycles, cycleId) {
+  const list = [...(cycles || [])]
+  if (cycleId) {
+    const cycle = list.find(c => c.id === cycleId) || null
+    return {
+      cycle,
+      ambiguous: false,
+      choice: cycle ? 'requested' : 'none',
+      activeCount: cycle ? 1 : 0,
+    }
+  }
+  const active = list.filter(c => c.status === 'active').sort((a, b) => {
+    const byStart = String(a.start_date || '').localeCompare(String(b.start_date || ''))
+    return byStart || String(a.id).localeCompare(String(b.id))
+  })
+  if (!active.length) return { cycle: null, ambiguous: false, choice: 'none', activeCount: 0 }
+  return {
+    cycle: active[0],
+    ambiguous: active.length > 1,
+    choice: active.length > 1 ? 'earliest_start_date' : 'only_active',
+    activeCount: active.length,
+  }
 }
 
 // The domain part of a From header: 'Bank <alerts@notify.bank.example>' → 'notify.bank.example'.
@@ -163,8 +271,12 @@ export function verifySender({ from, authResults }, allowedDomains) {
 // insert(row) writes one pending_review row (ignored when gmail_message_id already exists).
 // In a dry run nothing is written and `preview` lists what would be queued, for the caller only.
 export async function scanEmails({ emails, cycle, rounds, members, aliases, existingIds, dryRun, insert, allowedDomains }) {
-  const counts = { seen: emails.length, unverified: 0, parsed: 0, unparsed: 0, alreadyQueued: 0, queued: 0, suggested: 0, unmatched: 0 }
+  const counts = {
+    seen: emails.length, unverified: 0, parsed: 0, unparsed: 0,
+    outOfWindow: 0, alreadyQueued: 0, queued: 0, suggested: 0, unmatched: 0,
+  }
   const preview = []
+  const zone = cycle.timezone || 'America/Los_Angeles'
   for (const email of emails) {
     if (existingIds.has(email.id)) { counts.alreadyQueued += 1; continue }
     const sender = verifySender(email, allowedDomains)
@@ -172,13 +284,25 @@ export async function scanEmails({ emails, cycle, rounds, members, aliases, exis
     const parsed = parseZelleEmail(email)
     if (!parsed) { counts.unparsed += 1; continue }
     counts.parsed += 1
-    const round = roundFor(parsed.receivedAt, rounds, cycle.timezone || 'America/Los_Angeles')
+    const { round, timing } = assignRound(parsed.receivedAt, rounds, zone)
+    // Mail from before the collection window is reported and never given a round.
+    if (!round || timing === 'out_of_window') {
+      counts.outOfWindow += 1
+      if (dryRun) {
+        preview.push({
+          round: null, timing: 'out_of_window', sender: parsed.senderName,
+          amount: parsed.amount, suggested: null, reason: 'out_of_window',
+        })
+      }
+      continue
+    }
     const { memberId, reason } = matchMember({ ...parsed, contribution: cycle.contribution, members, aliases })
     if (memberId) counts.suggested += 1
     else counts.unmatched += 1
     const row = {
       cycle_id: cycle.id,
-      round_id: round?.id ?? null,
+      round_id: round.id,
+      round_timing: timing,
       gmail_message_id: email.id,
       email_from: sender.domain,
       received_at: new Date(parsed.receivedAt).toISOString(),
@@ -191,7 +315,10 @@ export async function scanEmails({ emails, cycle, rounds, members, aliases, exis
     }
     if (dryRun) {
       const name = members.find(m => m.id === memberId)?.display_first_name || null
-      preview.push({ round: round?.round_number ?? null, sender: parsed.senderName, amount: parsed.amount, suggested: name, reason })
+      preview.push({
+        round: round.round_number, timing, sender: parsed.senderName,
+        amount: parsed.amount, suggested: name, reason,
+      })
     } else {
       await insert(row)
     }

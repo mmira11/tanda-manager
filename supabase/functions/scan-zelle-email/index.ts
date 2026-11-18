@@ -15,12 +15,20 @@
 // POST body (all optional):
 //   { "dryRun": true }            default; parses and matches, writes nothing, returns a preview
 //   { "dryRun": false }           queues new emails in pending_review
-//   { "cycleId": "…" }            a specific cycle (for example last cycle); default the active one
-//   { "after": "2026/06/01", "before": "2026/11/20" }   limit the Gmail search to a date range
-// The function log carries counts only. The preview (names, amounts) goes only to the caller.
+//   { "cycleId": "…" }            a specific cycle (for example last cycle). With no cycleId, the
+//                                only active cycle is used. If several are active, the one
+//                                with the earliest start_date (then the smallest id) is used
+//                                and the response reports that choice.
+//   { "after": "2026/06/01", "before": "2026/11/20" }   limit the Gmail search. With no after,
+//                                the search starts 7 days before the cycle's first collection
+//                                date. With no before, it runs through today. Mail before that
+//                                window is counted as out_of_window and is not given a round.
+// The date window is also what keeps the sequential Gmail fetch (capped at 1,000 messages)
+// from walking the whole inbox. The function log carries counts only. The preview (names,
+// amounts) goes only to the caller.
 // Deploy with: supabase functions deploy scan-zelle-email --no-verify-jwt
 import { createClient } from 'npm:@supabase/supabase-js@2'
-import { googleAuthResults, scanEmails } from '../_shared/zelle.js'
+import { gmailQuery, gmailSearchRange, googleAuthResults, pickCycle, scanEmails } from '../_shared/zelle.js'
 import { timingSafeEqual } from '../_shared/reminders.js'
 
 type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[]; headers?: { name: string; value: string }[] }
@@ -72,6 +80,7 @@ async function fetchEmails(token: string, query: string) {
     const json = await res.json()
     for (const m of json.messages ?? []) ids.push(m.id)
     pageToken = json.nextPageToken ?? ''
+    // The search's after:/before: dates are what keep a busy inbox under this cap.
   } while (pageToken && ids.length < 1000)
 
   const emails = []
@@ -112,23 +121,36 @@ Deno.serve(async (req) => {
     auth: { persistSession: false },
   })
 
-  const cycleQuery = db.from('cycles').select('id, name, contribution, timezone, status')
+  const cycleQuery = db.from('cycles').select('id, name, contribution, timezone, status, start_date')
   const cycles = check(await (body?.cycleId ? cycleQuery.eq('id', body.cycleId) : cycleQuery.eq('status', 'active')))
-  const cycle = cycles?.[0]
+  const choice = pickCycle(cycles, body?.cycleId)
+  const cycle = choice.cycle
   if (!cycle) return Response.json({ dryRun, counts: null, note: 'no matching cycle' })
+  const cycleReport = {
+    cycleId: cycle.id,
+    cycleChoice: choice.choice,
+    activeCycles: choice.activeCount,
+    ...(choice.ambiguous ? { note: 'multiple active cycles; used the earliest start_date' } : {}),
+  }
 
   const [rounds, members] = await Promise.all([
-    db.from('rounds').select('id, round_number, payout_date').eq('cycle_id', cycle.id).then(check),
+    db.from('rounds').select('id, round_number, collect_date, payout_date').eq('cycle_id', cycle.id).then(check),
     db.from('members').select('id, display_first_name, removed_at').eq('cycle_id', cycle.id).then(check),
   ])
   const aliases = members.length
     ? check(await db.from('payer_aliases').select('member_id, alias_name').in('member_id', members.map(m => m.id)))
     : []
 
-  let query = Deno.env.get('ZELLE_GMAIL_QUERY') || 'subject:zelle'
-  if (body?.after) query += ` after:${body.after}`
-  if (body?.before) query += ` before:${body.before}`
-  const emails = await fetchEmails(await gmailToken(), query)
+  const bounds = gmailSearchRange({
+    rounds,
+    timeZone: cycle.timezone || 'America/Los_Angeles',
+    after: body?.after,
+    before: body?.before,
+  })
+  if (!bounds.after) {
+    return Response.json({ dryRun, cycle: cycle.name, ...cycleReport, counts: null, note: 'cycle has no collection date' })
+  }
+  const emails = await fetchEmails(await gmailToken(), gmailQuery(Deno.env.get('ZELLE_GMAIL_QUERY'), bounds))
 
   const existing = emails.length
     ? check(await db.from('pending_review').select('gmail_message_id').in('gmail_message_id', emails.map(e => e.id)))
@@ -142,6 +164,6 @@ Deno.serve(async (req) => {
     },
   })
   // Counts only in the function log: no names, amounts, subjects, or bodies.
-  console.log(JSON.stringify({ dryRun, cycleStatus: cycle.status, counts: result.counts }))
-  return Response.json({ dryRun, cycle: cycle.name, ...result })
+  console.log(JSON.stringify({ dryRun, ...cycleReport, counts: result.counts }))
+  return Response.json({ dryRun, cycle: cycle.name, search: { after: bounds.after, before: bounds.before }, ...cycleReport, ...result })
 })

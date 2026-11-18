@@ -22,6 +22,9 @@ export default function DashboardView({
   collectDate,
   reviews,
   participants,
+  rounds,
+  locale,
+  timeZone,
   onMatchReview,
   onDismissReview,
   readOnly,
@@ -73,6 +76,9 @@ export default function DashboardView({
         items={reviews}
         t={t}
         participants={participants}
+        rounds={rounds}
+        locale={locale}
+        timeZone={timeZone}
         readOnly={readOnly}
         onMatch={onMatchReview}
         onDismiss={onDismissReview}

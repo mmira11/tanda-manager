@@ -539,10 +539,12 @@ function assertZelleConfirm(database) {
   }
 
   const grants = psqlText(database, `
-    select has_function_privilege('anon', 'public.confirm_zelle_match(uuid, uuid)', 'execute')::text
-      || has_function_privilege('authenticated', 'public.confirm_zelle_match(uuid, uuid)', 'execute')::text;
+    select has_function_privilege('anon', 'public.confirm_zelle_match(uuid, uuid, uuid)', 'execute')::text
+      || has_function_privilege('authenticated', 'public.confirm_zelle_match(uuid, uuid, uuid)', 'execute')::text
+      || ',' || (select count(*)::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                 where n.nspname = 'public' and p.proname = 'confirm_zelle_match');
   `).trim()
-  if (grants !== 'falsetrue') throw new Error(`${database}: confirm_zelle_match grants are ${grants}`)
+  if (grants !== 'falsetrue,1') throw new Error(`${database}: confirm_zelle_match grants are ${grants}`)
 
   psqlText(database, `
     insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, received_at, sender_name, amount, raw_subject, suggested_member_id, match_reason)
@@ -608,7 +610,46 @@ function assertZelleConfirm(database) {
       || '|' || (select coalesce(paid_at::text, 'unpaid') from public.payments where round_id = ${round1} and member_id = ${rosa});
   `).trim()
   if (kept !== 'manual@2099-07-03T17:00|pending|unpaid') throw new Error(`${database}: amount/manual checks gave ${kept}`)
-  console.log(`${database}: confirm_zelle_match pays only the chosen member, once, at the exact amount, and rolls back on failure`)
+
+  // The admin's round replaces the one the scan stored. Maria's round 2 is still unpaid.
+  psqlText(database, `
+    insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, received_at, sender_name, amount, round_timing)
+    values ('eeeeeeee-0000-0000-0000-000000000006', '${cycle}', ${round1}, 'gmail-fake-006', '2099-07-03T19:00:00Z',
+            'Maria Demo', 100, 'late');
+  `)
+  psqlText(database, `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000006', ${maria}, ${round2});`)
+  const moved = psqlText(database, `
+    select (select (round_id = ${round2})::text from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000006')
+      || '|' || (select source from public.payments where round_id = ${round2} and member_id = ${maria} and paid_at is not null)
+      || '|' || (select count(*) from public.payments where round_id = ${round1} and member_id = ${maria} and source = 'auto');
+  `).trim()
+  if (moved !== 'true|auto|1') throw new Error(`${database}: chosen round was not applied (${moved})`)
+
+  psqlText(database, `
+    insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, sender_name, amount)
+    values ('eeeeeeee-0000-0000-0000-000000000007', '${cycle}', ${round1}, 'gmail-fake-007', 'Maria Demo', 100);
+  `)
+  mustFail('choosing a round from another cycle', `
+    select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000007', ${maria},
+      (select id from public.rounds where cycle_id <> '${cycle}' limit 1));
+  `, /not in this cycle/)
+  const stayed = psqlText(database, `select status from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000007';`).trim()
+  if (stayed !== 'pending') throw new Error(`${database}: a rejected round choice changed the review (${stayed})`)
+
+  const badTiming = psqlFails(database, `update public.pending_review set round_timing = 'nope' where id = 'eeeeeeee-0000-0000-0000-000000000007';`)
+  if (!/check constraint/.test(badTiming)) throw new Error(`${database}: a bad round_timing was stored: ${badTiming}`)
+  psqlText(database, `
+    update public.pending_review
+    set round_timing = 'late', dismiss_reason = 'partial', status = 'ignored'
+    where id = 'eeeeeeee-0000-0000-0000-000000000007';
+  `)
+  const noted = psqlText(database, `
+    select round_timing || '|' || dismiss_reason || '|' || status
+    from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000007';
+  `).trim()
+  if (noted !== 'late|partial|ignored') throw new Error(`${database}: timing/dismiss reason was ${noted}`)
+
+  console.log(`${database}: confirm_zelle_match pays only the chosen member, once, at the exact amount, for the round the admin picked`)
 }
 
 const fresh = 'tanda_sql_fresh'
