@@ -71,13 +71,13 @@ describe('home-screen icon opens the member board', () => {
   it('remembers a working link, and the start page goes back to it', async () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     const first = renderBoard()
-    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(await screen.findByText('$80 due')).toBeTruthy()
     // The link is saved in an effect after the board shows; wait for it rather than racing it.
     await waitFor(() => expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN))
     first.unmount()
 
     renderApp('/') // what a home-screen icon opens
-    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(await screen.findByText('$80 due')).toBeTruthy()
     expect(supabase.rpc).toHaveBeenLastCalledWith('get_member_board', { p_token: TOKEN })
   })
 
@@ -97,7 +97,7 @@ describe('home-screen icon opens the member board', () => {
     const user = userEvent.setup()
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     renderApp(`/m/${TOKEN}`)
-    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(await screen.findByText('$80 due')).toBeTruthy()
     await waitFor(() => expect(localStorage.getItem('tanda_member_token')).toBe(TOKEN))
 
     await user.click(screen.getByRole('button', { name: /Profile/ }))
@@ -124,7 +124,7 @@ describe('member board', () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     renderBoard()
 
-    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(await screen.findByText('$80 due')).toBeTruthy()
     expect(screen.getByText(/Hi, Ada!/)).toBeTruthy()
     expect(screen.getAllByText(/\$160/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Jun 2/).length).toBeGreaterThan(0)
@@ -144,15 +144,15 @@ describe('member board', () => {
     supabase.rpc.mockResolvedValue({ data: board(), error: null })
     const user = userEvent.setup()
     renderBoard()
-    await screen.findByText('Pending')
+    await screen.findByText('$80 due')
 
     await user.click(screen.getByLabelText('Toggle language'))
-    expect(screen.getByText('Pendiente')).toBeTruthy()
+    expect(screen.getByText('Debes $80')).toBeTruthy()
     expect(screen.getByText(/¡Hola, Ada!/)).toBeTruthy()
     expect(screen.getByLabelText('Cambiar idioma')).toBeTruthy()
 
     await user.click(screen.getByLabelText('Cambiar idioma'))
-    expect(screen.getByText('Pending')).toBeTruthy()
+    expect(screen.getByText('$80 due')).toBeTruthy()
   })
 
   it('flips to paid when the board is refetched', async () => {
@@ -161,7 +161,7 @@ describe('member board', () => {
       .mockResolvedValueOnce({ data: board({ paid: false }), error: null })
       .mockResolvedValue({ data: board({ paid: true }), error: null })
     renderBoard()
-    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(await screen.findByText('$80 due')).toBeTruthy()
 
     await act(async () => {
       vi.advanceTimersByTime(10000)
@@ -169,7 +169,7 @@ describe('member board', () => {
       await Promise.resolve()
     })
 
-    expect(await screen.findByText('Paid! ✅')).toBeTruthy()
+    expect(await screen.findByText("You're paid")).toBeTruthy()
     expect(supabase.rpc).toHaveBeenCalledWith('get_member_board', { p_token: TOKEN })
     expect(screen.queryByText('5550100199')).toBeNull()
   })
@@ -179,14 +179,14 @@ describe('member board', () => {
       .mockResolvedValueOnce({ data: board({ paid: false }), error: null })
       .mockResolvedValue({ data: board({ paid: true }), error: null })
     renderBoard()
-    expect(await screen.findByText('Pending')).toBeTruthy()
+    expect(await screen.findByText('$80 due')).toBeTruthy()
 
     await act(async () => {
       document.dispatchEvent(new Event('visibilitychange'))
       await Promise.resolve()
     })
 
-    expect(await screen.findByText('Paid! ✅')).toBeTruthy()
+    expect(await screen.findByText("You're paid")).toBeTruthy()
     expect(supabase.channel).not.toHaveBeenCalled()
   })
 
@@ -211,7 +211,7 @@ describe('member board', () => {
     const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
     renderBoard()
 
-    await user.click(await screen.findByRole('button', { name: 'Copy Zelle' }))
+    await user.click(await screen.findByRole('button', { name: 'Copy Zelle and pay' }))
 
     expect(writeText).toHaveBeenCalledWith('familia.demo')
     expect(await screen.findByRole('status')).toHaveTextContent('Copied')
@@ -266,7 +266,7 @@ describe('member page highlights', () => {
     first.unmount()
 
     renderBoard()
-    expect(await screen.findByText('Paid! ✅')).toBeTruthy()
+    expect(await screen.findByText("You're paid")).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -293,7 +293,7 @@ describe('member page highlights', () => {
     )
     // Ada's language_pref is en, so the preview ignores this phone's Spanish setting.
     expect(await screen.findByText(/Preview: this is what Ada sees/)).toBeTruthy()
-    expect(screen.getByText('Paid! ✅')).toBeTruthy()
+    expect(screen.getByText("You're paid")).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(localStorage.getItem('tanda_member_token')).toBeNull()
     expect(localStorage.getItem('tanda_seen_paid_1')).toBeNull()

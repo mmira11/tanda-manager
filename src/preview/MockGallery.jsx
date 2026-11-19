@@ -41,7 +41,7 @@ function MemberPreview() {
       display_first_name: 'Maria',
       language_pref: 'es',
       payout_date: daysFromNow(12),
-      paid_this_round: true,
+      paid_this_round: !new URLSearchParams(window.location.search).has('unpaid'),
     },
     current_round: {
       round_number: 3,

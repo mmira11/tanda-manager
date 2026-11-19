@@ -53,3 +53,25 @@ describe('group tab', () => {
     expect(screen.getByText('Orden de pagos')).toBeTruthy()
   })
 })
+
+describe('member home, action first', () => {
+  it('unpaid: leads with the amount due, deadline and the copy button, and links to the group', async () => {
+    const user = userEvent.setup()
+    render(<MemberExperience board={board} lang="en" onToggleLang={() => {}} preview />)
+    expect(screen.getByRole('heading', { name: '$100 due' })).toBeTruthy()
+    expect(screen.getByText(/^Closes .*Jan 8 at 6:00 PM$/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy Zelle and pay' })).toBeEnabled()
+    expect(screen.getByText('Your turn to receive')).toBeTruthy()
+    expect(screen.getByText('2 of 3 paid')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'See group' }))
+    expect(screen.getByRole('heading', { name: 'Payout order' })).toBeTruthy()
+  })
+
+  it('paid: confirms and shows the next payment instead of the pay button', () => {
+    const paidBoard = { ...board, me: { ...board.me, paid_this_round: true } }
+    render(<MemberExperience board={paidBoard} lang="en" onToggleLang={() => {}} preview />)
+    expect(screen.getByRole('heading', { name: "You're paid" })).toBeTruthy()
+    expect(screen.getByText(/^Next payment: .*Jan 15 · \$100$/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Copy Zelle and pay' })).toBeNull()
+  })
+})
