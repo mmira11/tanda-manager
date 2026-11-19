@@ -1,7 +1,7 @@
 import { createContext, useContext } from 'react'
 import { useCycleStore } from '../hooks/useCycleStore'
 
-const StoreContext = createContext(null)
+export const StoreContext = createContext(null)
 
 export function StoreProvider({ children }) {
   const store = useCycleStore()

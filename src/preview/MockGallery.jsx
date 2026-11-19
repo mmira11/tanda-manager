@@ -5,6 +5,9 @@ import MemberExperience from '../components/public/MemberExperience'
 import DashboardView from '../components/admin/DashboardView'
 import TabBar from '../components/ui/TabBar'
 import { renderMessage } from '../../supabase/functions/_shared/reminders.js'
+import { StoreContext } from '../context/StoreContext'
+import { LangProvider } from '../context/LangContext'
+import CreateCycleForm from '../components/admin/CreateCycleForm'
 
 function daysFromNow(days) {
   const date = new Date()
@@ -138,7 +141,18 @@ function AdminPreview() {
   )
 }
 
+function SetupPreview() {
+  return (
+    <StoreContext.Provider value={{ createCycle: async () => {} }}>
+      <LangProvider lang="en">
+        <CreateCycleForm onCancel={() => {}} />
+      </LangProvider>
+    </StoreContext.Provider>
+  )
+}
+
 export default function MockGallery() {
   const { screen } = useParams()
+  if (screen === 'setup') return <SetupPreview />
   return screen === 'admin' ? <AdminPreview /> : <MemberPreview />
 }

@@ -98,6 +98,49 @@ describe('first run: create a cycle', () => {
   })
 })
 
+describe('paste a member list', () => {
+  it('adds 10 pasted people in order, flags a bad number, and creates the cycle', async () => {
+    const fake = installFakeSupabase({ session: adminSession, isAdmin: true })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+    await screen.findByText('Create a cycle')
+    await user.type(screen.getByLabelText('Cycle name'), 'Tanda 10')
+    fireEvent.change(screen.getByLabelText('First collection date'), { target: { value: '2027-01-08' } })
+    await user.type(screen.getByLabelText('Contribution per person ($)'), '100')
+
+    const lines = ['Maria 555-010-0101', 'Rosa, (555) 010-0102', 'Luis 555010', 'Ana', 'Carmen 5550100105',
+      'Sofia 5550100106', 'Elena 5550100107', 'Pedro 5550100108', 'Beto 5550100109', 'Cata 5550100110']
+    fireEvent.change(screen.getByLabelText('Paste names and phones (optional)'), { target: { value: lines.join('\n') } })
+    await user.click(screen.getByRole('button', { name: 'Add to list' }))
+
+    expect(screen.getByRole('status').textContent).toBe('Added 10 people. Check 1 marked below.')
+    expect(screen.getByLabelText('Member 1 first name').value).toBe('Maria')
+    expect(screen.getByLabelText('Member 2 phone').value).toBe('(555) 010-0102')
+    expect(screen.getByLabelText('Member 10 first name').value).toBe('Cata')
+    expect(screen.queryByLabelText('Member 11 first name')).toBeNull()
+    expect(screen.getAllByText('Check this number: it needs 10 digits.')).toHaveLength(1)
+    expect(screen.getByText(/10 rounds · \$1,000 pot each round/)).toBeTruthy()
+
+    await user.click(screen.getByText('Create cycle'))
+    expect(await screen.findByText('Round 1 of 10')).toBeTruthy()
+    expect(fake.tables.members).toHaveLength(10)
+    expect(fake.tables.members.find(m => m.slot === 3)).toMatchObject({ display_first_name: 'Luis', phone: '555010' })
+    expect(fake.tables.cycles[0].status).toBe('active')
+  })
+
+  it('shuffle keeps everyone', async () => {
+    installFakeSupabase({ session: adminSession, isAdmin: true })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+    await screen.findByText('Create a cycle')
+    fireEvent.change(screen.getByLabelText('Paste names and phones (optional)'), { target: { value: 'A\nB\nC\nD' } })
+    await user.click(screen.getByRole('button', { name: 'Add to list' }))
+    await user.click(screen.getByRole('button', { name: 'Shuffle order' }))
+    const names = [1, 2, 3, 4].map(n => screen.getByLabelText(`Member ${n} first name`).value)
+    expect([...names].sort()).toEqual(['A', 'B', 'C', 'D'])
+  })
+})
+
 describe('crash guards', () => {
   it('a phone number in the days box shows a validation error instead of crashing', async () => {
     const fake = installFakeSupabase({ session: adminSession, isAdmin: true })

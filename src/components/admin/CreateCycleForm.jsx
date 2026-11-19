@@ -4,6 +4,8 @@ import { useStore } from '../../context/StoreContext'
 import { buildRounds, formatDate } from '../../utils/rounds'
 import { useLang } from '../../context/LangContext'
 import { formatMoney, isWholeCents } from '../../utils/money'
+import { isValidUsPhone } from '../../utils/messaging'
+import { parseMemberList, shuffled } from '../../utils/memberList'
 
 const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors'
 const emptyMember = () => ({ name: '', phone: '' })
@@ -44,6 +46,8 @@ export default function CreateCycleForm({ onImport, onCancel }) {
   const [errors, setErrors] = useState({})
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
+  const [pasted, setPasted] = useState('')
+  const [pasteNote, setPasteNote] = useState('')
 
   const parsed = {
     ...form,
@@ -71,6 +75,24 @@ export default function CreateCycleForm({ onImport, onCancel }) {
       ;[members[i], members[i + delta]] = [members[i + delta], members[i]]
       return { ...f, members }
     })
+  }
+
+  // Pasted people go after anyone already typed; untouched blank rows are dropped.
+  function addPasted() {
+    const rows = parseMemberList(pasted)
+    if (rows.length === 0) { setPasteNote('Nothing to add. Put one person per line.'); return }
+    setForm(f => {
+      const kept = f.members.filter(m => m.name.trim() || m.phone.trim())
+      return { ...f, members: [...kept, ...rows.map(({ name, phone }) => ({ name, phone }))] }
+    })
+    setErrors(e => ({ ...e, members: undefined }))
+    setPasted('')
+    const flagged = rows.filter(r => !r.phoneOk || !r.name).length
+    setPasteNote(`Added ${rows.length} ${rows.length === 1 ? 'person' : 'people'}.${flagged ? ` Check ${flagged} marked below.` : ''}`)
+  }
+
+  function shuffleMembers() {
+    setForm(f => ({ ...f, members: shuffled(f.members) }))
   }
 
   function removeMember(i) {
@@ -120,7 +142,36 @@ export default function CreateCycleForm({ onImport, onCancel }) {
         </div>
 
         <div>
-          <p className="text-sm font-medium text-gray-700 mb-1">Members, in payout order</p>
+          <label htmlFor="paste-members" className="block text-sm font-medium text-gray-700 mb-1">
+            Paste names and phones (optional)
+          </label>
+          <textarea
+            id="paste-members"
+            rows={4}
+            className={`${input} resize-y`}
+            placeholder={'Maria 555-010-0101\nRosa (555) 010-0102\nLuis'}
+            value={pasted}
+            onChange={e => { setPasted(e.target.value); setPasteNote('') }}
+          />
+          <p className="text-xs text-gray-500 mt-1">One person per line, from your contacts or group chat. Order here is payout order.</p>
+          <button
+            type="button"
+            onClick={addPasted}
+            disabled={!pasted.trim()}
+            className="mt-2 w-full border-2 border-gold-400 text-gold-700 font-semibold py-2 rounded-xl text-sm hover:bg-gold-50 disabled:opacity-40"
+          >
+            Add to list
+          </button>
+          {pasteNote && <p role="status" className="text-xs text-gray-600 mt-1">{pasteNote}</p>}
+
+          <div className="flex items-center justify-between mt-5 mb-1">
+            <p className="text-sm font-medium text-gray-700">Members, in payout order</p>
+            {memberCount > 1 && (
+              <button type="button" onClick={shuffleMembers} className="text-xs font-semibold text-gold-700 min-h-9 px-1">
+                Shuffle order
+              </button>
+            )}
+          </div>
           <div className="space-y-2">
             {form.members.map((m, i) => (
               <div key={i} className="grid grid-cols-[1.75rem_1fr_1fr_auto] gap-2 items-center">
@@ -139,6 +190,11 @@ export default function CreateCycleForm({ onImport, onCancel }) {
                   <button type="button" onClick={() => removeMember(i)}
                     aria-label={`Remove member ${i + 1}`} className="w-6 h-7 text-red-400 hover:text-red-600">×</button>
                 </div>
+                {m.phone.trim() && !isValidUsPhone(m.phone) && (
+                  <p className="col-start-2 col-span-3 -mt-1 text-xs font-semibold text-amber-700">
+                    Check this number: it needs 10 digits.
+                  </p>
+                )}
               </div>
             ))}
           </div>
