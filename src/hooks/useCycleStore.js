@@ -332,7 +332,9 @@ export function useCycleStore() {
       start_date: form.startDate,
       interval_days: form.intervalDays,
       contribution: form.contribution,
-      status: 'active',
+      // Draft until every child row is in, so an interrupted save (closed tab, lost
+      // signal) never leaves an empty cycle marked active.
+      status: 'draft',
       organizer_display_name: form.organizerName?.trim() || null,
       zelle_destination: form.organizerPhone?.trim() || null,
     }).select())
@@ -355,12 +357,27 @@ export function useCycleStore() {
       check(await supabase.from('payments').insert(
         rounds.flatMap(r => members.map(m => ({ round_id: r.id, member_id: m.id, amount: form.contribution })))
       ))
+      check(await supabase.from('cycles').update({ status: 'active' }).eq('id', cycle.id))
     } catch (e) {
       // Don't leave a half-built active cycle behind; the delete cascades to its rows.
       await supabase.from('cycles').delete().eq('id', cycle.id)
       throw e
     }
     await load(cycle.id)
+  }, [load])
+
+  // A cycle with no rounds or no members was never finished (an interrupted create).
+  // Deleting it cascades to any child rows; it never held payments.
+  const deleteIncompleteCycle = useCallback(async () => {
+    const current = storeRef.current
+    if (!current || (current.rounds.length > 0 && current.participants.length > 0)) return
+    try {
+      check(await supabase.from('cycles').delete().eq('id', current.config.cycleId))
+      selectedIdRef.current = null
+      await load()
+    } catch (e) {
+      setError(e.message || String(e))
+    }
   }, [load])
 
   // Phase 5: the admin confirms a detected Zelle payment. confirm_zelle_match marks that
@@ -454,6 +471,7 @@ export function useCycleStore() {
     revokeLink,
     assignRecipient,
     createCycle,
+    deleteIncompleteCycle,
     togglePayment,
     togglePayout,
     updateRoundNotes,

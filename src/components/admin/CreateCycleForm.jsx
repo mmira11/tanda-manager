@@ -8,11 +8,26 @@ import { formatMoney, isWholeCents } from '../../utils/money'
 const input = 'w-full border-2 border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-gold-500 transition-colors'
 const emptyMember = () => ({ name: '', phone: '' })
 
+const MAX_INTERVAL_DAYS = 365
+
+// A date input can hand back a 5-digit year, and an autofilled phone number can land in
+// the days box; either one makes date math throw, so check before building a preview.
+function isValidStartDate(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false
+  const d = new Date(iso + 'T00:00:00Z')
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === iso
+}
+
+function isValidInterval(n) {
+  return Number.isInteger(n) && n >= 1 && n <= MAX_INTERVAL_DAYS
+}
+
 export function validateCycleForm(f) {
   const errors = {}
   if (!f.name.trim()) errors.name = 'Name is required'
   if (!f.startDate) errors.startDate = 'Start date is required'
-  if (!Number.isInteger(f.intervalDays) || f.intervalDays < 1) errors.intervalDays = 'Whole number of days, 1 or more'
+  else if (!isValidStartDate(f.startDate)) errors.startDate = 'Pick a real date'
+  if (!isValidInterval(f.intervalDays)) errors.intervalDays = `Whole number of days, 1 to ${MAX_INTERVAL_DAYS}`
   if (!isWholeCents(f.contribution)) errors.contribution = 'Enter a positive amount in dollars and cents'
   if (f.members.length < 2) errors.members = 'Add at least 2 members'
   else if (f.members.some(m => !m.name.trim())) errors.members = 'Every member needs a first name'
@@ -36,7 +51,7 @@ export default function CreateCycleForm({ onImport, onCancel }) {
     contribution: Number(form.contribution),
   }
   const memberCount = form.members.length
-  const plan = parsed.startDate && Number.isInteger(parsed.intervalDays) && parsed.intervalDays > 0
+  const plan = isValidStartDate(parsed.startDate) && isValidInterval(parsed.intervalDays) && memberCount > 0
     ? buildRounds(parsed.startDate, parsed.intervalDays, memberCount)
     : null
 

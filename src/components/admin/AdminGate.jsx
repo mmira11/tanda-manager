@@ -87,6 +87,29 @@ function NotAdmin({ email }) {
   )
 }
 
+// An interrupted create can leave a cycle with no members or rounds. The dashboard
+// needs at least one round, so offer to clear it instead of crashing.
+function IncompleteCycle({ name }) {
+  const { deleteIncompleteCycle, error } = useStore()
+  const [busy, setBusy] = useState(false)
+  return (
+    <Screen>
+      <h1 className="text-xl font-bold text-gray-900">Cycle setup didn't finish</h1>
+      <p className="text-gray-500 text-sm mt-2">
+        “{name}” was saved without its members and rounds. It has no payments. Delete it and create the cycle again.
+      </p>
+      {error && <p className="text-red-600 text-sm mt-3">{error}</p>}
+      <button
+        disabled={busy}
+        onClick={async () => { setBusy(true); await deleteIncompleteCycle(); setBusy(false) }}
+        className="mt-6 w-full bg-gold-500 hover:bg-gold-600 text-white font-semibold py-3 rounded-xl disabled:opacity-50"
+      >
+        {busy ? 'Deleting…' : 'Delete and start over'}
+      </button>
+    </Screen>
+  )
+}
+
 function AdminHome({ email }) {
   const { store, loading, error, reload } = useStore()
   const [importing, setImporting] = useState(false)
@@ -127,6 +150,9 @@ function AdminHome({ email }) {
         onCancel={creating ? () => setCreating(false) : undefined}
       />
     )
+  }
+  if (store.rounds.length === 0 || store.participants.length === 0) {
+    return <IncompleteCycle name={store.config.name} />
   }
   return (
     <AdminDashboard
