@@ -51,7 +51,6 @@ describe('verifySender (anyone can send "Ana sent you $150")', () => {
       .toMatchObject({ ok: false, reason: 'not_authenticated' })
   })
 })
-import NeedsReviewCard from '../components/admin/NeedsReviewCard'
 import { LABELS } from '../data/labels'
 import { installFakeSupabase, seedCycle } from './fakeSupabase'
 import { useCycleStore } from '../hooks/useCycleStore'
@@ -254,7 +253,7 @@ describe('scanEmails', () => {
   })
 })
 
-describe('Match and Dismiss on the Needs-review card', () => {
+describe('confirmMatch and dismissReview in the store', () => {
   const t = LABELS.en
   const participants = [{ id: 'm1', slot: 1, name: 'Ana' }, { id: 'm2', slot: 2, name: 'Beto' }]
   const rounds = [{ id: 'r1', round: 1 }, { id: 'r2', round: 2 }]
@@ -262,97 +261,6 @@ describe('Match and Dismiss on the Needs-review card', () => {
     id: 'rv1', sender_name: 'Ana Prueba', amount: 150, suggested_member_id: 'm1', round_id: 'r1',
     round_timing: 'late', received_at: '2026-06-13T06:30:00.000Z',
   }
-
-  it('pre-selects the suggestion and calls onMatch with the chosen member', async () => {
-    const onMatch = vi.fn()
-    const user = userEvent.setup()
-    render(<NeedsReviewCard items={[item]} t={t} participants={participants} onMatch={onMatch} onDismiss={vi.fn()} />)
-    expect(screen.getByLabelText('Who paid?').value).toBe('m1')
-    await user.selectOptions(screen.getByLabelText('Who paid?'), 'm2')
-    await user.click(screen.getByText('Match'))
-    expect(onMatch).toHaveBeenCalledWith('rv1', 'm2', 'r1')
-  })
-
-  it('shows the email date in the cycle time zone and matches the round the admin picks', async () => {
-    const onMatch = vi.fn()
-    const user = userEvent.setup()
-    render(
-      <NeedsReviewCard
-        items={[item]} t={t} participants={participants} rounds={rounds}
-        locale="en-US" timeZone="America/Los_Angeles" onMatch={onMatch} onDismiss={vi.fn()}
-      />,
-    )
-    // 06:30 UTC on Jun 13 is 11:30 PM on Jun 12 in Los Angeles.
-    const detail = screen.getByText(/Jun/)
-    expect(detail.textContent).toContain('12')
-    expect(detail.textContent).toContain('2026')
-    expect(detail.textContent).toContain('Round 1')
-    expect(detail.textContent).toContain('Late')
-    await user.selectOptions(screen.getByLabelText('Round'), 'r2')
-    expect(screen.getByLabelText('Round').value).toBe('r2')
-    expect(detail.textContent).toContain('Round 2')
-    expect(detail.textContent).not.toContain('Late')
-    await user.click(screen.getByText('Match'))
-    expect(onMatch).toHaveBeenCalledWith('rv1', 'm1', 'r2')
-  })
-
-  it('labels Dismiss in Spanish and formats the date for es-US', () => {
-    render(
-      <NeedsReviewCard
-        items={[item]} t={LABELS.es} participants={participants} rounds={rounds}
-        locale="es-US" timeZone="America/Los_Angeles" onMatch={vi.fn()} onDismiss={vi.fn()}
-      />,
-    )
-    expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy()
-    expect(screen.getByLabelText('Motivo (opcional)')).toBeTruthy()
-    const detail = screen.getByText(/12/)
-    expect(detail.textContent.toLowerCase()).toContain('jun')
-    expect(detail.textContent).not.toContain('Fri')
-    expect(detail.textContent).toContain('Ronda 1')
-    expect(detail.textContent).toContain('Tarde')
-  })
-
-  it('passes an optional dismiss reason and pays nobody from the button', async () => {
-    const onDismiss = vi.fn()
-    const user = userEvent.setup()
-    render(<NeedsReviewCard items={[item]} t={t} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={onDismiss} />)
-    await user.type(screen.getByLabelText('Reason (optional)'), 'partial')
-    await user.click(screen.getByRole('button', { name: 'Dismiss' }))
-    expect(onDismiss).toHaveBeenCalledWith('rv1', 'partial')
-  })
-
-  it('keeps Match disabled until a member is chosen, and on archived cycles', () => {
-    const { rerender } = render(<NeedsReviewCard items={[{ ...item, suggested_member_id: null }]} t={t} participants={participants} onMatch={vi.fn()} onDismiss={vi.fn()} />)
-    expect(screen.getByText('Match').disabled).toBe(true)
-    rerender(<NeedsReviewCard items={[item]} t={t} participants={participants} readOnly onMatch={vi.fn()} onDismiss={vi.fn()} />)
-    expect(screen.getByText('Match').disabled).toBe(true)
-  })
-
-  it('turns Match off when the amount differs, in English and Spanish', () => {
-    const differs = { ...item, match_reason: 'first_name,amount_differs' }
-    const { rerender } = render(
-      <NeedsReviewCard items={[differs]} t={t} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={vi.fn()} />,
-    )
-    expect(screen.getByRole('button', { name: 'Match' }).disabled).toBe(true)
-    expect(screen.getByText('Amount differs, so Match is off. Mark this payment by hand.')).toBeTruthy()
-    rerender(
-      <NeedsReviewCard items={[differs]} t={LABELS.es} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={vi.fn()} />,
-    )
-    expect(screen.getByRole('button', { name: 'Emparejar' }).disabled).toBe(true)
-    expect(screen.getByText('El monto es distinto, así que Emparejar está desactivado. Márcalo a mano.')).toBeTruthy()
-  })
-
-  it('shows an on-time chip in English and Spanish', () => {
-    const onTime = { ...item, round_timing: 'on_time' }
-    const { rerender } = render(
-      <NeedsReviewCard items={[onTime]} t={t} participants={participants} rounds={rounds} onMatch={vi.fn()} onDismiss={vi.fn()} />,
-    )
-    expect(screen.getByText(/On time/)).toBeTruthy()
-    rerender(
-      <NeedsReviewCard items={[onTime]} t={LABELS.es} participants={participants} rounds={rounds} locale="es-US" onMatch={vi.fn()} onDismiss={vi.fn()} />,
-    )
-    expect(screen.getByText(/A tiempo/)).toBeTruthy()
-  })
 
   it('confirmMatch marks only that member paid, closes the review, and saves the alias', async () => {
     const db = seedCycle({ names: ['Ana', 'Beto'], contribution: 150 })

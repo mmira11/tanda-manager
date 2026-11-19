@@ -192,3 +192,22 @@ export function buildRounds(startDate, intervalDays, count) {
     return { roundNumber: i + 1, collectDate, payoutDate: addDays(collectDate, 1) }
   })
 }
+
+// US dates people are usually busy or away on. Used to flag a collect or payout day.
+export function holidayName(isoDate) {
+  if (!isoDate) return null
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const fixed = {
+    '1-1': "New Year's Day", '7-4': 'Fourth of July', '12-24': 'Christmas Eve',
+    '12-25': 'Christmas', '12-31': "New Year's Eve",
+  }
+  if (fixed[`${m}-${d}`]) return fixed[`${m}-${d}`]
+  const weekday = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
+  const nth = Math.ceil(d / 7)
+  if (m === 11 && weekday === 4 && nth === 4) return 'Thanksgiving'
+  if (m === 11 && weekday === 5 && d >= 23 && d <= 29) return 'Day after Thanksgiving'
+  if (m === 5 && weekday === 0 && nth === 2) return "Mother's Day"
+  if (m === 5 && weekday === 1 && d + 7 > 31) return 'Memorial Day'
+  if (m === 9 && weekday === 1 && nth === 1) return 'Labor Day'
+  return null
+}

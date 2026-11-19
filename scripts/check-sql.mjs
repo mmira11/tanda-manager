@@ -952,6 +952,72 @@ const fresh = 'tanda_sql_fresh'
 const legacy = 'tanda_sql_legacy'
 
 console.log('a) fresh schema.sql, then every migration twice')
+// Organizer v2 (migration 018): a Grokbot key reads the active round and marks payments,
+// nothing else. Keys are stored hashed; only an admin makes or revokes one.
+function assertBotKeys(database) {
+  const last = text => text.trim().split('\n').filter(Boolean).pop()
+  const linkCol = psqlText(database, `
+    select count(*) from information_schema.columns
+    where table_schema = 'public' and table_name = 'members' and column_name = 'link_sent_at';
+  `).trim()
+  if (linkCol !== '1') throw new Error(`${database}: members.link_sent_at is missing`)
+
+  const notAdmin = psqlFails(database, 'set role authenticated; select public.create_bot_key();')
+  if (!/not allowed/.test(notAdmin)) throw new Error(`${database}: non-admin create_bot_key failed for the wrong reason: ${notAdmin}`)
+  const anonCreate = psqlFails(database, 'set role anon; select public.create_bot_key();')
+  if (!/permission denied/.test(anonCreate)) throw new Error(`${database}: anon could reach create_bot_key: ${anonCreate}`)
+  const helper = psqlFails(database, "set role anon; select public.bot_key_ok('x');")
+  if (!/permission denied/.test(helper)) throw new Error(`${database}: anon could call bot_key_ok: ${helper}`)
+  const fake = psqlFails(database, `set role anon; select public.bot_round_status('tbk_${'0'.repeat(64)}');`)
+  if (!/not allowed/.test(fake)) throw new Error(`${database}: a made-up key was not refused: ${fake}`)
+
+  // An admin makes a key (rolled back afterwards so other checks see no admin).
+  const made = psqlText(database, `
+    begin;
+    create or replace function auth.uid() returns uuid language sql stable as $f$ select 'bbbbbbbb-0000-0000-0000-00000000b07b'::uuid $f$;
+    insert into auth.users (id) values ('bbbbbbbb-0000-0000-0000-00000000b07b') on conflict do nothing;
+    insert into public.admins (user_id) values ('bbbbbbbb-0000-0000-0000-00000000b07b') on conflict do nothing;
+    select public.create_bot_key();
+    rollback;
+  `).split('\n').find(line => line.startsWith('tbk_')) || ''
+  if (!/^tbk_[0-9a-f]{64}$/.test(made)) throw new Error(`${database}: create_bot_key did not return a key`)
+
+  // A key that exists (inserted by hash) works for anon; the plain key is never stored.
+  const key = `tbk_${'7'.repeat(64)}`
+  psqlText(database, `
+    update public.bot_keys set revoked_at = now() where revoked_at is null;
+    insert into public.bot_keys (key_hash) values (encode(digest('${key}', 'sha256'), 'hex'));
+  `)
+  const stored = psqlText(database, `select count(*) from public.bot_keys where key_hash = '${key}';`).trim()
+  if (stored !== '0') throw new Error(`${database}: a plain key was stored`)
+  const hidden = last(psqlText(database, 'set role authenticated; select count(*) from public.bot_keys;'))
+  if (hidden !== '0') throw new Error(`${database}: a non-admin could read bot_keys (${hidden})`)
+
+  const status = JSON.parse(last(psqlText(database, `set role anon; select public.bot_round_status('${key}');`)))
+  if (!status.cycle || !status.round || !Array.isArray(status.members) || status.members.length === 0) {
+    throw new Error(`${database}: bot_round_status returned ${JSON.stringify(status)}`)
+  }
+  const target = status.members.find(m => !m.paid) || status.members[0]
+  const marked = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${target.slot});`)))
+  if (!marked.members.find(m => m.slot === target.slot).paid) throw new Error(`${database}: bot_mark_paid did not mark slot ${target.slot}`)
+  const source = psqlText(database, `
+    select p.source from public.payments p join public.members m on m.id = p.member_id
+    join public.rounds r on r.id = p.round_id
+    where m.slot = ${target.slot} and r.cycle_id = m.cycle_id and r.round_number = ${status.round.number}
+      and m.cycle_id = (select id from public.cycles where status = 'active' order by start_date desc limit 1);
+  `).trim()
+  if (source !== 'auto') throw new Error(`${database}: bot payment source is ${source}`)
+  const undone = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${target.slot}, false);`)))
+  if (undone.members.find(m => m.slot === target.slot).paid) throw new Error(`${database}: bot_mark_paid could not undo`)
+  const noSlot = psqlFails(database, `set role anon; select public.bot_mark_paid('${key}', 999);`)
+  if (!/no member in slot/.test(noSlot)) throw new Error(`${database}: bad slot failed for the wrong reason: ${noSlot}`)
+
+  psqlText(database, 'update public.bot_keys set revoked_at = now() where revoked_at is null;')
+  const revoked = psqlFails(database, `set role anon; select public.bot_round_status('${key}');`)
+  if (!/not allowed/.test(revoked)) throw new Error(`${database}: a revoked key still worked: ${revoked}`)
+  console.log(`${database}: bot keys are hashed, admin-only to make, and limited to round status and marking payments`)
+}
+
 recreate(fresh)
 applyFile(fresh, join(root, 'supabase', 'schema.sql'))
 applyMigrations(fresh)
@@ -967,6 +1033,7 @@ assertReminderTables(fresh)
 assertZelleConfirm(fresh)
 assertArchivedZelleLock(fresh)
 assertReminderQueue(fresh)
+assertBotKeys(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -986,6 +1053,7 @@ assertReminderTables(legacy)
 assertZelleConfirm(legacy)
 assertArchivedZelleLock(legacy)
 assertReminderQueue(legacy)
+assertBotKeys(legacy)
 
 console.log('c) schema.sql alone, compared with both migrated databases')
 const baseline = 'tanda_sql_baseline'

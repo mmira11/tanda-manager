@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
-import { render, screen, renderHook, waitFor, act, fireEvent } from '@testing-library/react'
+import { render, screen, renderHook, waitFor, act, fireEvent, within } from '@testing-library/react'
 import {
   buildImportPlan,
   formatImportSummary,
@@ -189,12 +189,14 @@ describe('useCycleStore import and cycle switch', () => {
     render(<AdminGate />)
 
     expect(await screen.findByText('Finished')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Archive' })).toBeNull()
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Settings' }))
+    expect(screen.queryByRole('button', { name: 'Archive cycle…' })).toBeNull()
     expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Schedule' }))
-    expect(screen.getAllByRole('button', { name: 'Pending' })[0]).toBeDisabled()
+    await user.click(screen.getAllByRole('button', { name: /Ada/ })[0])
+    expect(screen.getByRole('button', { name: 'Ada: not paid' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Save round' })).toBeNull()
   })
 })
 
@@ -210,10 +212,9 @@ describe('archive then create', () => {
 
     expect(await screen.findByText('Current')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(screen.getByRole('button', { name: 'New cycle' })).toBeDisabled()
-    expect(screen.getByText(/Archive the active cycle before starting another/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'New cycle' })).toBeNull()
 
-    await user.click(screen.getByRole('button', { name: 'Archive' }))
+    await user.click(screen.getByRole('button', { name: 'Archive cycle…' }))
     expect(screen.getByRole('dialog')).toBeTruthy()
     expect(screen.getByText('Archive this cycle?')).toBeTruthy()
     expect(screen.queryByText('¿Archivar este ciclo?')).toBeNull()
@@ -260,29 +261,34 @@ function Loaded() {
 }
 
 describe('revoking a personal link (N7)', () => {
-  it('revokes, hides Copy, and Regenerate brings back a working link', async () => {
+  it('turns a link off, hides Copy, and New link brings back a working one', async () => {
     const fake = installFakeSupabase({ db: seedCycle({ names: ['Ada', 'Bea'], contribution: 40 }) })
     const user = userEvent.setup()
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     render(<StoreProvider><Loaded /></StoreProvider>)
 
     await user.click(await screen.findByRole('button', { name: 'Members' }))
-    await user.click(screen.getAllByText('Revoke link')[0])
+    await user.click(screen.getByRole('button', { name: 'More for Ada' }))
+    await user.click(screen.getByRole('button', { name: 'Turn off link' }))
 
     await waitFor(() => expect(fake.tables.members.find(m => m.slot === 1).token_revoked_at).toBeTruthy())
-    expect(screen.getByText('Link revoked')).toBeTruthy()
-    expect(screen.getAllByText('Copy personal link')).toHaveLength(1) // only Bea's link is still copyable
+    expect(screen.queryByRole('button', { name: 'Copy link' })).toBeNull()
+    expect(screen.queryByRole('link', { name: 'View as member' })).toBeNull()
     expect(fake.tables.members.find(m => m.slot === 2).token_revoked_at ?? null).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByText(/link off/)).toBeTruthy()
+    expect(screen.queryByRole('link', { name: 'Send Ada their link' })).toBeNull()
 
-    await user.click(screen.getAllByText('Regenerate link')[0])
+    await user.click(screen.getByRole('button', { name: 'More for Ada' }))
+    await user.click(screen.getByRole('button', { name: 'New link' }))
     await waitFor(() => expect(fake.tables.members.find(m => m.slot === 1).token_revoked_at).toBeNull())
     expect(fake.tables.members.find(m => m.slot === 1).access_token).not.toBe('test-token-1')
-    expect(screen.queryByText('Link revoked')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy()
   })
 })
 
 describe('archived history and personal links', () => {
-  it('lists the final round in History for an archived cycle', async () => {
+  it('lists every round, including the last, for an archived cycle', async () => {
     const db = seedCycle({ names: ['Ada', 'Bea'], name: 'Finished', startDate: '2027-06-04', contribution: 40 })
     db.cycles[0].status = 'archived'
     installFakeSupabase({ db })
@@ -291,12 +297,11 @@ describe('archived history and personal links', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Schedule' }))
 
-    expect(screen.getByText('Round 1')).toBeTruthy()
-    expect(screen.getByText('Round 2')).toBeTruthy()
+    const rounds = within(screen.getByRole('list', { name: 'Rounds' })).getAllByRole('listitem')
+    expect(rounds.map(li => li.textContent)).toEqual([expect.stringMatching(/^1Ada/), expect.stringMatching(/^2Bea/)])
     expect(screen.getByText(/Archived cycle/)).toBeTruthy()
   })
-
-  it('copies and regenerates a personal link without showing the token', async () => {
+  it('copies and remakes a personal link without showing the token', async () => {
     const fake = installFakeSupabase({ db: seedCycle({ names: ['Ada', 'Bea'], contribution: 40 }) })
     const user = userEvent.setup()
     const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined)
@@ -304,17 +309,18 @@ describe('archived history and personal links', () => {
     render(<StoreProvider><Loaded /></StoreProvider>)
 
     await user.click(await screen.findByRole('button', { name: 'Members' }))
-    expect(screen.queryByText('test-token-1')).toBeNull()
-    await user.click(screen.getAllByText('Copy personal link')[0])
+    expect(screen.queryByText(/test-token-1/)).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'More for Ada' }))
+    await user.click(screen.getByRole('button', { name: 'Copy link' }))
     expect(writeText).toHaveBeenCalledWith(expect.stringMatching(/\/m\/test-token-1$/))
 
-    await user.click(screen.getAllByText('Regenerate link')[0])
+    await user.click(screen.getByRole('button', { name: 'New link' }))
     await waitFor(() => {
       expect(fake.tables.members.find(m => m.slot === 1).access_token).not.toBe('test-token-1')
     })
     const next = fake.tables.members.find(m => m.slot === 1).access_token
-    expect(screen.queryByText(next)).toBeNull()
-    expect(screen.queryByText('test-token-1')).toBeNull()
+    expect(screen.queryByText(new RegExp(next))).toBeNull()
+    expect(screen.queryByText(/test-token-1/)).toBeNull()
   })
 })
 
@@ -351,9 +357,9 @@ describe('organizer can see what a member sees', () => {
     render(<StoreProvider><Loaded /></StoreProvider>)
 
     await user.click(await screen.findByRole('button', { name: 'Members' }))
-    const views = screen.getAllByRole('link', { name: 'View as member' })
-    expect(views).toHaveLength(2)
-    expect(views[0].getAttribute('href')).toMatch(/\/m\/test-token-1\?preview=1$/)
-    expect(views[0].getAttribute('target')).toBe('_blank')
+    await user.click(screen.getByRole('button', { name: 'More for Ada' }))
+    const view = screen.getByRole('link', { name: 'View as member' })
+    expect(view.getAttribute('href')).toMatch(/\/m\/test-token-1\?preview=1$/)
+    expect(view.getAttribute('target')).toBe('_blank')
   })
 })

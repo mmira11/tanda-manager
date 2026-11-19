@@ -145,6 +145,8 @@ export const LABELS = {
     unpaidState:      'Unpaid',
     sendRemindersNow: 'Send reminders now',
     stillOwe:         n => `Still owe · ${n}`,
+    tabToday:         'Today',
+    remindersByGrokbot: 'Reminders are sent by Grokbot. Nudge is for a quick personal text.',
     whoPaidThisRound: 'Who has paid this round',
     nudgeName:        name => `Nudge ${name}`,
     everyonePaid:     'Everyone has paid this round',

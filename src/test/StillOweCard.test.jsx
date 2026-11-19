@@ -23,10 +23,7 @@ const members = [
 ]
 
 function renderCard(props = {}) {
-  const handlers = {
-    onSelect: vi.fn(), onTogglePaid: vi.fn(), onMarkSent: vi.fn(), onSkipReminder: vi.fn(),
-    onMarkAllReminders: vi.fn(), onBuildReminders: vi.fn(),
-  }
+  const handlers = { onSelect: vi.fn(), onTogglePaid: vi.fn() }
   render(
     <StillOweCard
       t={t}
@@ -34,8 +31,7 @@ function renderCard(props = {}) {
       recipientSlot={4}
       contribution={100}
       zelle="org@example.com"
-      collectDate="2026-11-20"
-      reminderItems={[]}
+      collectDate="2099-06-12"
       {...handlers}
       {...props}
     />,
@@ -43,95 +39,68 @@ function renderCard(props = {}) {
   return handlers
 }
 
-describe('still owe list', () => {
-  it('lists unpaid people first with Mark paid, and paid people as chips', async () => {
+describe('still owe list (Today)', () => {
+  it('lists only unpaid people, each with Nudge (valid phone only) and Mark paid', async () => {
     const user = userEvent.setup()
     const { onTogglePaid, onSelect } = renderCard()
     expect(screen.getByRole('heading', { name: 'Still owe · 3' })).toBeTruthy()
     const owe = screen.getByRole('list', { name: 'Still owe · 3' })
     expect(within(owe).getAllByRole('listitem').map(li => li.textContent)).toEqual([
-      expect.stringMatching(/^BEBea.*Mark paid.*SMS$/),
-      expect.stringMatching(/^CACal.*No phone on file.*Mark paid$/),
-      expect.stringMatching(/^DEDee.*Receives this round.*Mark paid$/),
+      'BEBeaNudgeMark paid',
+      'CACalNo phone on fileMark paid',
+      'DEDeeReceives this roundMark paid',
     ])
     await user.click(within(owe).getAllByRole('button', { name: 'Mark paid' })[0])
     expect(onTogglePaid).toHaveBeenCalledWith(members[1])
-    await user.click(screen.getByRole('button', { name: 'Ada, Paid' }))
-    expect(onSelect).toHaveBeenCalledWith(members[0])
+    await user.click(within(owe).getByRole('button', { name: 'Bea' }))
+    expect(onSelect).toHaveBeenCalledWith(members[1])
     expect(document.body.textContent).not.toMatch(/555/)
+    expect(screen.getByText(/Reminders are sent by Grokbot/)).toBeTruthy()
   })
 
-  it('without a queue, SMS is the friendly nudge for people with a valid phone', () => {
-    renderCard({ collectDate: '2099-06-12' })
-    const links = screen.getAllByRole('link')
-    expect(links).toHaveLength(1)
-    expect(links[0].getAttribute('aria-label')).toBe('Text Bea a reminder')
-    const body = decodeURIComponent(links[0].getAttribute('href').split('body=')[1])
-    const [english, spanish] = body.split('\n\n')
+  it('Nudge sends the friendly two-paragraph text', () => {
+    renderCard()
+    const nudge = screen.getByRole('link', { name: 'Nudge Bea' })
+    const [english, spanish] = decodeURIComponent(nudge.getAttribute('href').split('body=')[1]).split('\n\n')
     expect(english).toBe('Hi Bea, friendly reminder that Tanda collection is on Friday, Jun 12. Please send $100 to org@example.com via Zelle. Thank you!')
     expect(spanish).toBe('Hola Bea, un recordatorio amigable de que la colección de Tanda es el viernes 12 de junio. Por favor, envíe 100 dólares a org@example.com a través de Zelle. ¡Gracias!')
-    expect(screen.getByRole('button', { name: 'Build reminder list now' })).toBeTruthy()
   })
 
-  it('folds queued reminders into the rows: exact message, SMS/WhatsApp mark sent, Skip, Mark all skips paid', async () => {
-    const user = userEvent.setup()
-    const { onMarkSent, onSkipReminder, onMarkAllReminders } = renderCard({
-      reminderItems: [bea, cal, ada],
-      reminderWindowLabel: 'Noon reminder',
-    })
-    expect(screen.getByText('Noon reminder · 2 to send')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Build reminder list now' })).toBeNull()
-
-    const sms = screen.getByRole('link', { name: 'Text Bea a reminder' })
-    const wa = screen.getByRole('link', { name: 'WhatsApp Bea' })
-    expect(decodeURIComponent(sms.getAttribute('href').split('body=')[1])).toBe(message('Bea'))
-    expect(decodeURIComponent(wa.getAttribute('href').split('text=')[1])).toBe(message('Bea'))
-    expect(sms.className).toMatch(/min-h-11/)
-    expect(sms.className).toMatch(/focus-visible:outline/)
-    expect(screen.getAllByText('Show message')[0].closest('details').open).toBe(false)
-    expect(screen.queryByRole('link', { name: 'Text Cal a reminder' })).toBeNull()
-
-    await user.click(sms)
-    expect(onMarkSent).toHaveBeenCalledWith('row-bea')
-    await user.click(screen.getByRole('button', { name: 'Skip Cal' }))
-    expect(onSkipReminder).toHaveBeenCalledWith('row-cal')
-    await user.click(screen.getByRole('button', { name: 'Mark all done' }))
-    expect(onMarkAllReminders).toHaveBeenCalledWith(['row-bea', 'row-cal'])
-  })
-
-  it('read-only (archived): no reminders, no Mark paid', () => {
-    renderCard({ readOnly: true, reminderItems: [bea] })
+  it('read-only (archived): no Nudge, no Mark paid', () => {
+    renderCard({ readOnly: true })
     expect(screen.queryByRole('link')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Mark paid' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Mark all done' })).toBeNull()
   })
 
   it('says everyone has paid when nobody owes', () => {
     renderCard({ members: members.map(m => ({ ...m, paid: true })) })
     expect(screen.getByRole('heading', { name: 'Everyone has paid this round' })).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Build reminder list now' })).toBeNull()
   })
 })
 
-describe('dashboard', () => {
+describe('Today', () => {
   const base = {
     t, cycleName: 'Demo Tanda', roundLabel: 'Round 1 of 4', collectedLabel: '$100', potLabel: '$400',
     paid: 1, total: 4, payoutLine: 'Payout Saturday → Dee', countdownLabel: '1d 4h', members,
     recipientSlot: 4, recipientName: 'Dee', contribution: 100, zelle: 'org@example.com',
-    collectDate: '2026-11-20', reviews: [], readOnly: false, onSelectMember: () => {}, reminderItems: [],
+    collectDate: '2026-11-20', readOnly: false, onSelectMember: () => {},
   }
 
-  it('leads with the round, countdown, money and payout, then the owe list', async () => {
+  it('leads with round, countdown, money and payout, then avatars, then who owes; no review or reminder queue', async () => {
     const user = userEvent.setup()
     const onTogglePayout = vi.fn()
-    render(<DashboardView {...base} payoutSent={false} onTogglePayout={onTogglePayout} onBuildReminders={() => {}} />)
+    render(<DashboardView {...base} payoutSent={false} onTogglePayout={onTogglePayout} />)
     expect(screen.getByText('Round 1 of 4')).toBeTruthy()
     expect(screen.getByText('1d 4h')).toBeTruthy()
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25')
     await user.click(screen.getByRole('button', { name: 'Mark payout to Dee as sent' }))
     expect(onTogglePayout).toHaveBeenCalled()
-    const text = document.body.textContent
-    expect(text.indexOf('Payout Saturday')).toBeLessThan(text.indexOf('Still owe · 3'))
+    const grid = screen.getByRole('list', { name: 'Who has paid this round' })
+    expect(within(grid).queryByRole('link')).toBeNull()
+    const owe = screen.getByRole('heading', { name: 'Still owe · 3' })
+    expect(grid.compareDocumentPosition(owe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByText(/Needs review/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /reminder list/i })).toBeNull()
   })
 
   it('shows a sent payout as pressed', () => {
@@ -139,11 +108,6 @@ describe('dashboard', () => {
     const btn = screen.getByRole('button', { name: /Payout to Dee marked sent/ })
     expect(btn.getAttribute('aria-pressed')).toBe('true')
     expect(btn.textContent).toBe('Sent ✓')
-  })
-
-  it('shows the build notice when no reminder window is open', () => {
-    render(<DashboardView {...base} onBuildReminders={() => {}} reminderNotice="No reminder window is open right now." />)
-    expect(screen.getByRole('status').textContent).toMatch(/No reminder window/)
   })
 })
 

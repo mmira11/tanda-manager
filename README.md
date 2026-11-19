@@ -71,6 +71,26 @@ Apply `014`, then `015`, then `016`, then `017`. `015` replaces the two-argument
 
 Never put the service-role key in a `VITE_` variable or in frontend code. The only thing that uses it is the optional `scripts/import-backup.mjs`, which reads it from `.env.local`. Importing a backup from Admin → Settings doesn't need it.
 
+## Grokbot access
+
+Grokbot (or any helper bot) gets one narrow key instead of an admin login. In **Settings → Grokbot**, tap **Make key** and copy it right away; only a hash is stored, so it can't be shown again. **Turn off** stops it at once; **New key** replaces it.
+
+The key can do two things, both on the active cycle only:
+
+```bash
+# Who is in the current round, their phones and language, and who has paid
+curl -s https://<project>.supabase.co/rest/v1/rpc/bot_round_status \
+  -H "apikey: <anon key>" -H "Content-Type: application/json" \
+  -d '{"p_key": "<bot key>"}'
+
+# Mark slot 3 paid for the current round (p_paid: false undoes; p_round picks another round)
+curl -s https://<project>.supabase.co/rest/v1/rpc/bot_mark_paid \
+  -H "apikey: <anon key>" -H "Content-Type: application/json" \
+  -d '{"p_key": "<bot key>", "p_slot": 3}'
+```
+
+`bot_round_status` returns the cycle (name, contribution, Zelle), the round (number, collect date, 6 PM deadline, payout date, recipient) and `members` with `slot`, `first_name`, `phone`, `language`, `paid` and `is_recipient`. The "current round" is the first one whose payout day is today or later, the same one members see. Payments the bot marks are saved with `source = 'auto'`. Treat the key like a password: anyone holding it can read members' first names and phone numbers.
+
 ## Edge functions
 
 These are separate from the static site. Deploy them with the Supabase CLI after the migrations they need. Set secrets with `supabase secrets set`. They stay out of the repo and out of any `VITE_` variable. `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are provided inside Edge Functions.

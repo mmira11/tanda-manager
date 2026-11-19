@@ -14,11 +14,11 @@ function Badge({ paid }) {
   )
 }
 
-export default function MemberAvatarGrid({ members, contribution, zelle, collectDate, t, onSelect, readOnly }) {
+export default function MemberAvatarGrid({ members, contribution, zelle, collectDate, t, onSelect, readOnly, showNudges = true }) {
   return (
     <ul className="grid grid-cols-5 gap-x-2 gap-y-4" aria-label={t.whoPaidThisRound}>
       {members.map(member => {
-        const nudge = canNudge(member)
+        const nudge = showNudges && canNudge(member)
           ? buildNudgeSmsUrl(member.phone, { name: member.name, amount: contribution, zelle, collectDate })
           : null
         const state = member.paid ? t.paidState : t.unpaidState
