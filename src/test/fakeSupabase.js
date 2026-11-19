@@ -13,7 +13,7 @@ export function mockModule() {
 
 const DEFAULTS = {
   cycles: { status: 'draft', interval_days: 14, organizer_display_name: null, zelle_destination: null },
-  members: { phone: null, language_pref: 'en' },
+  members: { phone: null, language_pref: 'en', link_sent_at: null },
   rounds: { payout_sent: false, payout_sent_at: null, notes: '' },
   payments: { paid_at: null, source: null },
   reminder_settings: { timezone: 'America/Los_Angeles', enabled: false, channel: 'queue' },
@@ -25,7 +25,7 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
   const tables = {
     cycles: [], members: [], rounds: [], payments: [],
     reminder_settings: [], reminder_templates: [], reminder_log: [], sms_opt_outs: [],
-    pending_review: [], payer_aliases: [],
+    pending_review: [], payer_aliases: [], bot_keys: [],
     ...structuredClone(db),
   }
   let nextId = 1000
@@ -156,6 +156,14 @@ export function installFakeSupabase({ session = null, isAdmin = false, db = {}, 
     from: vi.fn(from),
     rpc: vi.fn(async (name, args) => {
       if (name === 'is_admin') return { data: isAdmin, error: null }
+      if (name === 'create_bot_key' || name === 'revoke_bot_keys') {
+        const now = new Date().toISOString()
+        tables.bot_keys.forEach(k => { if (!k.revoked_at) k.revoked_at = now })
+        if (name === 'revoke_bot_keys') return { data: null, error: null }
+        const key = `tbk_${String(nextId++).padStart(64, '0')}`
+        tables.bot_keys.push({ id: `bot-key-${nextId++}`, key_hash: `hash-of-${key}`, label: 'Grokbot', created_at: now, revoked_at: null })
+        return { data: key, error: null }
+      }
       if (name === 'import_cycle') return importCycle(args.p_plan)
       if (name === 'confirm_zelle_match') {
         // Mirrors migrations 014, 015, and 016: an archived cycle fails before any write.

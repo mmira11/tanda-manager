@@ -38,6 +38,8 @@ export function toStore(cycle, members, rounds, payments) {
       id: m.id, slot: m.slot, name: m.display_first_name, phone: m.phone || '',
       accessToken: m.access_token || '',
       linkRevoked: Boolean(m.token_revoked_at),
+      language: m.language_pref === 'es' ? 'es' : 'en',
+      linkSentAt: m.link_sent_at || null,
     })),
     rounds: rounds.map(r => ({
       id: r.id,
@@ -104,7 +106,7 @@ export function useCycleStore() {
         return
       }
       const [members, rounds, settingsRows, templates, queued, optOuts] = await Promise.all([
-        supabase.from('members').select('id, slot, display_first_name, phone, access_token, token_revoked_at, removed_at')
+        supabase.from('members').select('id, slot, display_first_name, phone, access_token, token_revoked_at, removed_at, language_pref, link_sent_at')
           .eq('cycle_id', cycle.id).order('slot').then(check),
         supabase.from('rounds').select('*')
           .eq('cycle_id', cycle.id).order('round_number').then(check),
@@ -200,6 +202,8 @@ export function useCycleStore() {
     const patch = {}
     if ('name' in fields) patch.display_first_name = fields.name
     if ('phone' in fields) patch.phone = fields.phone || null
+    if ('language' in fields) patch.language_pref = fields.language === 'es' ? 'es' : 'en'
+    if ('linkSentAt' in fields) patch.link_sent_at = fields.linkSentAt
     return run(
       s => ({ ...s, participants: s.participants.map(p => (p.slot === slot ? { ...p, ...fields } : p)) }),
       async () => check(await supabase.from('members').update(patch).eq('id', member.id))
@@ -260,6 +264,28 @@ export function useCycleStore() {
     return run(null, async () => check(await supabase.from('rounds')
       .update({ recipient_member_id: member.id }).eq('id', round.id)))
   }, [run])
+
+  // Move a round's collect and payout days. The database refuses a payout before its
+  // collection or dates that fall out of round order (migration 009).
+  const updateRoundDates = useCallback((roundNum, collectDate, payoutDate) => {
+    const round = storeRef.current.rounds.find(r => r.round === roundNum)
+    if (!round) return
+    return run(
+      patchRound(roundNum, r => ({ ...r, collectDate, payoutDate })),
+      async () => check(await supabase.from('rounds')
+        .update({ collect_date: collectDate, payout_date: payoutDate }).eq('id', round.id))
+    )
+  }, [run])
+
+  // Grokbot's key: only a hash is stored. createBotKey returns the key once.
+  const loadBotKey = useCallback(async () => {
+    const rows = check(await supabase.from('bot_keys').select('created_at, revoked_at'))
+    return rows.filter(row => !row.revoked_at).sort((a, b) => (a.created_at < b.created_at ? 1 : -1))[0] || null
+  }, [])
+
+  const createBotKey = useCallback(async () => check(await supabase.rpc('create_bot_key')), [])
+
+  const revokeBotKeys = useCallback(async () => { check(await supabase.rpc('revoke_bot_keys')) }, [])
 
   const saveConfig = useCallback(({ organizerName, organizerPhone }) => {
     const { cycleId } = storeRef.current.config
@@ -472,6 +498,10 @@ export function useCycleStore() {
     assignRecipient,
     createCycle,
     deleteIncompleteCycle,
+    updateRoundDates,
+    loadBotKey,
+    createBotKey,
+    revokeBotKeys,
     togglePayment,
     togglePayout,
     updateRoundNotes,

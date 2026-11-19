@@ -2,7 +2,6 @@
 // round + countdown, money collected and the payout, anything to review, then who owes.
 import Logo from '../ui/Logo'
 import MemberAvatarGrid from './MemberAvatarGrid'
-import NeedsReviewCard from './NeedsReviewCard'
 import StillOweCard from './StillOweCard'
 
 export default function DashboardView({
@@ -24,23 +23,8 @@ export default function DashboardView({
   contribution,
   zelle,
   collectDate,
-  reviews,
-  participants,
-  rounds,
-  locale,
-  timeZone,
-  onMatchReview,
-  onDismissReview,
   readOnly,
   onSelectMember,
-  reminderItems,
-  reminderWindowLabel,
-  onMarkSent,
-  onSkipReminder,
-  onMarkAllReminders,
-  onBuildReminders,
-  reminderBuilding,
-  reminderNotice,
 }) {
   const percent = total > 0 ? Math.round((paid / total) * 100) : 0
   return (
@@ -59,7 +43,7 @@ export default function DashboardView({
       </header>
 
       <section className="bg-panel rounded-3xl border border-white/10 p-5" aria-label={t.paidOf(paid, total)}>
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2">
           <p className="text-3xl font-extrabold tracking-tight text-stone-50">
             {collectedLabel}
             <span className="text-base font-semibold text-stone-400"> {t.ofWord} {potLabel}</span>
@@ -77,7 +61,7 @@ export default function DashboardView({
           <div className="h-full rounded-full bg-mint transition-all" style={{ width: `${percent}%` }} />
         </div>
         {payoutLine && (
-          <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-sm font-semibold text-stone-100 min-w-0">{payoutLine}</p>
             {onTogglePayout && recipientName && (
               <button
@@ -105,21 +89,10 @@ export default function DashboardView({
           collectDate={collectDate}
           t={t}
           readOnly={readOnly}
+          showNudges={false}
           onSelect={onSelectMember}
         />
       )}
-
-      <NeedsReviewCard
-        items={reviews}
-        t={t}
-        participants={participants}
-        rounds={rounds}
-        locale={locale}
-        timeZone={timeZone}
-        readOnly={readOnly}
-        onMatch={onMatchReview}
-        onDismiss={onDismissReview}
-      />
 
       <StillOweCard
         t={t}
@@ -129,16 +102,8 @@ export default function DashboardView({
         zelle={zelle}
         collectDate={collectDate}
         readOnly={readOnly}
-        reminderItems={reminderItems}
-        reminderWindowLabel={reminderWindowLabel}
         onSelect={onSelectMember}
         onTogglePaid={onTogglePaid}
-        onMarkSent={onMarkSent}
-        onSkipReminder={onSkipReminder}
-        onMarkAllReminders={onMarkAllReminders}
-        onBuildReminders={onBuildReminders}
-        reminderBuilding={reminderBuilding}
-        reminderNotice={reminderNotice}
       />
     </div>
   )

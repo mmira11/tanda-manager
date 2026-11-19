@@ -35,9 +35,9 @@ describe('AdminGate', () => {
     installFakeSupabase({ session: adminSession, isAdmin: true, db: seedCycle({ names: ['Ana', 'Beto', 'Cata'] }) })
     render(<AdminGate />)
 
-    expect(await screen.findByRole('button', { name: 'Dashboard' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: /^Today/ })).toBeTruthy()
     expect(screen.getByText('Test Tanda')).toBeTruthy()
-    expect(screen.getByText('admin@example.com')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Dashboard' })).toBeNull()
   })
 })
 
@@ -198,8 +198,8 @@ describe('admin is always English', () => {
     expect(screen.queryByLabelText('Toggle language')).toBeNull()
     expect(screen.queryByLabelText('Cambiar idioma')).toBeNull()
     await user.click(screen.getByRole('button', { name: 'Settings' }))
-    expect(screen.getByRole('button', { name: 'Archive' })).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'New cycle' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Archive cycle…' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'New cycle' })).toBeNull()
   })
 
   it('shows the archived banner in English', async () => {
@@ -219,7 +219,7 @@ describe('sign out', () => {
     render(<AdminGate />)
 
     await user.click(await screen.findByText('Settings'))
-    expect(screen.getAllByText('admin@example.com').length).toBeGreaterThan(1)
+    expect(screen.getByText('Signed in as admin@example.com')).toBeTruthy()
     await user.click(screen.getByText('Sign out'))
 
     await waitFor(() => expect(screen.getByText('Admin Sign In')).toBeTruthy())

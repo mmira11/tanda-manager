@@ -1,33 +1,25 @@
+// src/components/admin/AdminDashboard.jsx — the organizer's four tabs, one job each:
+// Today (who owes, mark paid, payout), Members (links and people), Schedule (rounds and
+// dates), Settings (Zelle, Grokbot key, archive). Grokbot handles scheduled reminders.
 import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
 import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo, dateLocale, inRound } from '../../utils/rounds'
 import { compactCountdown, paymentStats } from '../../utils/presentation'
-import RoundPanel from './RoundPanel'
-import RosterEditor from './RosterEditor'
-import HistoryLog from './HistoryLog'
-import DataControls from './DataControls'
 import DashboardView from './DashboardView'
+import MembersView from './MembersView'
+import ScheduleView from './ScheduleView'
+import SettingsView from './SettingsView'
 import PaymentSheet from './PaymentSheet'
 import TabBar from '../ui/TabBar'
 import { LangProvider } from '../../context/LangContext'
-import { buildReminderView } from '../../utils/reminderQueue'
 
 export default function AdminDashboard({ email, onNewCycle }) {
-  const {
-    store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment, togglePayout,
-    confirmMatch, dismissReview, reminderMeta, buildReminderList, markReminders,
-  } = useStore()
+  const { store, error, clearError, togglePayment, togglePayout } = useStore()
   const [tab, setTab] = useState('dashboard')
-  const [confirmArchive, setConfirmArchive] = useState(false)
-  const [reminderNotice, setReminderNotice] = useState('')
-  const [reminderBuilding, setReminderBuilding] = useState(false)
-  const [selectedRound, setSelectedRound] = useState(() => getCurrentRound(store.rounds).round)
   const [sheetSlot, setSheetSlot] = useState(null)
   const [now, setNow] = useState(() => new Date())
-  const hasActive = cycles.some(cycle => cycle.status === 'active')
-  const viewingActive = store.config.status === 'active'
   const readOnly = store.config.status === 'archived'
   // The organizer's screens are English only. Texts sent to members stay bilingual.
   const lang = 'en'
@@ -49,49 +41,15 @@ export default function AdminDashboard({ email, onNewCycle }) {
   const payoutDay = current ? getDayName(current.payoutDate, dateLocale(lang)) : ''
   const deadline = current ? deadlineOnDate(current.collectDate, store.config.timezone).getTime() : null
   const countdownLabel = deadline && !readOnly ? compactCountdown(getCountdownTo(deadline, now)) : ''
-  const queue = buildReminderView({
-    now,
-    timezone: store.config.timezone,
-    settings: reminderMeta.settings,
-    rounds: store.rounds,
-    participants: store.participants,
-    queued: reminderMeta.queued,
-    templates: reminderMeta.templates,
-    contribution: store.config.contribution,
-    zelle: store.config.organizerPhone,
-  })
-  const windowLabel = {
-    thursday_all: t.reminderThursday,
-    friday_noon: t.reminderNoon,
-    friday_evening: t.reminderEvening,
-  }[queue.window] || ''
-
-  async function onBuildReminders() {
-    setReminderBuilding(true)
-    setReminderNotice('')
-    try {
-      const plan = await buildReminderList(now)
-      if (!plan?.window) setReminderNotice(t.noReminderWindow)
-      else if (!plan.rows?.length) setReminderNotice(t.noReminderRecipients)
-    } catch {
-      // buildReminderList already surfaces the message.
-    } finally {
-      setReminderBuilding(false)
-    }
-  }
+  const unpaid = members.filter(member => !member.paid).length
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 30000)
     return () => clearInterval(id)
   }, [])
 
-  const editRound = (roundNum) => {
-    setSelectedRound(roundNum)
-    setTab('schedule')
-  }
-
   const tabs = [
-    { id: 'dashboard', label: t.tabDashboard, icon: 'home', badge: queue.count },
+    { id: 'dashboard', label: t.tabToday, icon: 'home', badge: readOnly ? 0 : unpaid },
     { id: 'members', label: t.tabMembers, icon: 'members' },
     { id: 'schedule', label: t.tabSchedule, icon: 'rounds' },
     { id: 'settings', label: t.tabSettings, icon: 'settings' },
@@ -101,31 +59,6 @@ export default function AdminDashboard({ email, onNewCycle }) {
     <LangProvider lang={lang}>
     <div className="admin-theme min-h-screen bg-ink text-stone-100">
       <div className="max-w-lg mx-auto px-4 pt-5 pb-28">
-        {email && <p className="mb-3 truncate text-[11px] text-stone-400">{email}</p>}
-        {confirmArchive && (
-          <div role="dialog" aria-modal="true" aria-labelledby="archive-title" className="mb-4 bg-panel border border-white/10 rounded-2xl p-4">
-            <h2 id="archive-title" className="font-semibold text-stone-50">Archive this cycle?</h2>
-            <p className="text-sm text-stone-300 mt-1">
-              Payments and the roster will be locked. You can still view history, then start a new cycle.
-            </p>
-            <div className="flex gap-2 mt-4">
-              <button
-                type="button"
-                onClick={() => { setConfirmArchive(false); archiveCycle() }}
-                className="flex-1 bg-mint text-ink font-semibold py-2.5 rounded-xl text-sm min-h-11"
-              >
-                {t.archiveCycle}
-              </button>
-              <button
-                type="button"
-                onClick={() => setConfirmArchive(false)}
-                className="flex-1 border border-white/15 font-semibold py-2.5 rounded-xl text-sm min-h-11"
-              >
-                {t.cancel}
-              </button>
-            </div>
-          </div>
-        )}
         {readOnly && (
           <div className="mb-4 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-stone-200">
             {t.archivedBanner}
@@ -158,81 +91,13 @@ export default function AdminDashboard({ email, onNewCycle }) {
             contribution={store.config.contribution}
             zelle={store.config.organizerPhone}
             collectDate={current?.collectDate}
-            reviews={pendingReview}
-            participants={store.participants}
-            rounds={store.rounds}
-            locale={dateLocale(lang)}
-            timeZone={store.config.timezone}
-            onMatchReview={confirmMatch}
-            onDismissReview={dismissReview}
             readOnly={readOnly}
             onSelectMember={member => setSheetSlot(member.slot)}
-            reminderItems={queue.items}
-            reminderWindowLabel={windowLabel}
-            onMarkSent={id => markReminders([id], 'sent')}
-            onSkipReminder={id => markReminders([id], 'skipped')}
-            onMarkAllReminders={ids => markReminders(ids, 'sent')}
-            onBuildReminders={onBuildReminders}
-            reminderBuilding={reminderBuilding}
-            reminderNotice={reminderNotice}
           />
         )}
-        {tab === 'members' && <RosterEditor readOnly={readOnly} />}
-        {tab === 'schedule' && (
-          <div className="space-y-4">
-            <RoundPanel selectedRound={selectedRound} onSelectRound={setSelectedRound} readOnly={readOnly} />
-            <HistoryLog onEditRound={editRound} />
-          </div>
-        )}
-        {tab === 'settings' && (
-          <div className="space-y-4">
-            {cycles.length > 0 && (
-              <label className="block text-sm text-stone-300">
-                {t.cycleLabel}
-                <select
-                  aria-label={t.cycleLabel}
-                  value={store.config.cycleId}
-                  onChange={e => selectCycle(e.target.value)}
-                  className="mt-1 w-full rounded-xl bg-ink border border-white/15 px-3 py-3 text-sm text-stone-100"
-                >
-                  {cycles.map(cycle => (
-                    <option key={cycle.id} value={cycle.id}>
-                      {cycle.name} · {cycle.status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {hasActive && (
-              <p className="text-xs text-stone-400">
-                Archive the active cycle before starting another.
-              </p>
-            )}
-            <div className="flex gap-2">
-              {viewingActive && (
-                <button
-                  type="button"
-                  onClick={() => setConfirmArchive(true)}
-                  className="flex-1 min-h-11 text-sm font-semibold rounded-xl border border-white/15"
-                >
-                  {t.archive}
-                </button>
-              )}
-              {onNewCycle && (
-                <button
-                  type="button"
-                  onClick={onNewCycle}
-                  disabled={hasActive}
-                  title={hasActive ? t.archiveFirst : undefined}
-                  className="flex-1 min-h-11 text-sm font-semibold rounded-xl bg-mint text-ink disabled:opacity-40"
-                >
-                  {t.newCycle}
-                </button>
-              )}
-            </div>
-            <DataControls email={email} />
-          </div>
-        )}
+        {tab === 'members' && <MembersView readOnly={readOnly} />}
+        {tab === 'schedule' && <ScheduleView readOnly={readOnly} />}
+        {tab === 'settings' && <SettingsView email={email} onNewCycle={onNewCycle} />}
       </div>
 
       {sheetMember && (
