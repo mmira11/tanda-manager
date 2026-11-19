@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
+      includeAssets: ['icons/favicon-32.png', 'icons/apple-touch-icon.png', 'icons/tanda-192.png', 'icons/tanda-512.png', 'icons/tanda-maskable-512.png'],
       workbox: {
         // Default patterns skip fonts. Latin woff2 only, so the precache stays small.
         globPatterns: ['**/*.{js,css,html,woff2}'],
@@ -23,8 +23,9 @@ export default defineConfig({
         orientation: 'portrait',
         start_url: '/tanda-manager/',
         icons: [
-          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/tanda-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/tanda-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icons/tanda-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),
