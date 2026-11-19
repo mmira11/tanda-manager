@@ -1,4 +1,4 @@
-// send-reminders: called every hour by pg_cron (supabase/cron/schedule_send_reminders.sql).
+// send-reminders: called every 30 minutes by pg_cron (supabase/cron/schedule_send_reminders.sql).
 // Decides in Los Angeles time whether a reminder window is due, then hands the row to the
 // channel dispatcher. The default channel is queue: one reminder_log row per person, no
 // external send. Twilio is still here, and stays off unless reminder_settings.channel is

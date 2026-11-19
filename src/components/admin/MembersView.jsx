@@ -204,7 +204,7 @@ export default function MembersView({ readOnly = false }) {
   const zelle = config.organizerPhone || ''
   const welcome = bilingual(
     `Welcome to ${config.name}! 🎉 Collection is every ${config.intervalDays} days. Please send ${money} to ${zelle || organizerFallback('en')} via Zelle on collection day. I'll text each of you your own private link. Looking forward to a great tanda with everyone!`,
-    `¡Bienvenidos a ${config.name}! 🎉 El cobro es cada ${config.intervalDays} días. Por favor envíen ${money} a ${zelle || organizerFallback('es')} por Zelle el día de cobro. A cada quien le mando su enlace privado. ¡Qué gusto hacer esta tanda juntos!`,
+    `¡Bienvenidos a ${config.name}! 🎉 El cobro es cada ${config.intervalDays} días. Por favor manden ${money} a ${zelle || organizerFallback('es')} por Zelle el día de cobro. A cada quien le mando su enlace privado. ¡Qué gusto hacer esta tanda juntos!`,
   )
   const groupUrl = buildGroupSmsUrl(withPhone, welcome)
   const open = participants.find(p => p.slot === openSlot) || null

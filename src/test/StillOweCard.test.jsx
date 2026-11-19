@@ -55,7 +55,7 @@ describe('still owe list (Today)', () => {
     await user.click(within(owe).getByRole('button', { name: 'Bea' }))
     expect(onSelect).toHaveBeenCalledWith(members[1])
     expect(document.body.textContent).not.toMatch(/555/)
-    expect(screen.getByText(/Reminders are sent by Grokbot/)).toBeTruthy()
+    expect(screen.getByText(/Grok Bot drafts reminders; you send them/)).toBeTruthy()
   })
 
   it('Nudge sends the friendly two-paragraph text', () => {
@@ -63,7 +63,7 @@ describe('still owe list (Today)', () => {
     const nudge = screen.getByRole('link', { name: 'Nudge Bea' })
     const [english, spanish] = decodeURIComponent(nudge.getAttribute('href').split('body=')[1]).split('\n\n')
     expect(english).toBe('Hi Bea, friendly reminder that Tanda collection is on Friday, Jun 12. Please send $100 to org@example.com via Zelle. Thank you!')
-    expect(spanish).toBe('Hola Bea, un recordatorio amigable de que la colección de Tanda es el viernes 12 de junio. Por favor, envíe 100 dólares a org@example.com a través de Zelle. ¡Gracias!')
+    expect(spanish).toBe('Hola Bea, te recordamos que el cobro de la tanda es el viernes 12 de junio. Por favor envía $100 a org@example.com por Zelle. ¡Gracias!')
   })
 
   it('read-only (archived): no Nudge, no Mark paid', () => {
@@ -116,7 +116,7 @@ describe('reminder view', () => {
     const view = buildReminderView({
       now: new Date('2026-11-20T21:00:00Z'),
       timezone: 'America/Los_Angeles',
-      settings: { friday_noon_at: '12:00', friday_evening_at: '18:00', thursday_all_at: '09:00' },
+      settings: { friday_noon_at: '12:00', friday_evening_at: '16:30', thursday_all_at: '09:00' },
       contribution: 100,
       zelle: 'org@example.com',
       templates: [],

@@ -25,9 +25,13 @@ describe('window selection in Los Angeles time', () => {
     expect(dueWindow(at('2026-11-19T17:00:00Z'), round)).toBe('thursday_all')
     expect(dueWindow(localClock(new Date('2026-07-09T16:00:00Z')), { ...round, collect_date: '2026-07-10' })).toBe('thursday_all')
   })
-  it('Friday 12:00 and 18:00 are the unpaid windows', () => {
+  it('Friday 12:00 and 16:30 are the unpaid windows', () => {
     expect(dueWindow(at('2026-11-20T20:00:00Z'), round)).toBe('friday_noon')
-    expect(dueWindow(at('2026-11-21T02:00:00Z'), round)).toBe('friday_evening') // 18:00 Fri in LA, already Sat in UTC
+    expect(dueWindow(at('2026-11-21T00:30:00Z'), round)).toBe('friday_evening') // 16:30 Fri PST
+    expect(dueWindow(localClock(new Date('2026-07-10T23:30:00Z')), { ...round, collect_date: '2026-07-10' })).toBe('friday_evening') // 16:30 Fri PDT
+    expect(dueWindow(at('2026-11-21T00:00:00Z'), round)).toBeNull() // 16:00, before the last call
+    expect(dueWindow(at('2026-11-21T02:00:00Z'), round)).toBeNull() // 18:00 is the deadline, not the last call
+    expect(dueWindow(at('2026-11-21T02:00:00Z'), round, { friday_evening_at: '18:00' })).toBe('friday_evening')
   })
   it('any other hour or day is not a window', () => {
     expect(dueWindow(at('2026-11-19T18:00:00Z'), round)).toBeNull() // Thu 10:00
@@ -45,7 +49,9 @@ describe('window selection in Los Angeles time', () => {
     expect(activeReminderWindow(at('2026-11-20T17:00:00Z'), round)).toBe('thursday_all') // Fri 09:00
     expect(activeReminderWindow(at('2026-11-20T20:00:00Z'), round)).toBe('friday_noon')
     expect(activeReminderWindow(at('2026-11-20T21:00:00Z'), round)).toBe('friday_noon') // Fri 13:00
-    expect(activeReminderWindow(at('2026-11-21T02:00:00Z'), round)).toBe('friday_evening')
+    expect(activeReminderWindow(at('2026-11-21T00:00:00Z'), round)).toBe('friday_noon') // Fri 16:00, last call is 16:30
+    expect(activeReminderWindow(at('2026-11-21T00:30:00Z'), round)).toBe('friday_evening')
+    expect(activeReminderWindow(at('2026-11-21T02:00:00Z'), round)).toBe('friday_evening') // stays open after 16:30
     expect(activeReminderWindow(at('2026-11-21T18:00:00Z'), round)).toBeNull()
   })
 })
@@ -103,7 +109,7 @@ describe('message text', () => {
   it('falls back to built-in bilingual text when a cycle has no templates', () => {
     const text = renderMessage([], 'thursday_all', { firstName: 'Ada', amount: 87.5 })
     expect(text).toBe('Hi Ada, friendly reminder that Tanda collection is tomorrow. Please send $87.50 to the organizer via Zelle. Thank you!'
-      + '\n\nHola Ada, un recordatorio amigable de que la colección de Tanda es mañana. Por favor, envíe 87.50 dólares al organizador a través de Zelle. ¡Gracias!')
+      + '\n\nHola Ada, te recordamos que el cobro de la tanda es mañana. Por favor envía $87.50 al organizador por Zelle. ¡Gracias!')
   })
 })
 
@@ -312,15 +318,16 @@ describe('runReminders', () => {
 })
 
 describe('reminder-day texts match the nudge style', () => {
-  it('noon and 6 PM read like the organizer, with dólares and the Zelle in Spanish', async () => {
+  it('noon and the 4:30 last call read like the organizer, in tú, and still name the 6 PM deadline', async () => {
     const { renderMessage } = await import('../../supabase/functions/_shared/reminders.js')
-    const noon = renderMessage([], 'friday_noon', { firstName: 'Eddy', amount: 200, zelle: '2093620911' })
-    expect(noon).toBe('Hi Eddy, friendly reminder that Tanda collection is today and closes at 6 PM. Please send $200 to 2093620911 via Zelle. Thank you!'
-      + '\n\nHola Eddy, un recordatorio amigable de que la colección de Tanda es hoy y cierra a las 6 PM. Por favor, envíe 200 dólares a 2093620911 a través de Zelle. ¡Gracias!')
-    const last = renderMessage([], 'friday_evening', { firstName: 'Eddy', amount: 200, zelle: '2093620911' })
+    const noon = renderMessage([], 'friday_noon', { firstName: 'Eddy', amount: 200, zelle: 'org@example.com' })
+    expect(noon).toBe('Hi Eddy, friendly reminder that Tanda collection is today and closes at 6 PM. Please send $200 to org@example.com via Zelle. Thank you!'
+      + '\n\nHola Eddy, te recordamos que el cobro de la tanda es hoy y cierra a las 6 PM. Por favor envía $200 a org@example.com por Zelle. ¡Gracias!')
+    const last = renderMessage([], 'friday_evening', { firstName: 'Eddy', amount: 200, zelle: 'org@example.com' })
     expect(last).toContain('last friendly reminder that Tanda collection closes at 6 PM today')
-    expect(last).toContain('último recordatorio amigable')
-    expect(last).not.toMatch(/undefined|\{\{/)
+    expect(last).toContain('el cobro de la tanda cierra hoy a las 6 PM')
+    expect(last).toContain('envía $200')
+    expect(last).not.toMatch(/colección|envíe|undefined|\{\{/)
   })
 
   it('a saved custom template still fills the old variables', async () => {

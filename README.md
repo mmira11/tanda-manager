@@ -51,14 +51,16 @@ Nudges on the dashboard still open the phone's SMS app. The reminder queue below
 
 ## Supabase setup
 
-1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `017`). Each migration is safe to run more than once.
+1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `019`). Each migration is safe to run more than once.
    - `013` — reminder log and SMS opt-outs
    - `014` — Zelle `pending_review` rows and `confirm_zelle_match`
    - `015` — the round the admin picked, an optional dismiss reason, and `round_timing` (`early`, `on_time`, `after_deadline`, `late`)
    - `016` — an archived cycle refuses Match, dismiss, and payer-alias edits. The cycle can still be viewed and unarchived.
    - `017` — reminder queue (`channel`, `queued` / `skipped`, admin RPCs). Queue mode needs this.
+   - `018` — when a member link was sent, and one narrow bot key
+   - `019` — bot status drops phone numbers; `bot_mark_paid` takes an optional `paid_at` and records `source = 'bot'`. The last-call reminder default moves to 4:30 PM Pacific.
 
-Apply `014`, then `015`, then `016`, then `017`. `015` replaces the two-argument `confirm_zelle_match` from `014`. `016` replaces it again. If `014` and `015` are already applied, run `016` next, then `017`.
+Apply `014`, then `015`, then `016`, then `017`, then `018`, then `019`. `015` replaces the two-argument `confirm_zelle_match` from `014`. `016` replaces it again. If `014` through `018` are already applied, run `019` next. Run `019` in the SQL editor before relying on the bot status payload.
 2. **Turn on email sign-in.** Under Authentication → Providers, enable Email. The app sends magic links only and won't create new users (`shouldCreateUser: false`), so create your own user under Authentication → Users.
 3. **Allow the redirect URLs.** Under Authentication → URL Configuration, add every address you'll sign in from, including the `/tanda-manager/` base path:
    - `http://localhost:5173/tanda-manager/admin`
@@ -78,18 +80,19 @@ Grokbot (or any helper bot) gets one narrow key instead of an admin login. In **
 The key can do two things, both on the active cycle only:
 
 ```bash
-# Who is in the current round, their phones and language, and who has paid
+# Who is in the current round, and who has paid. No phone numbers.
 curl -s https://<project>.supabase.co/rest/v1/rpc/bot_round_status \
   -H "apikey: <anon key>" -H "Content-Type: application/json" \
   -d '{"p_key": "<bot key>"}'
 
-# Mark slot 3 paid for the current round (p_paid: false undoes; p_round picks another round)
+# Mark slot 3 paid. p_paid_at is the Zelle email time; omit it to use the current time.
+# p_paid: false undoes. p_round picks another round.
 curl -s https://<project>.supabase.co/rest/v1/rpc/bot_mark_paid \
   -H "apikey: <anon key>" -H "Content-Type: application/json" \
-  -d '{"p_key": "<bot key>", "p_slot": 3}'
+  -d '{"p_key": "<bot key>", "p_slot": 3, "p_paid_at": "2099-06-01T17:30:00Z"}'
 ```
 
-`bot_round_status` returns the cycle (name, contribution, Zelle), the round (number, collect date, 6 PM deadline, payout date, recipient) and `members` with `slot`, `first_name`, `phone`, `language`, `paid` and `is_recipient`. The "current round" is the first one whose payout day is today or later, the same one members see. Payments the bot marks are saved with `source = 'auto'`. Treat the key like a password: anyone holding it can read members' first names and phone numbers.
+`bot_round_status` returns the cycle (name, contribution, Zelle), the round (number, collect date, 6 PM deadline, payout date, recipient) and `members` with `slot`, `first_name`, `language`, `paid`, `amount`, and `is_recipient`. It does not return phone numbers. The "current round" is the first one whose payout day is today or later, the same one members see. Payments the bot marks are saved with `source = 'bot'`. Treat the key like a password: anyone holding it can read first names and mark a payment. Grok Bot drafts reminders; you send them.
 
 ## Edge functions
 
@@ -99,7 +102,7 @@ These are separate from the static site. Deploy them with the Supabase CLI after
 
 Queue mode is the default. No Twilio account is required. At each window the function writes one `reminder_log` row per person (`status = queued`, `channel = queue`) and sends nothing. The dashboard shows **Send reminders now** / **Enviar recordatorios** while that window's list still has someone unpaid. Each row shows the bilingual message plus SMS and WhatsApp buttons. Tapping one opens your phone and marks that row sent. **Mark all done** clears the remaining unpaid rows. **Skip** drops one person. Someone who pays first stays on the card greyed out and is left out of the count.
 
-Windows, in `America/Los_Angeles`: Thursday 9:00 everyone with a phone, Friday 12:00 and Friday 6:00 unpaid only. The same rules live in `supabase/functions/_shared/reminders.js`. The hourly job only writes during that exact hour. **Build reminder list now** on the dashboard uses the open window, so the list still appears if cron did not run. A person is never queued twice for the same round and window.
+Windows, in `America/Los_Angeles`: Thursday 9:00 everyone with a phone, Friday 12:00 and Friday 4:30 PM unpaid only. Collection still closes at 6:00 PM; the 4:30 PM text is the last call before that deadline. The same rules live in `supabase/functions/_shared/reminders.js`. The job runs every 30 minutes and writes only when the local time matches that window. **Build reminder list now** on the dashboard uses the open window, so the list still appears if cron did not run. A person is never queued twice for the same round and window.
 
 The old Twilio sender is still in the function. It stays off unless that cycle's `reminder_settings.channel` is `twilio` and `REMINDERS_DRY_RUN` is `false`.
 
@@ -108,7 +111,7 @@ Setup:
 1. Run migration `017_reminder_queue.sql` (after `013`).
 2. Deploy the function: `supabase functions deploy send-reminders --no-verify-jwt`
 3. Set `CRON_SECRET` to a long random string. The cron job sends it as `x-cron-secret`.
-4. Run `supabase/cron/schedule_send_reminders.sql` once. It turns on `pg_cron` and `pg_net` and reads two Vault secrets (`tanda_reminders_url`, `tanda_cron_secret`). It is safe to run more than once. It is not a migration: CI's Postgres has no `pg_cron`.
+4. Run `supabase/cron/schedule_send_reminders.sql` once. It turns on `pg_cron` and `pg_net` and reads two Vault secrets (`tanda_reminders_url`, `tanda_cron_secret`). It is safe to run more than once. Run it again after migration `019` so the job fires at :00 and :30; otherwise the 4:30 PM last call never queues. It is not a migration: CI's Postgres has no `pg_cron`.
 
 ```bash
 supabase functions deploy send-reminders --no-verify-jwt
