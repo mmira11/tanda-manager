@@ -131,7 +131,7 @@ function AdminPreview() {
         active="dashboard"
         onChange={() => {}}
         tabs={[
-          { id: 'dashboard', label: t.tabDashboard, icon: 'home', badge: queued.filter(item => !item.paid).length },
+          { id: 'dashboard', label: t.tabToday, icon: 'home', badge: queued.filter(item => !item.paid).length },
           { id: 'members', label: t.tabMembers, icon: 'members' },
           { id: 'schedule', label: t.tabSchedule, icon: 'rounds' },
           { id: 'settings', label: t.tabSettings, icon: 'settings' },
