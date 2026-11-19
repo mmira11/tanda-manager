@@ -1,6 +1,7 @@
 // src/components/admin/DashboardView.jsx — the organizer's "today" screen, status first:
 // round + countdown, money collected and the payout, anything to review, then who owes.
 import Logo from '../ui/Logo'
+import MemberAvatarGrid from './MemberAvatarGrid'
 import NeedsReviewCard from './NeedsReviewCard'
 import StillOweCard from './StillOweCard'
 
@@ -95,6 +96,18 @@ export default function DashboardView({
           </div>
         )}
       </section>
+
+      {members.length > 0 && (
+        <MemberAvatarGrid
+          members={members}
+          contribution={contribution}
+          zelle={zelle}
+          collectDate={collectDate}
+          t={t}
+          readOnly={readOnly}
+          onSelect={onSelectMember}
+        />
+      )}
 
       <NeedsReviewCard
         items={reviews}
