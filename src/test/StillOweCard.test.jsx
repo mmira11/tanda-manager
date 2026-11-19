@@ -60,16 +60,15 @@ describe('still owe list', () => {
     expect(document.body.textContent).not.toMatch(/555/)
   })
 
-  it('without a queue, SMS is a nudge for people with a valid phone, dated in both languages', () => {
-    renderCard({ collectDate: '2026-06-12' })
+  it('without a queue, SMS is the friendly nudge for people with a valid phone', () => {
+    renderCard({ collectDate: '2099-06-12' })
     const links = screen.getAllByRole('link')
     expect(links).toHaveLength(1)
     expect(links[0].getAttribute('aria-label')).toBe('Text Bea a reminder')
     const body = decodeURIComponent(links[0].getAttribute('href').split('body=')[1])
-    const [english, spanish] = body.split(' / ')
-    expect(english).toContain('Fri, Jun 12')
-    expect(spanish.toLowerCase()).toContain('jun')
-    expect(spanish).not.toContain('Fri')
+    const [english, spanish] = body.split('\n\n')
+    expect(english).toBe('Hi Bea, friendly reminder that Tanda collection is on Friday, Jun 12. Please send $100 to org@example.com via Zelle. Thank you!')
+    expect(spanish).toBe('Hola Bea, un recordatorio amigable de que la colección de Tanda es el viernes 12 de junio. Por favor, envíe 100 dólares a org@example.com a través de Zelle. ¡Gracias!')
     expect(screen.getByRole('button', { name: 'Build reminder list now' })).toBeTruthy()
   })
 

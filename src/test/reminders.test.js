@@ -102,8 +102,8 @@ describe('message text', () => {
   })
   it('falls back to built-in bilingual text when a cycle has no templates', () => {
     const text = renderMessage([], 'thursday_all', { firstName: 'Ada', amount: 87.5 })
-    expect(text).toMatch(/^Hi Ada, tanda collection is tomorrow\. Please send \$87\.50 by Zelle to the organizer/)
-    expect(text).toMatch(/Hola Ada, el cobro de la tanda es mañana\. .*el organizador/)
+    expect(text).toBe('Hi Ada, friendly reminder that Tanda collection is tomorrow. Please send $87.50 to the organizer via Zelle. Thank you!'
+      + '\n\nHola Ada, un recordatorio amigable de que la colección de Tanda es mañana. Por favor, envíe 87.50 dólares al organizador a través de Zelle. ¡Gracias!')
   })
 })
 
@@ -308,5 +308,24 @@ describe('runReminders', () => {
     expect(isDryRun('true')).toBe(true)
     expect(isDryRun('FALSE')).toBe(false)
     expect(isDryRun(' false ')).toBe(false)
+  })
+})
+
+describe('reminder-day texts match the nudge style', () => {
+  it('noon and 6 PM read like the organizer, with dólares and the Zelle in Spanish', async () => {
+    const { renderMessage } = await import('../../supabase/functions/_shared/reminders.js')
+    const noon = renderMessage([], 'friday_noon', { firstName: 'Eddy', amount: 200, zelle: '2093620911' })
+    expect(noon).toBe('Hi Eddy, friendly reminder that Tanda collection is today and closes at 6 PM. Please send $200 to 2093620911 via Zelle. Thank you!'
+      + '\n\nHola Eddy, un recordatorio amigable de que la colección de Tanda es hoy y cierra a las 6 PM. Por favor, envíe 200 dólares a 2093620911 a través de Zelle. ¡Gracias!')
+    const last = renderMessage([], 'friday_evening', { firstName: 'Eddy', amount: 200, zelle: '2093620911' })
+    expect(last).toContain('last friendly reminder that Tanda collection closes at 6 PM today')
+    expect(last).toContain('último recordatorio amigable')
+    expect(last).not.toMatch(/undefined|\{\{/)
+  })
+
+  it('a saved custom template still fills the old variables', async () => {
+    const { renderMessage } = await import('../../supabase/functions/_shared/reminders.js')
+    const custom = [{ kind: 'friday_noon', lang: 'en', body: 'Yo {{firstName}}, {{amount}} to {{zelle}}' }]
+    expect(renderMessage(custom, 'friday_noon', { firstName: 'Ana', amount: 50, zelle: 'z' })).toMatch(/^Yo Ana, \$50 to z\n\nHola Ana/)
   })
 })

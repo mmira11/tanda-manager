@@ -21,16 +21,16 @@ export const DEFAULT_SETTINGS = {
 // Used when a cycle has no reminder_templates rows (cycles made with the create form).
 export const DEFAULT_TEMPLATES = {
   thursday_all: {
-    en: 'Hi {{firstName}}, tanda collection is tomorrow. Please send {{amount}} by Zelle to {{zelle}}. Thank you!',
-    es: 'Hola {{firstName}}, el cobro de la tanda es mañana. Por favor envía {{amount}} por Zelle a {{zelle}}. ¡Gracias!',
+    en: 'Hi {{firstName}}, friendly reminder that Tanda collection is tomorrow. Please send {{amount}} to {{zelle}} via Zelle. Thank you!',
+    es: 'Hola {{firstName}}, un recordatorio amigable de que la colección de Tanda es mañana. Por favor, envíe {{amountEs}} {{toZelleEs}} a través de Zelle. ¡Gracias!',
   },
   friday_noon: {
-    en: 'Hi {{firstName}}, tanda collection is today and closes at 6 PM. Please send {{amount}} by Zelle to {{zelle}}.',
-    es: 'Hola {{firstName}}, el cobro de la tanda es hoy y cierra a las 6 PM. Por favor envía {{amount}} por Zelle a {{zelle}}.',
+    en: 'Hi {{firstName}}, friendly reminder that Tanda collection is today and closes at 6 PM. Please send {{amount}} to {{zelle}} via Zelle. Thank you!',
+    es: 'Hola {{firstName}}, un recordatorio amigable de que la colección de Tanda es hoy y cierra a las 6 PM. Por favor, envíe {{amountEs}} {{toZelleEs}} a través de Zelle. ¡Gracias!',
   },
   friday_evening: {
-    en: 'Hi {{firstName}}, last call: tanda collection closes now. Please send {{amount}} by Zelle to {{zelle}}.',
-    es: 'Hola {{firstName}}, último aviso: el cobro de la tanda cierra ahora. Por favor envía {{amount}} por Zelle a {{zelle}}.',
+    en: 'Hi {{firstName}}, last friendly reminder that Tanda collection closes at 6 PM today. Please send {{amount}} to {{zelle}} via Zelle as soon as you can. Thank you!',
+    es: 'Hola {{firstName}}, último recordatorio amigable de que la colección de Tanda cierra hoy a las 6 PM. Por favor, envíe {{amountEs}} {{toZelleEs}} a través de Zelle lo antes posible. ¡Gracias!',
   },
 }
 
@@ -113,8 +113,11 @@ function fill(text, vars) {
 // One text with English first, then Spanish.
 export function renderMessage(templates, kind, { firstName, amount, zelle }) {
   const pick = lang => templates.find(t => t.kind === kind && t.lang === lang)?.body || DEFAULT_TEMPLATES[kind][lang]
-  const vars = { firstName: firstName || '', amount: money(amount), zelle: zelle || 'the organizer' }
-  const esVars = { ...vars, zelle: zelle || 'el organizador' }
+  // {{amountEs}} reads "200 dólares"; {{toZelleEs}} is "a <zelle>" or "al organizador".
+  const saved = String(zelle || '').trim()
+  const amountEs = `${money(amount).slice(1)} dólares`
+  const vars = { firstName: firstName || '', amount: money(amount), amountEs, zelle: saved || 'the organizer', toZelleEs: saved ? `a ${saved}` : 'al organizador' }
+  const esVars = { ...vars, zelle: saved || 'el organizador' }
   return `${fill(pick('en'), vars)}\n\n${fill(pick('es'), esVars)}`
 }
 

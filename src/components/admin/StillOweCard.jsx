@@ -5,7 +5,6 @@
 import { avatarColor, canNudge, initials } from '../../utils/presentation'
 import { buildNudgeSmsUrl, isValidUsPhone, smsUrlWithBody, whatsAppUrlWithBody } from '../../utils/messaging'
 import { actionableReminders } from '../../utils/reminderQueue'
-import { formatDate } from '../../utils/rounds'
 
 const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint'
 const chip = `inline-flex items-center justify-center min-h-11 px-3 rounded-xl text-sm font-semibold ${focus}`
@@ -45,8 +44,6 @@ export default function StillOweCard({
   const paid = members.filter(member => member.paid)
   const queued = actionableReminders(reminderItems)
   const queuedBySlot = Object.fromEntries(queued.map(item => [item.slot, item]))
-  const whenEn = collectDate ? formatDate(collectDate, 'en-US') : ''
-  const whenEs = collectDate ? formatDate(collectDate, 'es-US') : ''
 
   return (
     <section className="bg-panel rounded-3xl border border-white/10 px-4 pt-4 pb-2" aria-labelledby="owe-title">
@@ -77,7 +74,7 @@ export default function StillOweCard({
             const hasPhone = isValidUsPhone(member.phone)
             const smsUrl = readOnly ? null
               : item && hasPhone ? smsUrlWithBody(member.phone, item.message)
-                : canNudge(member) ? buildNudgeSmsUrl(member.phone, { name: member.name, amount: contribution, zelle, whenEn, whenEs })
+                : canNudge(member) ? buildNudgeSmsUrl(member.phone, { name: member.name, amount: contribution, zelle, collectDate })
                   : null
             const waUrl = item && hasPhone ? whatsAppUrlWithBody(member.phone, item.message) : null
             const note = member.slot === recipientSlot ? t.receivesThisRound
