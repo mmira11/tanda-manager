@@ -58,8 +58,9 @@ function MemberPreview() {
     })),
     rounds: PEOPLE.map(([name], index) => ({
       number: index + 1,
-      collect_date: '2099-03-06',
-      payout_date: index === 0 ? daysFromNow(12) : '2099-04-01',
+      // Round 3 (index 2) is current: collect tomorrow, payout the day after, every 14 days.
+      collect_date: daysFromNow(1 + (index - 2) * 14),
+      payout_date: daysFromNow(2 + (index - 2) * 14),
       recipient_first_name: name,
     })),
   }
