@@ -10,6 +10,7 @@ import RoundStepper from './RoundStepper'
 import ProgressRing from '../admin/ProgressRing'
 import Celebration, { alreadySeen, markSeen } from './Celebration'
 import AddToHomeHint from './AddToHomeHint'
+import GroupView from './GroupView'
 
 function Confetti() {
   const dots = [
@@ -108,6 +109,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
   const tabs = [
     { id: 'home', label: t.tabHome, icon: 'home' },
     { id: 'rounds', label: t.tabMyRounds, icon: 'rounds' },
+    { id: 'group', label: t.tabGroup, icon: 'members' },
     { id: 'profile', label: t.tabProfile, icon: 'profile' },
   ]
 
@@ -258,6 +260,10 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
               </div>
             ))}
           </section>
+        )}
+
+        {tab === 'group' && (
+          <GroupView board={board} t={t} locale={locale} rounds={rounds} isMine={isMine} complete={complete} />
         )}
 
         {tab === 'profile' && (
