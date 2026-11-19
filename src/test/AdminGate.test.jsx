@@ -78,7 +78,7 @@ describe('first run: create a cycle', () => {
     await user.click(screen.getByText('Create cycle'))
 
     expect(await screen.findByText('Round 1 of 3')).toBeTruthy()
-    expect(screen.getByText('$450')).toBeTruthy()
+    expect(screen.getByText(/of \$450/)).toBeTruthy()
 
     const [cycle] = fake.tables.cycles
     expect(cycle).toMatchObject({ name: 'Tanda 2027', start_date: '2027-01-08', interval_days: 7, contribution: 150, status: 'active' })

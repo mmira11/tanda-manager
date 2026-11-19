@@ -2,12 +2,10 @@ import { useEffect, useState } from 'react'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
 import { dateLocale, deadlineOnDate, formatDate, getCountdownTo } from '../../utils/rounds'
-import { compactCountdown, daysUntil, memberRoundSteps, paymentStats } from '../../utils/presentation'
+import { avatarColor, compactCountdown, daysUntil, initials, memberRoundSteps, paymentStats } from '../../utils/presentation'
 import Logo from '../ui/Logo'
 import LangToggle from '../ui/LangToggle'
 import TabBar from '../ui/TabBar'
-import RoundStepper from './RoundStepper'
-import ProgressRing from '../admin/ProgressRing'
 import Celebration, { alreadySeen, markSeen } from './Celebration'
 import AddToHomeHint from './AddToHomeHint'
 import GroupView from './GroupView'
@@ -35,7 +33,7 @@ function Confetti() {
 
 function CalendarIcon() {
   return (
-    <span className="w-10 h-10 rounded-xl bg-white text-teal flex items-center justify-center shrink-0" aria-hidden="true">
+    <span className="w-10 h-10 rounded-xl bg-cream text-teal flex items-center justify-center shrink-0" aria-hidden="true">
       <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8">
         <path d="M8 3v3M16 3v3M4 8h16M6 5h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" strokeLinecap="round" />
       </svg>
@@ -68,6 +66,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
   // Rounds carry first names only, so "mine" is my name on my payout date.
   const isMine = item => item.name === myName && item.payoutDate === payoutDate
   const [celebration, setCelebration] = useState(null)
+  const nextRound = rounds.find(item => item.round === (round?.round_number ?? 0) + 1) || null
   const days = daysUntil(payoutDate)
   const deadlineMs = round?.collect_deadline
     ? new Date(round.collect_deadline).getTime()
@@ -108,8 +107,8 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
 
   const tabs = [
     { id: 'home', label: t.tabHome, icon: 'home' },
-    { id: 'rounds', label: t.tabMyRounds, icon: 'rounds' },
     { id: 'group', label: t.tabGroup, icon: 'members' },
+    { id: 'rounds', label: t.tabMyRounds, icon: 'rounds' },
     { id: 'profile', label: t.tabProfile, icon: 'profile' },
   ]
 
@@ -125,7 +124,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
           <Logo />
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-extrabold tracking-tight text-stone-900 truncate">{board.cycle?.name || 'Tanda'}</h1>
-            <p className="text-xs text-stone-500 truncate">{t.tagline}</p>
+            <p className="text-sm text-stone-600 truncate">{t.greeting(myName)}</p>
           </div>
           <LangToggle lang={lang} onToggle={onToggleLang} label={t.toggleLanguage} />
         </div>
@@ -134,11 +133,6 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
       <main className="max-w-lg mx-auto px-4 pb-28 space-y-4">
         {tab === 'home' && (
           <>
-            <div className="card-in">
-              <h2 className="text-2xl font-extrabold text-stone-900">{t.greeting(myName)}</h2>
-              <p className="text-sm text-stone-500 mt-0.5">{t.greetingSub} 🌸</p>
-            </div>
-
             {complete && (
               <div className="bg-white rounded-3xl shadow-sm p-5 text-center">
                 <p className="text-lg font-bold text-teal">{t.tandaDone}</p>
@@ -146,93 +140,121 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
               </div>
             )}
 
-            {round?.recipient_first_name && !complete && (
+            {round && !complete && myTurn && (
               <section className="card-in relative overflow-hidden rounded-3xl p-5 text-white shadow-sm bg-gradient-to-br from-teal to-[#0B5A55]">
-                <div className="absolute -top-10 -right-10 w-36 h-36 rounded-full bg-white/10" aria-hidden="true" />
-                <div className="absolute inset-y-0 w-20 bg-white/10 blur-md animate-shimmer" aria-hidden="true" />
-                <p className="relative text-sm font-semibold text-white/80">{t.roundWord(round.round_number)}</p>
-                <p className="relative text-xl font-extrabold mt-1">
-                  {myTurn ? t.yourRound : `${t.receiving(round.recipient_first_name)} 🎉`}
-                </p>
-                <p className="relative text-sm text-white/90 mt-1">
+                <p className="text-sm font-semibold text-white/80">{t.roundWord(round.round_number)}</p>
+                <p className="text-xl font-extrabold mt-1">{t.yourRound}</p>
+                <p className="text-sm text-white/90 mt-1">
                   {t.receivingPot(formatMoney(stats.pot), formatDate(round.payout_date, locale))}
                 </p>
               </section>
             )}
 
-            {round && (
-              <section className="card-in relative overflow-hidden bg-white rounded-3xl shadow-sm p-5">
-                {paid && !complete && <Confetti />}
-                {(complete || !round.recipient_first_name) && (
-                  <p className="text-sm font-semibold text-teal">{t.roundWord(round.round_number)}</p>
-                )}
-                <p className={`text-3xl font-extrabold mt-1 ${paid ? 'text-emerald-600' : 'text-amber-600'}`}>
-                  {paid ? t.paidBig : t.pendingBig}
-                </p>
-                {!paid && time && (
-                  <p className="text-sm font-medium text-amber-700 mt-1">
-                    {time.done ? t.collectionDay : t.closesIn(compactCountdown(time))}
-                  </p>
-                )}
-
-                {payoutDate && (
-                  <div className="mt-4 bg-cream rounded-2xl p-3 flex items-center gap-3">
-                    <CalendarIcon />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs text-stone-500">{t.yourPayout}</p>
-                      <p className="font-bold text-stone-900">{formatDate(payoutDate, locale)} · {formatMoney(stats.pot)}</p>
-                      <p className="text-xs text-stone-500 mt-0.5">{t.thanksLine}</p>
-                    </div>
-                    {days != null && (
-                      <div className="text-center shrink-0 pl-2">
-                        <span className="text-coral text-lg" aria-hidden="true">♡</span>
-                        <p className="text-[11px] font-bold text-coralink leading-tight max-w-16">{t.daysLeft(days)}</p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="mt-5">
-                  <ProgressRing
-                    value={stats.paid}
-                    max={stats.total}
-                    label={t.groupPaid(stats.paid, stats.total)}
-                    track="#EFE9DF"
-                    stroke="#127A74"
-                    size="w-36 h-36"
-                  >
-                    <p className="text-2xl font-extrabold text-teal leading-none">{stats.percent}%</p>
-                    <p className="text-[11px] font-semibold text-stone-500 mt-1 leading-tight">{t.groupPaid(stats.paid, stats.total)}</p>
-                  </ProgressRing>
+            {round && !complete && !paid && (
+              <section className="card-in bg-white rounded-3xl shadow-sm p-5" aria-labelledby="pay-title">
+                <p className="text-sm font-semibold text-stone-600">{t.yourPaymentRound(round.round_number)}</p>
+                <div className="flex items-baseline justify-between gap-2 mt-1">
+                  <h2 id="pay-title" className="text-3xl font-extrabold tracking-tight text-stone-900">
+                    {t.amountDue(formatMoney(board.cycle?.contribution))}
+                  </h2>
+                  {time && (
+                    <span className="shrink-0 text-xs font-bold text-amber-800 bg-amber-100 rounded-full px-2.5 py-1">
+                      {time.done ? t.collectionDay : t.timeLeft(compactCountdown(time))}
+                    </span>
+                  )}
                 </div>
+                {round.collect_date && (
+                  <p className="text-sm text-stone-600 mt-1">{t.closesAt(formatDate(round.collect_date, locale))}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={copyZelle}
+                  disabled={!zelle}
+                  className="mt-4 w-full min-h-14 rounded-2xl bg-teal text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+                    <rect x="8" y="8" width="12" height="12" rx="2" />
+                    <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeLinecap="round" />
+                  </svg>
+                  {t.copyZellePay}
+                </button>
+                <p className="text-center text-xs text-stone-600 mt-2">{zelle ? t.alreadySent : t.zelleMissing}</p>
               </section>
             )}
 
-            <section className="bg-white rounded-3xl shadow-sm p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-bold text-stone-900">{t.roundsTitle}</h3>
-                <button type="button" onClick={() => setTab('rounds')} className="text-sm font-semibold text-coralink min-h-11 px-1">
-                  {t.seeAll}
-                </button>
-              </div>
-              <RoundStepper rounds={rounds} label={t.roundsTitle} />
-            </section>
+            {round && !complete && paid && (
+              <section className="card-in relative overflow-hidden rounded-3xl p-5 text-white shadow-sm bg-teal">
+                <Confetti />
+                <div className="relative flex items-center gap-3">
+                  <span className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center shrink-0" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M5 12.5 10 17 19 7.5" />
+                    </svg>
+                  </span>
+                  <div>
+                    <h2 className="text-2xl font-extrabold tracking-tight">{t.youArePaid}</h2>
+                    <p className="text-sm text-white/90">{t.paidRoundLine(round.round_number, formatMoney(board.cycle?.contribution))}</p>
+                  </div>
+                </div>
+                {nextRound && (
+                  <p className="relative text-sm text-white/90 mt-4">
+                    {t.nextPayment(formatDate(nextRound.collectDate, locale), formatMoney(board.cycle?.contribution))}
+                  </p>
+                )}
+              </section>
+            )}
 
-            <div>
-              <button
-                type="button"
-                onClick={copyZelle}
-                disabled={!zelle}
-                className="w-full min-h-14 rounded-2xl bg-teal text-white font-bold text-base flex items-center justify-center gap-2 disabled:opacity-50"
-              >
-                <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-                  <rect x="8" y="8" width="12" height="12" rx="2" />
-                  <path d="M6 16H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" strokeLinecap="round" />
-                </svg>
-                {t.copyZelle}
-              </button>
-              <p className="text-center text-xs text-stone-500 mt-2">{zelle ? t.copyZelleHint : t.zelleMissing}</p>
-            </div>
+            {payoutDate && !complete && !myTurn && (
+              <section className="bg-white rounded-3xl shadow-sm px-5 py-4 flex items-center gap-3">
+                <CalendarIcon />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-stone-600">{t.yourTurnReceive}</p>
+                  <p className="font-bold text-stone-900">{formatDate(payoutDate, locale)} · {formatMoney(stats.pot)}</p>
+                </div>
+                {days != null && days >= 0 && (
+                  <p className="shrink-0 text-sm font-bold text-coralink">{t.inDays(days)}</p>
+                )}
+              </section>
+            )}
+
+            {round && (
+              <section className="bg-white rounded-3xl shadow-sm px-5 py-4" aria-label={t.tabGroup}>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="font-bold text-stone-900 min-w-0">
+                    {round.recipient_first_name && !complete && !myTurn
+                      ? `${t.receiving(round.recipient_first_name)} 🎉`
+                      : t.roundWord(round.round_number)}
+                  </p>
+                  <button type="button" onClick={() => setTab('group')} className="shrink-0 text-sm font-semibold text-coralink min-h-11 px-1">
+                    {t.seeGroup}
+                  </button>
+                </div>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="flex" aria-hidden="true">
+                    {progress.slice(0, 10).map((person, i) => (
+                      <span
+                        key={person.slot}
+                        className={`w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center ring-2 ${person.paid ? 'ring-teal' : 'ring-white opacity-50'} ${i ? '-ml-1' : ''}`}
+                        style={{ backgroundColor: avatarColor(person.display_first_name) }}
+                      >
+                        {initials(person.display_first_name)}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="text-sm font-semibold text-teal">{t.paidOf(stats.paid, stats.total)}</p>
+                </div>
+                <div
+                  className="mt-3 h-2 rounded-full bg-[#EFE9DF] overflow-hidden"
+                  role="progressbar"
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-valuenow={stats.percent}
+                  aria-label={t.groupPaid(stats.paid, stats.total)}
+                >
+                  <div className="h-full rounded-full bg-teal" style={{ width: `${stats.percent}%` }} />
+                </div>
+              </section>
+            )}
 
             {!preview && <AddToHomeHint t={t} />}
           </>

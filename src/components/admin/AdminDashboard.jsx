@@ -16,7 +16,7 @@ import { buildReminderView } from '../../utils/reminderQueue'
 
 export default function AdminDashboard({ email, onNewCycle }) {
   const {
-    store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment,
+    store, cycles, selectCycle, archiveCycle, error, clearError, pendingReview, togglePayment, togglePayout,
     confirmMatch, dismissReview, reminderMeta, buildReminderList, markReminders,
   } = useStore()
   const [tab, setTab] = useState('dashboard')
@@ -150,6 +150,11 @@ export default function AdminDashboard({ email, onNewCycle }) {
             payoutLine={current ? t.payoutLine(payoutDay, recipient?.name || '') : ''}
             countdownLabel={countdownLabel}
             members={members}
+            recipientSlot={current?.recipientSlot}
+            recipientName={recipient?.name || ''}
+            payoutSent={current?.payoutSent === true}
+            onTogglePayout={current ? () => togglePayout(current.round) : undefined}
+            onTogglePaid={member => togglePayment(current.round, member.slot)}
             contribution={store.config.contribution}
             zelle={store.config.organizerPhone}
             collectDate={current?.collectDate}

@@ -41,7 +41,7 @@ function MemberPreview() {
       display_first_name: 'Maria',
       language_pref: 'es',
       payout_date: daysFromNow(12),
-      paid_this_round: true,
+      paid_this_round: !new URLSearchParams(window.location.search).has('unpaid'),
     },
     current_round: {
       round_number: 3,
@@ -80,6 +80,7 @@ function AdminPreview() {
     ['Sofia', '', false],
   ].map(([name, phone, paidRow], index) => ({
     id: `queue-${index + 1}`,
+    slot: members.find(member => member.name === name)?.slot,
     name,
     phone,
     paid: paidRow,
@@ -100,10 +101,17 @@ function AdminPreview() {
           payoutLine={t.payoutLine('Saturday', 'Luis')}
           countdownLabel="1d 14h"
           members={members}
+          recipientSlot={3}
+          recipientName="Luis"
+          payoutSent={false}
+          onTogglePayout={() => {}}
+          onTogglePaid={() => {}}
           contribution={100}
           zelle="familia.demo"
           collectDate={daysFromNow(1)}
-          reviews={[]}
+          reviews={[{ id: 'rev-1', sender_name: 'J. LOPEZ', amount: 100, status: 'pending' }]}
+          participants={members.map(member => ({ ...member, id: `m${member.slot}` }))}
+          rounds={[]}
           readOnly={false}
           onSelectMember={() => {}}
           reminderItems={queued}
