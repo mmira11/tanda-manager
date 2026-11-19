@@ -47,6 +47,7 @@ export function buildReminderView({
       if (!person) return []
       return [{
         id: row.id,
+        slot: person.slot,
         name: person.name,
         phone: person.phone || '',
         paid: storeRound?.payments?.[person.slot] === true,
