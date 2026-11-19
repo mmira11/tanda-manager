@@ -107,17 +107,41 @@ export function buildTimedReminderSmsUrl(recipientPhone, recipientName, organize
   return smsLink(stripPhone(recipientPhone), timedReminderBody(recipientName, organizerPhone, type, amount))
 }
 
-export function buildNudgeBody({ name, amount, zelle, when, whenEn, whenEs }) {
-  const who = name?.trim() || 'there'
+// Days from today (on this phone's calendar) to a 'YYYY-MM-DD' date.
+function daysFromToday(isoDate, today) {
+  const [y, m, d] = isoDate.split('-').map(Number)
+  const now = new Date(today)
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000)
+}
+
+// "is this Friday" / "es este viernes", relative to today so the text reads naturally.
+function collectionPhrase(collectDate, today) {
+  if (!collectDate) return { en: 'is coming up', es: 'se acerca' }
+  const at = new Date(`${collectDate}T12:00:00`)
+  const dayEn = at.toLocaleDateString('en-US', { weekday: 'long' })
+  const dayEs = at.toLocaleDateString('es-US', { weekday: 'long' })
+  const dateEn = at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const dateEs = at.toLocaleDateString('es-US', { day: 'numeric', month: 'long' })
+  const n = daysFromToday(collectDate, today)
+  if (n === 0) return { en: 'is today', es: 'es hoy' }
+  if (n === 1) return { en: 'is tomorrow', es: 'es mañana' }
+  if (n > 1 && n < 7) return { en: `is this ${dayEn}`, es: `es este ${dayEs}` }
+  if (n >= 7) return { en: `is on ${dayEn}, ${dateEn}`, es: `es el ${dayEs} ${dateEs}` }
+  if (n > -7) return { en: `was this past ${dayEn}`, es: `fue este ${dayEs} pasado` }
+  return { en: `was on ${dayEn}, ${dateEn}`, es: `fue el ${dayEs} ${dateEs}` }
+}
+
+// The organizer's one-tap nudge: a friendly English paragraph, a blank line, then Spanish.
+export function buildNudgeBody({ name, amount, zelle, collectDate, today = new Date() }) {
+  const who = name?.trim()
   const saved = zelle?.trim()
-  const destEn = saved || organizerFallback('en')
-  const destEs = saved || organizerFallback('es')
   const money = formatMoney(amount)
-  const englishWhen = whenEn || when || ''
-  const spanishWhen = whenEs || when || ''
-  const enDate = englishWhen ? ` (${englishWhen})` : ''
-  const esDate = spanishWhen ? ` (${spanishWhen})` : ''
-  return `Hi ${who}, please send ${money} by Zelle to ${destEn}${enDate}. Thank you! / Hola ${who}, por favor envía ${money} por Zelle a ${destEs}${esDate}. ¡Gracias!`
+  const when = collectionPhrase(collectDate, today)
+  const english = `${who ? `Hi ${who}` : 'Hi'}, friendly reminder that Tanda collection ${when.en}. `
+    + `Please send ${money} to ${saved || 'the organizer'} via Zelle. Thank you!`
+  const spanish = `${who ? `Hola ${who}` : 'Hola'}, un recordatorio amigable de que la colección de Tanda ${when.es}. `
+    + `Por favor, envíe ${money.slice(1)} dólares ${saved ? `a ${saved}` : 'al organizador'} a través de Zelle. ¡Gracias!`
+  return `${english}\n\n${spanish}`
 }
 
 // Send exactly the text the organizer sees on screen.

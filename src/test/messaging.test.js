@@ -83,8 +83,8 @@ describe('messaging', () => {
   it('uses el organizador in the Spanish reminder and nudge', () => {
     expect(buildReminderBody(1, 'vie, 12 de jun', '', 40, 'es')).toContain('el organizador')
     const body = buildNudgeBody({ name: 'Rosa', amount: 100, zelle: '  ' })
-    expect(body).toContain('the organizer')
-    expect(body).toContain('el organizador')
+    expect(body).toContain('to the organizer via Zelle')
+    expect(body).toContain('dólares al organizador a través de Zelle')
   })
 
   it('uses the cycle contribution instead of a fixed amount', () => {
@@ -97,7 +97,7 @@ describe('messaging', () => {
     expect(buildNudgeSmsUrl('', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
     expect(buildNudgeSmsUrl('555-0100', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
     expect(buildNudgeSmsUrl('22345678901', { name: 'Rosa', amount: 100, zelle: 'familia.demo' })).toBeNull()
-    const url = buildNudgeSmsUrl('(555) 010-0104', { name: 'Rosa', amount: 100, zelle: 'familia.demo', when: 'Fri, Jun 12' })
+    const url = buildNudgeSmsUrl('(555) 010-0104', { name: 'Rosa', amount: 100, zelle: 'familia.demo', collectDate: '2026-06-12' })
     const body = decodeURIComponent(url.split('body=')[1])
     expect(url).toMatch(/^sms:\+15550100104\?&body=/)
     expect(body).toContain('Rosa')
@@ -107,19 +107,23 @@ describe('messaging', () => {
     expect(body).not.toContain('5550100104')
   })
 
-  it('puts the en-US date in the English half and the es-US date in the Spanish half', () => {
-    const body = buildNudgeBody({
-      name: 'Rosa',
-      amount: 100,
-      zelle: 'familia.demo',
-      whenEn: 'Fri, Jun 12',
-      whenEs: 'vie, 12 de jun',
-    })
-    const [english, spanish] = body.split(' / ')
-    expect(english).toContain('Fri, Jun 12')
-    expect(english).not.toContain('vie')
-    expect(spanish).toContain('vie, 12 de jun')
-    expect(spanish).not.toContain('Fri')
+  it('nudges in the friendly two-paragraph wording, relative to collection day', () => {
+    const today = new Date(2026, 10, 23) // Mon, Nov 23
+    const nudge = collectDate => buildNudgeBody({ name: 'Eddy', amount: 200, zelle: '2093620911', collectDate, today })
+    expect(nudge('2026-11-27')).toBe(
+      'Hi Eddy, friendly reminder that Tanda collection is this Friday. Please send $200 to 2093620911 via Zelle. Thank you!'
+      + '\n\n'
+      + 'Hola Eddy, un recordatorio amigable de que la colección de Tanda es este viernes. Por favor, envíe 200 dólares a 2093620911 a través de Zelle. ¡Gracias!',
+    )
+    expect(nudge('2026-11-23')).toContain('collection is today.')
+    expect(nudge('2026-11-23')).toContain('Tanda es hoy.')
+    expect(nudge('2026-11-24')).toContain('collection is tomorrow.')
+    expect(nudge('2026-11-24')).toContain('Tanda es mañana.')
+    expect(nudge('2026-12-11')).toContain('is on Friday, Dec 11.')
+    expect(nudge('2026-12-11')).toContain('es el viernes 11 de diciembre.')
+    expect(nudge('2026-11-20')).toContain('was this past Friday.')
+    expect(nudge('2026-11-20')).toContain('fue este viernes pasado.')
+    expect(buildNudgeBody({ name: 'Ana', amount: 87.5, zelle: 'x', today })).toContain('envíe 87.50 dólares')
   })
 
   it('labels the evening reminder at 6 PM, when the organizer sends it', () => {
