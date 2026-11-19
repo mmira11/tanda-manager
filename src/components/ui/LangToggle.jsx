@@ -9,10 +9,10 @@ export default function LangToggle({ lang, onToggle, tone = 'light', label = 'To
       type="button"
       onClick={onToggle}
       aria-label={label}
-      className={`flex items-center text-xs font-bold rounded-full overflow-hidden border min-h-11 ${shell}`}
+      className={`shrink-0 flex items-center text-xs font-bold rounded-full overflow-hidden border min-h-11 ${shell}`}
     >
-      <span className={`px-3 py-2 min-w-11 text-center ${lang === 'en' ? active : idle}`}>EN</span>
-      <span className={`px-3 py-2 min-w-11 text-center ${lang === 'es' ? active : idle}`}>ES</span>
+      <span className={`px-2.5 py-2 min-w-9 text-center ${lang === 'en' ? active : idle}`}>EN</span>
+      <span className={`px-2.5 py-2 min-w-9 text-center ${lang === 'es' ? active : idle}`}>ES</span>
     </button>
   )
 }
