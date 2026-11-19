@@ -81,7 +81,7 @@ create table public.payments (
   member_id uuid not null references public.members (id) on delete cascade,
   amount numeric(10,2) not null,
   paid_at timestamptz,
-  source text check (source in ('manual', 'auto')),
+  source text check (source in ('manual', 'auto', 'bot')),
   unique (round_id, member_id)
 );
 
@@ -91,8 +91,9 @@ create table public.reminder_settings (
   timezone text not null default 'America/Los_Angeles',
   thursday_all_at time not null default '09:00',
   friday_noon_at time not null default '12:00',
-  friday_evening_at time not null default '18:00',
-  enabled boolean not null default false
+  friday_evening_at time not null default '16:30',
+  enabled boolean not null default false,
+  channel text not null default 'queue' check (channel in ('queue', 'twilio'))
 );
 
 create table public.reminder_templates (
@@ -442,3 +443,429 @@ grant select, insert, update, delete on
   public.rounds, public.payments, public.reminder_settings,
   public.reminder_templates, public.pending_review
 to authenticated;
+
+-- 007, 008, 018: columns the later functions read. Added here in migration order so a
+-- fresh schema.sql matches migrations-in-order (each migration uses IF NOT EXISTS).
+alter table public.members add column if not exists token_revoked_at timestamptz;
+alter table public.members add column if not exists removed_at timestamptz;
+alter table public.members add column if not exists link_sent_at timestamptz;
+
+-- 013 + 017: opt-outs, the reminder log, and the queue RPCs. channel and the queued
+-- status are the post-017 shape. 013's CREATE TABLE IF NOT EXISTS leaves this in place;
+-- 017 drops and recreates the status and channel checks.
+create table if not exists public.sms_opt_outs (
+  phone_e164   text primary key check (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+  opted_out_at timestamptz not null default now(),
+  keyword      text
+);
+
+create table if not exists public.reminder_log (
+  id         uuid primary key default gen_random_uuid(),
+  cycle_id   uuid not null references public.cycles (id) on delete cascade,
+  round_id   uuid not null references public.rounds (id) on delete cascade,
+  member_id  uuid not null references public.members (id) on delete cascade,
+  kind       text not null check (kind in ('thursday_all', 'friday_noon', 'friday_evening')),
+  local_date date not null,
+  dry_run    boolean not null,
+  status     text not null check (status in ('dry_run', 'sending', 'sent', 'failed', 'queued', 'skipped')),
+  twilio_sid text,
+  error      text,
+  created_at timestamptz not null default now(),
+  channel    text not null default 'queue' check (channel in ('queue', 'twilio')),
+  unique (round_id, member_id, kind, dry_run)
+);
+
+alter table public.sms_opt_outs enable row level security;
+alter table public.reminder_log enable row level security;
+
+drop policy if exists admin_read_sms_opt_outs on public.sms_opt_outs;
+create policy admin_read_sms_opt_outs on public.sms_opt_outs
+  for select to authenticated using (public.is_admin());
+drop policy if exists admin_read_reminder_log on public.reminder_log;
+create policy admin_read_reminder_log on public.reminder_log
+  for select to authenticated using (public.is_admin());
+drop policy if exists admin_update_reminder_log on public.reminder_log;
+create policy admin_update_reminder_log on public.reminder_log
+  for update to authenticated
+  using (public.is_admin())
+  with check (public.is_admin());
+
+revoke all on public.sms_opt_outs, public.reminder_log from anon, authenticated;
+grant select on public.sms_opt_outs to authenticated;
+grant select, update on public.reminder_log to authenticated;
+
+create or replace function public.enqueue_reminders(p_rows jsonb)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_inserted integer := 0;
+  v_row jsonb;
+  v_id uuid;
+begin
+  if not public.is_admin() then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' then
+    raise exception 'expected a list of reminders' using errcode = '22023';
+  end if;
+
+  for v_row in select value from jsonb_array_elements(p_rows)
+  loop
+    if (v_row->>'kind') not in ('thursday_all', 'friday_noon', 'friday_evening') then
+      raise exception 'invalid reminder window' using errcode = '22023';
+    end if;
+    v_id := null;
+    insert into public.reminder_log (
+      cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel
+    ) values (
+      (v_row->>'cycle_id')::uuid,
+      (v_row->>'round_id')::uuid,
+      (v_row->>'member_id')::uuid,
+      v_row->>'kind',
+      (v_row->>'local_date')::date,
+      false,
+      'queued',
+      'queue'
+    )
+    on conflict (round_id, member_id, kind, dry_run) do nothing
+    returning id into v_id;
+    if v_id is not null then
+      v_inserted := v_inserted + 1;
+    end if;
+  end loop;
+  return v_inserted;
+end;
+$$;
+
+create or replace function public.set_reminder_log_status(p_id uuid, p_status text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  if p_status not in ('sent', 'skipped') then
+    raise exception 'invalid reminder status' using errcode = '22023';
+  end if;
+  update public.reminder_log
+     set status = p_status
+   where id = p_id
+     and status = 'queued';
+  if not found then
+    raise exception 'reminder not queued' using errcode = 'P0002';
+  end if;
+end;
+$$;
+
+revoke all on function public.enqueue_reminders(jsonb) from public, anon;
+grant execute on function public.enqueue_reminders(jsonb) to authenticated;
+revoke all on function public.set_reminder_log_status(uuid, text) from public, anon;
+grant execute on function public.set_reminder_log_status(uuid, text) to authenticated;
+
+-- 018 + 019: one hashed bot key. Status returns first name, round, paid, and amount,
+-- not phone numbers. Marking paid records source 'bot' and an optional paid_at.
+create table if not exists public.bot_keys (
+  id uuid primary key default gen_random_uuid(),
+  key_hash text not null unique,
+  label text not null default 'Grokbot',
+  created_at timestamptz not null default now(),
+  revoked_at timestamptz
+);
+alter table public.bot_keys enable row level security;
+drop policy if exists admin_read_bot_keys on public.bot_keys;
+create policy admin_read_bot_keys on public.bot_keys
+  for select to authenticated using (public.is_admin());
+revoke all on public.bot_keys from anon, authenticated;
+grant select on public.bot_keys to authenticated;
+
+create or replace function public.bot_key_ok(p_key text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public, extensions
+as $$
+  select p_key is not null and length(p_key) >= 32 and exists (
+    select 1 from public.bot_keys
+    where revoked_at is null
+      and key_hash = encode(digest(p_key, 'sha256'), 'hex')
+  );
+$$;
+
+create or replace function public.create_bot_key()
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_key text;
+begin
+  if not public.is_admin() then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  update public.bot_keys set revoked_at = now() where revoked_at is null;
+  v_key := 'tbk_' || encode(gen_random_bytes(32), 'hex');
+  insert into public.bot_keys (key_hash) values (encode(digest(v_key, 'sha256'), 'hex'));
+  return v_key;
+end;
+$$;
+
+create or replace function public.revoke_bot_keys()
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = public, extensions
+as $$
+begin
+  if not public.is_admin() then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  update public.bot_keys set revoked_at = now() where revoked_at is null;
+end;
+$$;
+
+create or replace function public.bot_pick_round(p_cycle uuid, p_round integer)
+returns public.rounds
+language plpgsql
+stable
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_zone text;
+  v_today date;
+  v_round public.rounds%rowtype;
+begin
+  if p_round is not null then
+    select * into v_round from public.rounds where cycle_id = p_cycle and round_number = p_round;
+    if not found then
+      raise exception 'no round %', p_round using errcode = 'P0002';
+    end if;
+    return v_round;
+  end if;
+  select coalesce(nullif(btrim(timezone), ''), 'America/Los_Angeles') into v_zone from public.cycles where id = p_cycle;
+  v_today := (timezone(v_zone, now()))::date;
+  select * into v_round from public.rounds
+  where cycle_id = p_cycle and payout_date >= v_today order by round_number limit 1;
+  if not found then
+    select * into v_round from public.rounds where cycle_id = p_cycle order by round_number desc limit 1;
+  end if;
+  return v_round;
+end;
+$$;
+
+create or replace function public.bot_round_status(p_key text, p_round integer default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_cycle public.cycles%rowtype;
+  v_round public.rounds%rowtype;
+  v_zone text;
+begin
+  if not public.bot_key_ok(p_key) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+
+  select * into v_cycle from public.cycles where status = 'active' order by start_date desc limit 1;
+  if not found then
+    return jsonb_build_object('cycle', null);
+  end if;
+  v_round := public.bot_pick_round(v_cycle.id, p_round);
+  v_zone := coalesce(nullif(btrim(v_cycle.timezone), ''), 'America/Los_Angeles');
+
+  return jsonb_build_object(
+    'cycle', jsonb_build_object(
+      'name', v_cycle.name,
+      'contribution', v_cycle.contribution,
+      'zelle_destination', v_cycle.zelle_destination,
+      'timezone', v_zone,
+      'rounds_total', (select count(*) from public.rounds where cycle_id = v_cycle.id)
+    ),
+    'round', case when v_round.id is null then null else jsonb_build_object(
+      'number', v_round.round_number,
+      'collect_date', v_round.collect_date,
+      'payout_date', v_round.payout_date,
+      'collect_deadline', (v_round.collect_date + time '18:00') at time zone v_zone,
+      'payout_sent', v_round.payout_sent,
+      'recipient_first_name', (
+        select m.display_first_name from public.members m
+        where m.id = v_round.recipient_member_id and m.removed_at is null
+      )
+    ) end,
+    'members', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'slot', m.slot,
+        'first_name', m.display_first_name,
+        'language', m.language_pref,
+        'paid', p.paid_at is not null,
+        'amount', p.amount,
+        'is_recipient', m.id = v_round.recipient_member_id
+      ) order by m.slot), '[]'::jsonb)
+      from public.payments p
+      join public.members m on m.id = p.member_id
+      where p.round_id = v_round.id and m.removed_at is null
+    )
+  );
+end;
+$$;
+
+create or replace function public.bot_mark_paid(
+  p_key text,
+  p_slot integer,
+  p_paid boolean default true,
+  p_round integer default null,
+  p_paid_at timestamptz default null
+)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = public
+as $$
+declare
+  v_cycle public.cycles%rowtype;
+  v_round public.rounds%rowtype;
+  v_member public.members%rowtype;
+begin
+  if not public.bot_key_ok(p_key) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  select * into v_cycle from public.cycles where status = 'active' order by start_date desc limit 1;
+  if not found then
+    raise exception 'no active cycle' using errcode = 'P0002';
+  end if;
+  v_round := public.bot_pick_round(v_cycle.id, p_round);
+  select * into v_member from public.members
+  where cycle_id = v_cycle.id and slot = p_slot and removed_at is null;
+  if not found then
+    raise exception 'no member in slot %', p_slot using errcode = 'P0002';
+  end if;
+
+  update public.payments
+  set paid_at = case
+        when coalesce(p_paid, true) then coalesce(p_paid_at, paid_at, now())
+        else null
+      end,
+      source = case when coalesce(p_paid, true) then 'bot' else null end
+  where round_id = v_round.id and member_id = v_member.id;
+  if not found then
+    raise exception '% does not pay in round %', v_member.display_first_name, v_round.round_number using errcode = 'P0002';
+  end if;
+
+  return public.bot_round_status(p_key, v_round.round_number);
+end;
+$$;
+
+revoke all on function public.bot_key_ok(text) from public, anon, authenticated;
+revoke all on function public.bot_pick_round(uuid, integer) from public, anon, authenticated;
+revoke all on function public.create_bot_key() from public, anon;
+revoke all on function public.revoke_bot_keys() from public, anon;
+revoke all on function public.bot_round_status(text, integer) from public;
+revoke all on function public.bot_mark_paid(text, integer, boolean, integer, timestamptz) from public, anon, authenticated;
+grant execute on function public.create_bot_key() to authenticated;
+grant execute on function public.revoke_bot_keys() to authenticated;
+grant execute on function public.bot_round_status(text, integer) to anon, authenticated;
+grant execute on function public.bot_mark_paid(text, integer, boolean, integer, timestamptz) to anon, authenticated;
+
+-- 010 + 019: backup import. Last-call reminder is 16:30, not the 6 PM deadline.
+create or replace function public.import_cycle(p_plan jsonb)
+returns jsonb
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_cycle_id uuid;
+  v_start    date := (p_plan->'cycle'->>'start_date')::date;
+  v_members  integer;
+  v_rounds   integer;
+  v_payments integer;
+  v_paid     integer;
+begin
+  if v_start is null then
+    raise exception 'start_date is required' using errcode = '22023';
+  end if;
+  if exists (select 1 from public.cycles where start_date = v_start) then
+    raise exception 'A cycle with this start date already exists' using errcode = '23505';
+  end if;
+
+  insert into public.cycles
+    (name, start_date, interval_days, contribution, status, timezone, organizer_display_name, zelle_destination)
+  select c.name, c.start_date, c.interval_days, c.contribution, 'draft',
+         coalesce(nullif(btrim(c.timezone), ''), 'America/Los_Angeles'),
+         c.organizer_display_name, c.zelle_destination
+  from jsonb_to_record(p_plan->'cycle') as c(
+    name text, start_date date, interval_days integer, contribution numeric,
+    timezone text, organizer_display_name text, zelle_destination text)
+  returning id into v_cycle_id;
+
+  insert into public.members (cycle_id, slot, display_first_name, phone, language_pref, access_token)
+  select v_cycle_id, m.slot, m.display_first_name, m.phone, coalesce(m.language_pref, 'en'), m.access_token
+  from jsonb_to_recordset(p_plan->'members') as m(
+    slot integer, display_first_name text, phone text, language_pref text, access_token text);
+  get diagnostics v_members = row_count;
+
+  insert into public.rounds
+    (cycle_id, round_number, collect_date, payout_date, recipient_member_id, payout_sent, payout_sent_at, notes)
+  select v_cycle_id, r.round_number, r.collect_date, r.payout_date, m.id,
+         coalesce(r.payout_sent, false), r.payout_sent_at, coalesce(r.notes, '')
+  from jsonb_to_recordset(p_plan->'rounds') as r(
+    round_number integer, collect_date date, payout_date date, "recipientSlot" integer,
+    payout_sent boolean, payout_sent_at timestamptz, notes text)
+  left join public.members m on m.cycle_id = v_cycle_id and m.slot = r."recipientSlot";
+  get diagnostics v_rounds = row_count;
+
+  insert into public.payments (round_id, member_id, amount, paid_at, source)
+  select r.id, m.id, p.amount, p.paid_at, p.source
+  from jsonb_to_recordset(p_plan->'payments') as p(
+    "roundNumber" integer, slot integer, amount numeric, paid_at timestamptz, source text)
+  left join public.rounds r on r.cycle_id = v_cycle_id and r.round_number = p."roundNumber"
+  left join public.members m on m.cycle_id = v_cycle_id and m.slot = p.slot;
+  get diagnostics v_payments = row_count;
+
+  if v_members = 0 or v_rounds = 0 or v_payments = 0 then
+    raise exception 'An import needs members, rounds, and payments' using errcode = '22023';
+  end if;
+
+  insert into public.reminder_settings
+    (cycle_id, timezone, thursday_all_at, friday_noon_at, friday_evening_at, enabled)
+  values (v_cycle_id, 'America/Los_Angeles', '09:00', '12:00', '16:30', false);
+
+  insert into public.reminder_templates (cycle_id, kind, lang, body)
+  select v_cycle_id, t.kind, t.lang, t.body
+  from jsonb_to_recordset(coalesce(p_plan->'reminder_templates', '[]'::jsonb)) as t(kind text, lang text, body text);
+
+  update public.cycles
+  set status = 'archived',
+      archived_at = coalesce((p_plan->'cycle'->>'archived_at')::timestamptz, now())
+  where id = v_cycle_id;
+
+  select count(*) into v_paid from public.payments p
+  join public.rounds r on r.id = p.round_id
+  where r.cycle_id = v_cycle_id and p.paid_at is not null;
+
+  return jsonb_build_object(
+    'cycle_id', v_cycle_id,
+    'members', v_members,
+    'rounds', v_rounds,
+    'payments', v_payments,
+    'paid', v_paid
+  );
+end;
+$$;
+
+revoke all on function public.import_cycle(jsonb) from public, anon;
+grant execute on function public.import_cycle(jsonb) to authenticated;

@@ -70,7 +70,7 @@ export function buildReminderBody(roundNum, formattedDate, organizerPhone, amoun
   const org = organizerPhone?.trim() || organizerFallback(lang)
   const money = formatMoney(amount)
   if (lang === 'es') {
-    return `Recordatorio: la recolección de la Ronda ${roundNum} de la tanda es el ${formattedDate}. Envía ${money} por Zelle a ${org}. ¡Gracias!`
+    return `Recordatorio: el cobro de la Ronda ${roundNum} de la tanda es el ${formattedDate}. Envía ${money} por Zelle a ${org}. ¡Gracias!`
   }
   return `Reminder: Tanda Round ${roundNum} collection is on ${formattedDate}. Please send ${money} to ${org} via Zelle. Thank you!`
 }
@@ -139,8 +139,8 @@ export function buildNudgeBody({ name, amount, zelle, collectDate, today = new D
   const when = collectionPhrase(collectDate, today)
   const english = `${who ? `Hi ${who}` : 'Hi'}, friendly reminder that Tanda collection ${when.en}. `
     + `Please send ${money} to ${saved || 'the organizer'} via Zelle. Thank you!`
-  const spanish = `${who ? `Hola ${who}` : 'Hola'}, un recordatorio amigable de que la colección de Tanda ${when.es}. `
-    + `Por favor, envíe ${money.slice(1)} dólares ${saved ? `a ${saved}` : 'al organizador'} a través de Zelle. ¡Gracias!`
+  const spanish = `${who ? `Hola ${who}` : 'Hola'}, te recordamos que el cobro de la tanda ${when.es}. `
+    + `Por favor envía ${money} ${saved ? `a ${saved}` : 'al organizador'} por Zelle. ¡Gracias!`
   return `${english}\n\n${spanish}`
 }
 

@@ -1,6 +1,6 @@
 // src/components/admin/AdminDashboard.jsx — the organizer's four tabs, one job each:
 // Today (who owes, mark paid, payout), Members (links and people), Schedule (rounds and
-// dates), Settings (Zelle, Grokbot key, archive). Grokbot handles scheduled reminders.
+// dates), Settings (Zelle, Grokbot key, archive). Grok Bot drafts scheduled reminders; you send them.
 import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { LABELS } from '../../data/labels'

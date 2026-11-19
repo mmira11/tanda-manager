@@ -997,6 +997,20 @@ function assertBotKeys(database) {
   if (!status.cycle || !status.round || !Array.isArray(status.members) || status.members.length === 0) {
     throw new Error(`${database}: bot_round_status returned ${JSON.stringify(status)}`)
   }
+  const dumped = JSON.stringify(status)
+  if (/"phone"/.test(dumped) || dumped.includes('5550100199') || dumped.includes('5550100102')) {
+    throw new Error(`${database}: bot_round_status included a phone number`)
+  }
+  for (const member of status.members) {
+    const keys = Object.keys(member).sort().join(',')
+    if (keys !== 'amount,first_name,is_recipient,language,paid,slot') {
+      throw new Error(`${database}: bot member keys are ${keys}`)
+    }
+    if (!member.first_name || typeof member.paid !== 'boolean' || member.amount == null) {
+      throw new Error(`${database}: bot member is missing a name, paid flag, or amount`)
+    }
+  }
+  if (status.round.number == null) throw new Error(`${database}: bot_round_status is missing the round`)
   const target = status.members.find(m => !m.paid) || status.members[0]
   const marked = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${target.slot});`)))
   if (!marked.members.find(m => m.slot === target.slot).paid) throw new Error(`${database}: bot_mark_paid did not mark slot ${target.slot}`)
@@ -1006,9 +1020,54 @@ function assertBotKeys(database) {
     where m.slot = ${target.slot} and r.cycle_id = m.cycle_id and r.round_number = ${status.round.number}
       and m.cycle_id = (select id from public.cycles where status = 'active' order by start_date desc limit 1);
   `).trim()
-  if (source !== 'auto') throw new Error(`${database}: bot payment source is ${source}`)
+  if (source !== 'bot') throw new Error(`${database}: bot payment source is ${source}`)
   const undone = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${target.slot}, false);`)))
   if (undone.members.find(m => m.slot === target.slot).paid) throw new Error(`${database}: bot_mark_paid could not undo`)
+  const stamped = last(psqlText(database, `
+    select public.bot_mark_paid('${key}', ${target.slot}, true, null, '2099-06-01T17:30:00Z');
+    select p.source || '|' || to_char(p.paid_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS')
+    from public.payments p
+    join public.members m on m.id = p.member_id
+    join public.rounds r on r.id = p.round_id
+    where m.slot = ${target.slot} and r.round_number = ${status.round.number}
+      and m.cycle_id = (select id from public.cycles where status = 'active' order by start_date desc limit 1);
+  `))
+  if (stamped !== 'bot|2099-06-01T17:30:00') throw new Error(`${database}: paid_at was ${stamped}`)
+  const defs = psqlText(database, `
+    select pg_get_functiondef('public.bot_round_status(text,integer)'::regprocedure)
+      || pg_get_functiondef('public.bot_mark_paid(text,integer,boolean,integer,timestamptz)'::regprocedure);
+  `)
+  const paths = defs.match(/search_path to [^\n]+/gi) || []
+  if (!/security definer/i.test(defs) || paths.length < 2 || paths.some(path => /extensions/i.test(path) || !/'public'/i.test(path))) {
+    throw new Error(`${database}: bot read/mark functions must be security definer with search_path=public (${paths.join(' || ')})`)
+  }
+  if (!defs.includes('bot_key_ok') || !defs.includes("'bot'")) {
+    throw new Error(`${database}: bot_mark_paid dropped the key check or source bot`)
+  }
+  if (defs.includes("'phone'")) throw new Error(`${database}: bot_round_status still selects a phone`)
+  const overloads = psqlText(database, `
+    select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'bot_mark_paid';
+  `).trim()
+  if (overloads !== '1') throw new Error(`${database}: expected one bot_mark_paid, found ${overloads}`)
+  const evening = last(psqlText(database, `
+    select (select pg_get_expr(ad.adbin, ad.adrelid)
+              from pg_attrdef ad
+              join pg_attribute a on a.attrelid = ad.adrelid and a.attnum = ad.adnum
+              join pg_class c on c.oid = a.attrelid
+              join pg_namespace n on n.oid = c.relnamespace
+             where n.nspname = 'public' and c.relname = 'reminder_settings' and a.attname = 'friday_evening_at')
+      || '|' || (select count(*) from public.reminder_settings where friday_evening_at = time '18:00')
+      || '|' || (select count(*) from public.reminder_settings where friday_evening_at = time '16:30');
+  `))
+  const [expr, oldRows, newRows] = evening.split('|')
+  if (!String(expr).includes('16:30') || oldRows !== '0' || Number(newRows) < 1) {
+    throw new Error(`${database}: last-call default was ${evening}`)
+  }
+  const imported = psqlText(database, `select pg_get_functiondef('public.import_cycle(jsonb)'::regprocedure);`)
+  if (!imported.includes("'16:30'") || imported.includes('18:00')) {
+    throw new Error(`${database}: import_cycle still schedules the last call at 6 PM`)
+  }
   const noSlot = psqlFails(database, `set role anon; select public.bot_mark_paid('${key}', 999);`)
   if (!/no member in slot/.test(noSlot)) throw new Error(`${database}: bad slot failed for the wrong reason: ${noSlot}`)
 

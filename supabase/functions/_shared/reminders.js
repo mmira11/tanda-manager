@@ -4,9 +4,10 @@
 // Windows, all in the cycle's time zone (America/Los_Angeles by default):
 //   thursday_all   – the day before a round's collection date, at reminder_settings.thursday_all_at (09:00)
 //   friday_noon    – collection day, at friday_noon_at (12:00), unpaid members only
-//   friday_evening – collection day, at friday_evening_at (18:00), unpaid members only
-// pg_cron calls the function every hour on the hour (UTC); the window check here is what
-// pins the sends to Los Angeles time, so daylight saving needs no special handling.
+//   friday_evening – collection day, at friday_evening_at (16:30), unpaid members only
+// The 6 PM collection deadline stays 18:00. The last call goes out at 4:30 PM so people
+// still have time to send. pg_cron runs at :00 and :30 UTC; this check matches the local
+// hour and minute, so daylight saving needs no special handling.
 
 export const WINDOWS = ['thursday_all', 'friday_noon', 'friday_evening']
 
@@ -14,7 +15,7 @@ export const DEFAULT_SETTINGS = {
   timezone: 'America/Los_Angeles',
   thursday_all_at: '09:00',
   friday_noon_at: '12:00',
-  friday_evening_at: '18:00',
+  friday_evening_at: '16:30',
   enabled: false,
 }
 
@@ -22,15 +23,15 @@ export const DEFAULT_SETTINGS = {
 export const DEFAULT_TEMPLATES = {
   thursday_all: {
     en: 'Hi {{firstName}}, friendly reminder that Tanda collection is tomorrow. Please send {{amount}} to {{zelle}} via Zelle. Thank you!',
-    es: 'Hola {{firstName}}, un recordatorio amigable de que la colección de Tanda es mañana. Por favor, envíe {{amountEs}} {{toZelleEs}} a través de Zelle. ¡Gracias!',
+    es: 'Hola {{firstName}}, te recordamos que el cobro de la tanda es mañana. Por favor envía {{amount}} {{toZelleEs}} por Zelle. ¡Gracias!',
   },
   friday_noon: {
     en: 'Hi {{firstName}}, friendly reminder that Tanda collection is today and closes at 6 PM. Please send {{amount}} to {{zelle}} via Zelle. Thank you!',
-    es: 'Hola {{firstName}}, un recordatorio amigable de que la colección de Tanda es hoy y cierra a las 6 PM. Por favor, envíe {{amountEs}} {{toZelleEs}} a través de Zelle. ¡Gracias!',
+    es: 'Hola {{firstName}}, te recordamos que el cobro de la tanda es hoy y cierra a las 6 PM. Por favor envía {{amount}} {{toZelleEs}} por Zelle. ¡Gracias!',
   },
   friday_evening: {
     en: 'Hi {{firstName}}, last friendly reminder that Tanda collection closes at 6 PM today. Please send {{amount}} to {{zelle}} via Zelle as soon as you can. Thank you!',
-    es: 'Hola {{firstName}}, último recordatorio amigable de que la colección de Tanda cierra hoy a las 6 PM. Por favor, envíe {{amountEs}} {{toZelleEs}} a través de Zelle lo antes posible. ¡Gracias!',
+    es: 'Hola {{firstName}}, último recordatorio: el cobro de la tanda cierra hoy a las 6 PM. Por favor envía {{amount}} {{toZelleEs}} por Zelle lo antes posible. ¡Gracias!',
   },
 }
 
@@ -39,14 +40,15 @@ export const DEFAULT_TEMPLATES = {
 export const STOP_WORDS = ['STOP', 'STOPALL', 'UNSUBSCRIBE', 'CANCEL', 'END', 'QUIT', 'OPTOUT', 'REVOKE', 'ALTO', 'PARAR', 'BAJA']
 export const START_WORDS = ['START', 'YES', 'UNSTOP', 'SI', 'SÍ']
 
-// Wall-clock date and hour in a time zone. now is a Date.
+// Wall-clock date, hour, and minute in a time zone. now is a Date.
 export function localClock(now, timeZone = DEFAULT_SETTINGS.timezone) {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit',
+    timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
   }).formatToParts(now)
   const get = type => parts.find(p => p.type === type)?.value
   const hour = Number(get('hour')) % 24
-  return { date: `${get('year')}-${get('month')}-${get('day')}`, hour }
+  const minute = Number(get('minute'))
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, hour, minute }
 }
 
 function addDaysIso(iso, days) {
@@ -55,19 +57,27 @@ function addDaysIso(iso, days) {
   return d.toISOString().slice(0, 10)
 }
 
-function hourOf(time) {
-  return Number(String(time).slice(0, 2))
+// '16:30' or '16:30:00' → minutes since midnight. The cron fires on the minute, not just the hour.
+function timeMinutes(time) {
+  const match = /^(\d{1,2}):(\d{2})/.exec(String(time).trim())
+  if (!match) return NaN
+  return Number(match[1]) * 60 + Number(match[2])
+}
+
+function clockMinutes(clock) {
+  return clock.hour * 60 + (Number(clock.minute) || 0)
 }
 
 // Which window, if any, is due for this round at this local clock time.
 export function dueWindow(clock, round, settings = {}) {
   const s = { ...DEFAULT_SETTINGS, ...settings }
-  if (clock.date === addDaysIso(round.collect_date, -1) && clock.hour === hourOf(s.thursday_all_at)) {
+  const nowMin = clockMinutes(clock)
+  if (clock.date === addDaysIso(round.collect_date, -1) && nowMin === timeMinutes(s.thursday_all_at)) {
     return 'thursday_all'
   }
   if (clock.date === round.collect_date) {
-    if (clock.hour === hourOf(s.friday_noon_at)) return 'friday_noon'
-    if (clock.hour === hourOf(s.friday_evening_at)) return 'friday_evening'
+    if (nowMin === timeMinutes(s.friday_noon_at)) return 'friday_noon'
+    if (nowMin === timeMinutes(s.friday_evening_at)) return 'friday_evening'
   }
   return null
 }
@@ -191,13 +201,11 @@ export function allowReminderReplay(channel, dryRunEnv) {
 export function activeReminderWindow(clock, round, settings = {}) {
   const s = { ...DEFAULT_SETTINGS, ...settings }
   const dayBefore = addDaysIso(round.collect_date, -1)
-  const thu = hourOf(s.thursday_all_at)
-  const noon = hourOf(s.friday_noon_at)
-  const eve = hourOf(s.friday_evening_at)
-  if (clock.date === dayBefore) return clock.hour >= thu ? 'thursday_all' : null
+  const nowMin = clockMinutes(clock)
+  if (clock.date === dayBefore) return nowMin >= timeMinutes(s.thursday_all_at) ? 'thursday_all' : null
   if (clock.date === round.collect_date) {
-    if (clock.hour >= eve) return 'friday_evening'
-    if (clock.hour >= noon) return 'friday_noon'
+    if (nowMin >= timeMinutes(s.friday_evening_at)) return 'friday_evening'
+    if (nowMin >= timeMinutes(s.friday_noon_at)) return 'friday_noon'
     return 'thursday_all'
   }
   return null

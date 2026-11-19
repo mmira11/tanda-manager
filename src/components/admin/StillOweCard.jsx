@@ -1,6 +1,6 @@
 // src/components/admin/StillOweCard.jsx — Today's to-do list: who still owes this round,
-// each with a one-tap Nudge (a friendly SMS) and Mark paid. Grokbot sends the scheduled
-// reminders; Nudge is for a quick personal text.
+// each with a one-tap Nudge (a friendly SMS) and Mark paid. Grok Bot drafts the scheduled
+// reminders; you send them. Nudge is for a quick personal text.
 import { avatarColor, initials } from '../../utils/presentation'
 import { buildNudgeSmsUrl, isValidUsPhone } from '../../utils/messaging'
 

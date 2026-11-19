@@ -8,10 +8,12 @@
 --        select vault.create_secret('https://<project-ref>.supabase.co/functions/v1/send-reminders', 'tanda_reminders_url');
 --        select vault.create_secret('<same value as CRON_SECRET>', 'tanda_cron_secret');
 --
--- pg_cron runs in UTC, so this fires at the top of every hour and the function decides in
--- America/Los_Angeles time whether a window (Thu 9:00, Fri 12:00, Fri 18:00) is due. That keeps
--- the texts on Los Angeles time across daylight saving changes. Not part of migrations/ because
+-- pg_cron runs in UTC. This fires at :00 and :30 so the 4:30 PM last call is reached.
+-- The function decides in America/Los_Angeles time whether a window (Thu 9:00, Fri 12:00,
+-- Fri 16:30) is due. The 6 PM collection deadline is unchanged. That keeps the texts on
+-- Los Angeles time across daylight saving changes. Not part of migrations/ because
 -- CI's plain Postgres has no pg_cron, pg_net, or Vault. Safe to run more than once.
+-- Run this again after migration 019 if a job scheduled at the top of the hour is already on.
 
 create extension if not exists pg_cron;
 create extension if not exists pg_net;
@@ -20,7 +22,7 @@ select cron.unschedule(jobid) from cron.job where jobname = 'tanda-send-reminder
 
 select cron.schedule(
   'tanda-send-reminders',
-  '0 * * * *',
+  '0,30 * * * *',
   $$
   select net.http_post(
     url := (select decrypted_secret from vault.decrypted_secrets where name = 'tanda_reminders_url'),

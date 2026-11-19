@@ -53,7 +53,7 @@ function GrokbotCard({ readOnly }) {
         </span>
       </div>
       <p className="text-sm text-stone-300">
-        A key lets Grokbot see who still owes this round (first names and phones) and mark payments. Nothing else.
+        A key lets Grok Bot read this round (first names, paid status, and amounts) and mark a payment.
       </p>
       {active && <p className="text-xs text-stone-400">Key made {shortDay(active.created_at.slice(0, 10))}.</p>}
       {freshKey && (

@@ -84,7 +84,8 @@ describe('messaging', () => {
     expect(buildReminderBody(1, 'vie, 12 de jun', '', 40, 'es')).toContain('el organizador')
     const body = buildNudgeBody({ name: 'Rosa', amount: 100, zelle: '  ' })
     expect(body).toContain('to the organizer via Zelle')
-    expect(body).toContain('dólares al organizador a través de Zelle')
+    expect(body).toContain('al organizador por Zelle')
+    expect(body).not.toMatch(/colección|envíe|a través/)
   })
 
   it('uses the cycle contribution instead of a fixed amount', () => {
@@ -109,21 +110,22 @@ describe('messaging', () => {
 
   it('nudges in the friendly two-paragraph wording, relative to collection day', () => {
     const today = new Date(2026, 10, 23) // Mon, Nov 23
-    const nudge = collectDate => buildNudgeBody({ name: 'Eddy', amount: 200, zelle: '2093620911', collectDate, today })
+    const nudge = collectDate => buildNudgeBody({ name: 'Eddy', amount: 200, zelle: 'org@example.com', collectDate, today })
     expect(nudge('2026-11-27')).toBe(
-      'Hi Eddy, friendly reminder that Tanda collection is this Friday. Please send $200 to 2093620911 via Zelle. Thank you!'
+      'Hi Eddy, friendly reminder that Tanda collection is this Friday. Please send $200 to org@example.com via Zelle. Thank you!'
       + '\n\n'
-      + 'Hola Eddy, un recordatorio amigable de que la colección de Tanda es este viernes. Por favor, envíe 200 dólares a 2093620911 a través de Zelle. ¡Gracias!',
+      + 'Hola Eddy, te recordamos que el cobro de la tanda es este viernes. Por favor envía $200 a org@example.com por Zelle. ¡Gracias!',
     )
     expect(nudge('2026-11-23')).toContain('collection is today.')
-    expect(nudge('2026-11-23')).toContain('Tanda es hoy.')
+    expect(nudge('2026-11-23')).toContain('el cobro de la tanda es hoy.')
     expect(nudge('2026-11-24')).toContain('collection is tomorrow.')
-    expect(nudge('2026-11-24')).toContain('Tanda es mañana.')
+    expect(nudge('2026-11-24')).toContain('el cobro de la tanda es mañana.')
     expect(nudge('2026-12-11')).toContain('is on Friday, Dec 11.')
     expect(nudge('2026-12-11')).toContain('es el viernes 11 de diciembre.')
     expect(nudge('2026-11-20')).toContain('was this past Friday.')
     expect(nudge('2026-11-20')).toContain('fue este viernes pasado.')
-    expect(buildNudgeBody({ name: 'Ana', amount: 87.5, zelle: 'x', today })).toContain('envíe 87.50 dólares')
+    expect(buildNudgeBody({ name: 'Ana', amount: 87.5, zelle: 'x', today })).toContain('envía $87.50')
+    expect(buildNudgeBody({ name: 'Ana', amount: 87.5, zelle: 'x', today })).not.toMatch(/colección|envíe/)
   })
 
   it('labels the evening reminder at 6 PM, when the organizer sends it', () => {
