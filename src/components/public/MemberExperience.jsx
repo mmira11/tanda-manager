@@ -41,14 +41,6 @@ function CalendarIcon() {
   )
 }
 
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 16 16" className="w-4 h-4 text-teal" aria-hidden="true">
-      <path d="M3 8.2 6.2 11.5 13 4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
 export default function MemberExperience({ board, lang, onToggleLang, complete = false, onForgetDevice, preview = false }) {
   const t = LABELS[lang] || LABELS.en
   const locale = dateLocale(lang)
@@ -108,7 +100,6 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
   const tabs = [
     { id: 'home', label: t.tabHome, icon: 'home' },
     { id: 'group', label: t.tabGroup, icon: 'members' },
-    { id: 'rounds', label: t.tabMyRounds, icon: 'rounds' },
     { id: 'profile', label: t.tabProfile, icon: 'profile' },
   ]
 
@@ -258,30 +249,6 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
 
             {!preview && <AddToHomeHint t={t} />}
           </>
-        )}
-
-        {tab === 'rounds' && (
-          <section className="bg-white rounded-3xl shadow-sm p-4 space-y-2">
-            <h2 className="font-bold text-lg px-1">{t.roundsTitle}</h2>
-            {rounds.length === 0 && <p className="text-sm text-stone-500 px-1">{t.noRounds}</p>}
-            {rounds.map(item => (
-              <div key={item.round} className={`rounded-2xl px-3 py-3 flex items-center gap-3 ${isMine(item) ? 'bg-coral/15 ring-2 ring-coral/40' : item.state === 'current' ? 'bg-teal/10' : 'bg-cream'}`}>
-                <span className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold ${item.state === 'future' ? 'bg-stone-200 text-stone-500' : 'bg-teal text-white'}`}>
-                  {item.round}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold truncate">
-                    {item.name}
-                    {isMine(item) && (
-                      <span className="ml-2 align-middle rounded-full bg-coral text-ink text-[11px] font-bold px-2 py-0.5">{t.youBadge}</span>
-                    )}
-                  </p>
-                  <p className="text-xs text-stone-500">{formatDate(item.payoutDate, locale)}</p>
-                </div>
-                {item.state === 'past' && <CheckIcon />}
-              </div>
-            ))}
-          </section>
         )}
 
         {tab === 'group' && (

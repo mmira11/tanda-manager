@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, act, waitFor } from '@testing-library/react'
+import { render, screen, act, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import MemberBoard from '../components/public/MemberBoard'
@@ -129,8 +129,8 @@ describe('member board', () => {
     expect(screen.getAllByText(/\$160/).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Jun 2/).length).toBeGreaterThan(0)
     const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'My Rounds' }))
-    expect(screen.getByText('Bea')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Group' }))
+    expect(screen.getAllByText('Bea').length).toBeGreaterThan(0)
     expect(screen.getByText(/Jul 4/)).toBeTruthy()
     expect(screen.queryByText(/Jun 16/)).toBeNull()
     expect(screen.queryByText('5550100199')).toBeNull()
@@ -251,9 +251,11 @@ describe('member page highlights', () => {
     expect(await screen.findByText('This round goes to Bea 🎉')).toBeTruthy()
     expect(screen.getByRole('heading', { level: 1, name: 'Tanda 2099' })).toBeTruthy()
 
-    await user.click(screen.getByRole('button', { name: 'My Rounds' }))
-    const mine = screen.getByText('You').closest('div')
+    await user.click(screen.getByRole('button', { name: 'Group' }))
+    const order = screen.getByRole('heading', { name: 'Payout order' }).parentElement
+    const mine = within(order).getByText('You').closest('li')
     expect(mine.textContent).toMatch(/Ada/)
+    expect(screen.queryByRole('button', { name: 'My Rounds' })).toBeNull()
   })
 
   it('thanks a member once when their payment lands', async () => {
