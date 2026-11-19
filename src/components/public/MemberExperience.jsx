@@ -144,7 +144,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
             {round && !complete && !paid && (
               <section className="card-in bg-white rounded-3xl shadow-sm p-5" aria-labelledby="pay-title">
                 <p className="text-sm font-semibold text-stone-600">{t.yourPaymentRound(round.round_number)}</p>
-                <div className="flex items-baseline justify-between gap-2 mt-1">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mt-1">
                   <h2 id="pay-title" className="text-3xl font-extrabold tracking-tight text-stone-900">
                     {t.amountDue(formatMoney(board.cycle?.contribution))}
                   </h2>
@@ -220,29 +220,29 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
                     {t.seeGroup}
                   </button>
                 </div>
-                <div className="flex items-center gap-3 mt-1">
-                  <div className="flex" aria-hidden="true">
-                    {progress.slice(0, 10).map((person, i) => (
-                      <span
-                        key={person.slot}
-                        className={`w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center ring-2 ${person.paid ? 'ring-teal' : 'ring-white opacity-50'} ${i ? '-ml-1' : ''}`}
-                        style={{ backgroundColor: avatarColor(person.display_first_name) }}
-                      >
-                        {initials(person.display_first_name)}
-                      </span>
-                    ))}
+                <ul className="flex flex-wrap gap-1.5 mt-2" aria-hidden="true">
+                  {progress.map(person => (
+                    <li
+                      key={person.slot}
+                      className={`w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center ring-2 ${person.paid ? 'ring-teal' : 'ring-white opacity-50'}`}
+                      style={{ backgroundColor: avatarColor(person.display_first_name) }}
+                    >
+                      {initials(person.display_first_name)}
+                    </li>
+                  ))}
+                </ul>
+                <div className="flex items-center gap-3 mt-3">
+                  <div
+                    className="flex-1 min-w-0 h-2 rounded-full bg-[#EFE9DF] overflow-hidden"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={stats.percent}
+                    aria-label={t.groupPaid(stats.paid, stats.total)}
+                  >
+                    <div className="h-full rounded-full bg-teal" style={{ width: `${stats.percent}%` }} />
                   </div>
-                  <p className="text-sm font-semibold text-teal">{t.paidOf(stats.paid, stats.total)}</p>
-                </div>
-                <div
-                  className="mt-3 h-2 rounded-full bg-[#EFE9DF] overflow-hidden"
-                  role="progressbar"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={stats.percent}
-                  aria-label={t.groupPaid(stats.paid, stats.total)}
-                >
-                  <div className="h-full rounded-full bg-teal" style={{ width: `${stats.percent}%` }} />
+                  <p className="shrink-0 text-sm font-semibold text-teal">{t.paidOf(stats.paid, stats.total)}</p>
                 </div>
               </section>
             )}

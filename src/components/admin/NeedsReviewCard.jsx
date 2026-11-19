@@ -46,13 +46,13 @@ function ReviewItem({ item, t, participants, rounds, locale, timeZone, readOnly,
           {rounds.map(r => <option key={r.id} value={r.id}>{t.roundWord(r.round)}</option>)}
         </select>
       )}
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           aria-label={t.whoPaid}
           value={memberId}
           disabled={readOnly}
           onChange={e => setMemberId(e.target.value)}
-          className="flex-1 min-h-11 rounded-xl bg-ink border border-stone-600 text-stone-100 text-sm px-2"
+          className="flex-1 min-w-[9rem] min-h-11 rounded-xl bg-ink border border-stone-600 text-stone-100 text-sm px-2"
         >
           <option value="">{t.whoPaid}</option>
           {participants.map(p => <option key={p.id} value={p.id}>{p.name || `#${p.slot}`}</option>)}

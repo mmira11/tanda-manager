@@ -97,7 +97,7 @@ export default function StillOweCard({
                   )}
                 </div>
                 {(smsUrl || waUrl || item) && (
-                  <div className="flex gap-1.5 mt-1.5 pl-12">
+                  <div className="flex flex-wrap gap-1.5 mt-1.5 pl-12">
                     {smsUrl && (
                       <a
                         href={smsUrl}
