@@ -98,6 +98,50 @@ describe('first run: create a cycle', () => {
   })
 })
 
+describe('crash guards', () => {
+  it('a phone number in the days box shows a validation error instead of crashing', async () => {
+    const fake = installFakeSupabase({ session: adminSession, isAdmin: true })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+    await screen.findByText('Create a cycle')
+    await user.type(screen.getByLabelText('Cycle name'), 'Tanda')
+    fireEvent.change(screen.getByLabelText('First collection date'), { target: { value: '2026-11-27' } })
+    await user.type(screen.getByLabelText('Contribution per person ($)'), '200')
+    fireEvent.change(screen.getByLabelText('Days between rounds'), { target: { value: '5551234567' } })
+    await user.type(screen.getByLabelText('Member 1 first name'), 'Ana')
+    await user.type(screen.getByLabelText('Member 2 first name'), 'Beto')
+    expect(screen.getByText('Create a cycle')).toBeTruthy()
+    await user.click(screen.getByText('Create cycle'))
+    expect(screen.getByText('Whole number of days, 1 to 365')).toBeTruthy()
+    expect(fake.tables.cycles).toHaveLength(0)
+  })
+
+  it('a 5-digit year is refused instead of crashing', async () => {
+    installFakeSupabase({ session: adminSession, isAdmin: true })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+    await screen.findByText('Create a cycle')
+    fireEvent.change(screen.getByLabelText('First collection date'), { target: { value: '20261-01-01' } })
+    await user.click(screen.getByText('Create cycle'))
+    expect(screen.getByText('Pick a real date')).toBeTruthy()
+  })
+
+  it('an interrupted create (cycle with no members or rounds) offers delete instead of a blank page', async () => {
+    const db = seedCycle({ names: ['Ana', 'Beto'], name: 'Half built' })
+    db.members = []
+    db.rounds = []
+    db.payments = []
+    const fake = installFakeSupabase({ session: adminSession, isAdmin: true, db })
+    const user = userEvent.setup()
+    render(<AdminGate />)
+
+    expect(await screen.findByText("Cycle setup didn't finish")).toBeTruthy()
+    await user.click(screen.getByText('Delete and start over'))
+    expect(await screen.findByText('Create a cycle')).toBeTruthy()
+    expect(fake.tables.cycles).toHaveLength(0)
+  })
+})
+
 describe('admin is always English', () => {
   afterEach(() => localStorage.clear())
 
