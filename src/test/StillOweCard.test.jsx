@@ -3,6 +3,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LABELS } from '../data/labels'
 import StillOweCard from '../components/admin/StillOweCard'
+import MemberAvatarGrid from '../components/admin/MemberAvatarGrid'
 import DashboardView from '../components/admin/DashboardView'
 import TabBar from '../components/ui/TabBar'
 import { buildReminderView } from '../utils/reminderQueue'
@@ -189,5 +190,36 @@ describe('dashboard tab badge', () => {
     )
     expect(screen.getByRole('button', { name: 'Dashboard, 2' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Members' }).textContent).not.toMatch(/0/)
+  })
+})
+
+describe('avatar row with nudges', () => {
+  it('shows everyone, and a Nudge only for unpaid people with a valid phone, using the friendly text', async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    render(<MemberAvatarGrid members={members} contribution={100} zelle="org@example.com" collectDate="2099-06-12" t={t} onSelect={onSelect} />)
+    const grid = screen.getByRole('list', { name: 'Who has paid this round' })
+    expect(within(grid).getAllByRole('listitem')).toHaveLength(4)
+    const nudges = within(grid).getAllByRole('link')
+    expect(nudges.map(a => a.getAttribute('aria-label'))).toEqual(['Nudge Bea'])
+    expect(decodeURIComponent(nudges[0].getAttribute('href').split('body=')[1]))
+      .toMatch(/^Hi Bea, friendly reminder that Tanda collection is on Friday, Jun 12\./)
+    expect(grid.textContent).not.toMatch(/555/)
+    await user.click(screen.getByRole('button', { name: 'Ada, Paid' }))
+    expect(onSelect).toHaveBeenCalledWith(members[0])
+  })
+
+  it('hides nudges on an archived cycle', () => {
+    render(<MemberAvatarGrid members={members} contribution={100} zelle="z" collectDate="2099-06-12" t={t} readOnly onSelect={() => {}} />)
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('sits on the dashboard between the money card and the Still owe list', () => {
+    render(<DashboardView t={t} cycleName="Demo" roundLabel="Round 1 of 4" collectedLabel="$100" potLabel="$400" paid={1} total={4}
+      payoutLine="Payout Saturday → Dee" members={members} recipientSlot={4} recipientName="Dee" contribution={100}
+      zelle="z" collectDate="2099-06-12" reviews={[]} readOnly={false} onSelectMember={() => {}} reminderItems={[]} />)
+    const grid = screen.getByRole('list', { name: 'Who has paid this round' })
+    const owe = screen.getByRole('heading', { name: 'Still owe · 3' })
+    expect(grid.compareDocumentPosition(owe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

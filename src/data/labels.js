@@ -145,6 +145,8 @@ export const LABELS = {
     unpaidState:      'Unpaid',
     sendRemindersNow: 'Send reminders now',
     stillOwe:         n => `Still owe · ${n}`,
+    whoPaidThisRound: 'Who has paid this round',
+    nudgeName:        name => `Nudge ${name}`,
     everyonePaid:     'Everyone has paid this round',
     paidSection:      n => `Paid · ${n}`,
     remindText:       name => `Text ${name} a reminder`,
