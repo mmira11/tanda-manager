@@ -207,7 +207,7 @@ export default function CreateCycleForm({ onImport, onCancel }) {
 
         {plan && parsed.contribution > 0 && (
           <div className="bg-gold-50 border border-gold-200 rounded-xl p-3 text-sm text-gray-700">
-            {memberCount} rounds · {formatMoney(parsed.contribution * memberCount)} pot each round ·
+            {memberCount} rounds · {formatMoney(parsed.contribution * Math.max(memberCount - 1, 0))} pot each round ·
             last payout {formatDate(plan[plan.length - 1].payoutDate, locale)}
           </div>
         )}

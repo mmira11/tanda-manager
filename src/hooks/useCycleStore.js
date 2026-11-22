@@ -53,7 +53,9 @@ export function toStore(cycle, members, rounds, payments) {
       payments: Object.fromEntries(
         payments
           .filter(p => p.round_id === r.id && activeIds.has(p.member_id))
-          .map(p => [slotById[p.member_id], p.paid_at !== null])
+          // auto_recipient is the waiver, not money received. The screen still shows
+          // that person as settled because they are the round's recipient.
+          .map(p => [slotById[p.member_id], p.paid_at !== null && p.source !== 'auto_recipient'])
       ),
     })),
   }
@@ -116,7 +118,7 @@ export function useCycleStore() {
         supabase.from('sms_opt_outs').select('phone_e164').then(check),
       ])
       const payments = rounds.length
-        ? check(await supabase.from('payments').select('round_id, member_id, paid_at')
+        ? check(await supabase.from('payments').select('round_id, member_id, paid_at, source')
             .in('round_id', rounds.map(r => r.id)))
         : []
       const reviews = check(await supabase.from('pending_review')
@@ -163,6 +165,8 @@ export function useCycleStore() {
     const s = storeRef.current
     const round = s.rounds.find(r => r.round === roundNum)
     const member = s.participants.find(p => p.slot === slot)
+    // The recipient does not pay this round. Unmarking them would look like a debt.
+    if (!round || !member || slot === round.recipientSlot) return
     const paid = !round.payments[slot]
     return run(
       patchRound(roundNum, r => ({ ...r, payments: { ...r.payments, [slot]: paid } })),
@@ -436,7 +440,12 @@ export function useCycleStore() {
       now,
       cycle: { id: s.config.cycleId },
       settings: { ...(meta.settings || {}), timezone: meta.settings?.timezone || s.config.timezone },
-      rounds: s.rounds.map(round => ({ id: round.id, round_number: round.round, collect_date: round.collectDate })),
+      rounds: s.rounds.map(round => ({
+        id: round.id,
+        round_number: round.round,
+        collect_date: round.collectDate,
+        recipient_member_id: s.participants.find(person => person.slot === round.recipientSlot)?.id ?? null,
+      })),
       members: s.participants.map(person => ({
         id: person.id, display_first_name: person.name, phone: person.phone, removed_at: null,
       })),

@@ -49,11 +49,11 @@ Deno.serve(async (req) => {
     const [settings, templates, rounds, members] = await Promise.all([
       db.from('reminder_settings').select('*').eq('cycle_id', cycle.id).maybeSingle().then(check),
       db.from('reminder_templates').select('kind, lang, body').eq('cycle_id', cycle.id).then(check),
-      db.from('rounds').select('id, round_number, collect_date').eq('cycle_id', cycle.id).then(check),
+      db.from('rounds').select('id, round_number, collect_date, recipient_member_id').eq('cycle_id', cycle.id).then(check),
       db.from('members').select('id, display_first_name, phone, removed_at').eq('cycle_id', cycle.id).then(check),
     ])
     const payments = rounds.length
-      ? check(await db.from('payments').select('round_id, member_id, paid_at').in('round_id', rounds.map(r => r.id)))
+      ? check(await db.from('payments').select('round_id, member_id, paid_at, source').in('round_id', rounds.map(r => r.id)))
       : []
     cycles.push({
       cycle,

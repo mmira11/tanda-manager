@@ -195,7 +195,7 @@ describe('useCycleStore import and cycle switch', () => {
     expect(screen.getByRole('button', { name: 'New cycle' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Schedule' }))
     await user.click(screen.getAllByRole('button', { name: /Ada/ })[0])
-    expect(screen.getByRole('button', { name: 'Ada: not paid' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Ada: Recipient - no payment due' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Save round' })).toBeNull()
   })
 })

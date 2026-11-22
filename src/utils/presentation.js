@@ -2,19 +2,44 @@ import { isValidUsPhone } from './messaging'
 
 const AVATAR_COLORS = ['#14857F', '#0F6B66', '#C46B4A', '#3D6B8C', '#7A5C3E', '#2F6F4E', '#8C4A6F', '#4E5B8C']
 
+// The person who receives this round does not pay in. They still count as settled.
+export function isWaivedRecipient(record) {
+  return record?.isRecipient === true || record?.is_recipient === true
+}
+
+export function countsAsPaid(record) {
+  if (record === true) return true
+  if (!record || record === false) return false
+  return record.paid === true || isWaivedRecipient(record)
+}
+
+// paid / total is the headcount, including the recipient.
+// collected / pot is the money, and the recipient's row is never part of it,
+// even when that row was already marked paid by hand.
 export function paymentStats(records, contribution) {
-  const list = records || []
-  const total = list.length
-  const paid = list.filter(item => item === true || item?.paid === true).length
-  const percent = total === 0 ? 0 : Math.round((paid / total) * 100)
+  const rows = (records || []).map(item => {
+    if (item === true || item === false) return { paid: item === true, recipient: false }
+    return { paid: item?.paid === true, recipient: isWaivedRecipient(item) }
+  })
+  const total = rows.length
+  const paid = rows.filter(row => row.paid || row.recipient).length
+  const owing = rows.filter(row => !row.recipient)
   const amount = Number(contribution) || 0
   return {
     paid,
     total,
-    percent,
-    collected: paid * amount,
-    pot: total * amount,
+    percent: total === 0 ? 0 : Math.round((paid / total) * 100),
+    collected: owing.filter(row => row.paid).length * amount,
+    pot: owing.length * amount,
   }
+}
+
+// payers: members who have a payment row in this round (N9). payments: { [slot]: bool }.
+export function roundPaymentStats(payers, payments, recipientSlot, contribution) {
+  return paymentStats((payers || []).map(person => ({
+    paid: payments?.[person.slot] === true,
+    isRecipient: person.slot === recipientSlot,
+  })), contribution)
 }
 
 export function roundStepState(roundNumber, currentRound) {
@@ -55,7 +80,8 @@ export function avatarColor(name) {
 }
 
 export function canNudge(member) {
-  return member?.paid !== true && isValidUsPhone(member?.phone)
+  if (member?.paid === true || isWaivedRecipient(member)) return false
+  return isValidUsPhone(member?.phone)
 }
 
 function fallbackRounds(board) {

@@ -45,8 +45,8 @@ describe('schedule list', () => {
     const rows = within(screen.getByRole('list', { name: 'Rounds' })).getAllByRole('button')
     expect(rows).toHaveLength(12)
     expect(rows[5].getAttribute('aria-current')).toBe('step')
-    expect(rows[5].textContent).toMatch(/^6Fay.*Fri, Aug 21 → Sat, Aug 22.*0\/12 paid$/)
-    expect(rows[0].textContent).toMatch(/0\/12 paid$/)
+    expect(rows[5].textContent).toMatch(/^6Fay.*Fri, Aug 21 → Sat, Aug 22.*1\/12 paid$/)
+    expect(rows[0].textContent).toMatch(/1\/12 paid$/)
     expect(rows[8].textContent).not.toMatch(/paid/)
   })
 
@@ -68,7 +68,7 @@ describe('round detail', () => {
     await openRound(user, 5)
     expect(screen.getByRole('heading', { name: 'Round 5 · Eve' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'Mark payout sent to Eve' }))
-    expect(screen.getByRole('button', { name: /\$2,400 sent to Eve/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /\$2,200 sent to Eve/ })).toBeTruthy()
     await waitFor(() => expect(savedRound(5).payout_sent).toBe(true))
     expect(savedRound(5).payout_sent_at).toBeTruthy()
     expect(savedRound(6).payout_sent).toBe(false)
@@ -77,6 +77,8 @@ describe('round detail', () => {
   it('marks and unmarks a payment on any round: paid_at and source=manual, then cleared', async () => {
     const user = await openSchedule()
     await openRound(user, 5)
+    expect(screen.getByText('$2,200 pot · 1 of 12 paid')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Eve: Recipient - no payment due' })).toBeDisabled()
     await user.click(screen.getByRole('button', { name: 'Ada: not paid' }))
     await waitFor(() => expect(savedPayment(5, 1).source).toBe('manual'))
     expect(savedPayment(5, 1).paid_at).not.toBeNull()
@@ -132,11 +134,11 @@ describe('round detail', () => {
     fake = installFakeSupabase({ db })
     const user = await openSchedule()
     await openRound(user, 2)
-    expect(screen.getByText('$600 pot · 0 of 4 paid')).toBeTruthy()
+    expect(screen.getByText('$450 pot · 1 of 4 paid')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Eve: not paid' })).toBeNull()
     await user.click(screen.getByText('‹ Schedule'))
     await openRound(user, 1)
-    expect(screen.getByText('$750 pot · 0 of 5 paid')).toBeTruthy()
+    expect(screen.getByText('$600 pot · 1 of 5 paid')).toBeTruthy()
   })
 
   it('handles more rounds than members, one person receiving twice (N9)', async () => {
@@ -155,7 +157,7 @@ describe('round detail', () => {
     expect(rows.map(r => r.textContent.slice(0, 4))).toEqual(['1Ada', '2Bea', '3Ada'])
     await openRound(user, 3)
     expect(screen.getByRole('heading', { name: 'Round 3 · Ada' })).toBeTruthy()
-    expect(screen.getByText('$100 pot · 0 of 2 paid')).toBeTruthy()
+    expect(screen.getByText('$50 pot · 1 of 2 paid')).toBeTruthy()
   })
 
   it('is read-only on an archived cycle', async () => {
@@ -167,7 +169,7 @@ describe('round detail', () => {
     expect(rows.some(r => r.getAttribute('aria-current'))).toBe(false)
     await openRound(user, 1)
     expect(screen.getByLabelText('Collect by 6 PM')).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Ada: not paid' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Ada: Recipient - no payment due' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Save round' })).toBeNull()
   })
 })

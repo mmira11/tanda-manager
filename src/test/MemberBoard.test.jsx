@@ -126,7 +126,7 @@ describe('member board', () => {
 
     expect(await screen.findByText('$80 due')).toBeTruthy()
     expect(screen.getByText(/Hi, Ada!/)).toBeTruthy()
-    expect(screen.getAllByText(/\$160/).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/\$160/)).toBeNull()
     expect(screen.getAllByText(/Jun 2/).length).toBeGreaterThan(0)
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Group' }))

@@ -74,14 +74,15 @@ create table public.rounds (
   unique (cycle_id, round_number)
 );
 
--- One row per member per round. paid_at IS NULL = unpaid
+-- One row per member per round. paid_at IS NULL = unpaid.
+-- auto_recipient: this member receives the round and does not pay in.
 create table public.payments (
   id uuid primary key default gen_random_uuid(),
   round_id uuid not null references public.rounds (id) on delete cascade,
   member_id uuid not null references public.members (id) on delete cascade,
   amount numeric(10,2) not null,
   paid_at timestamptz,
-  source text check (source in ('manual', 'auto', 'bot')),
+  source text check (source in ('manual', 'auto', 'bot', 'auto_recipient')),
   unique (round_id, member_id)
 );
 
@@ -292,8 +293,11 @@ begin
     raise exception 'The Zelle amount does not match this payment; mark it by hand instead' using errcode = '22023';
   end if;
 
-  -- Already marked paid by hand: keep that record as it is.
-  if v_payment.paid_at is null then
+  -- A waiver (auto_recipient) is not a recorded payment, so a real Zelle match
+  -- replaces it with source auto and the email time. That money still stays out of
+  -- the pot, because pot sums skip the recipient. A row already paid from a real
+  -- source (manual, auto, bot) is left as it is.
+  if v_payment.paid_at is null or v_payment.source is not distinct from 'auto_recipient' then
     update public.payments
     set paid_at = v_review.received_at, source = 'auto'
     where id = v_payment.id;
@@ -332,12 +336,18 @@ begin
     raise exception 'not found' using errcode = 'P0002';
   end if;
 
-  select * into v_member from public.members where access_token = p_token;
+  select * into v_member from public.members
+  where access_token = p_token and token_revoked_at is null and removed_at is null;
   if not found then
     raise exception 'not found' using errcode = 'P0002';
   end if;
 
   select * into v_cycle from public.cycles where id = v_member.cycle_id;
+  if v_cycle.status = 'archived'
+     and coalesce(v_cycle.archived_at, '-infinity'::timestamptz) + interval '30 days' <= now() then
+    raise exception 'not found' using errcode = 'P0002';
+  end if;
+
   v_zone := coalesce(nullif(btrim(v_cycle.timezone), ''), 'America/Los_Angeles');
   v_today := (timezone(v_zone, now()))::date;
 
@@ -374,15 +384,22 @@ begin
       'slot', v_member.slot,
       'display_first_name', v_member.display_first_name,
       'language_pref', v_member.language_pref,
-      'payout_date', (
-        select r.payout_date from public.rounds r
-        where r.recipient_member_id = v_member.id
-        limit 1
+      'payout_date', coalesce(
+        (select r.payout_date from public.rounds r
+         where r.recipient_member_id = v_member.id and r.cycle_id = v_cycle.id and r.payout_date >= v_today
+         order by r.payout_date limit 1),
+        (select r.payout_date from public.rounds r
+         where r.recipient_member_id = v_member.id and r.cycle_id = v_cycle.id
+         order by r.payout_date desc limit 1)
       ),
       'paid_this_round', (
-        select p.paid_at is not null
-        from public.payments p
-        where p.round_id = v_round.id and p.member_id = v_member.id
+        v_member.id = v_round.recipient_member_id
+        or exists (
+          select 1 from public.payments p
+          where p.round_id = v_round.id
+            and p.member_id = v_member.id
+            and p.paid_at is not null
+        )
       )
     ),
     'current_round', case when v_round.id is null then null else jsonb_build_object(
@@ -393,20 +410,19 @@ begin
       'collect_deadline', v_deadline,
       'recipient_first_name', (
         select m.display_first_name from public.members m
-        where m.id = v_round.recipient_member_id
+        where m.id = v_round.recipient_member_id and m.removed_at is null
       )
     ) end,
     'progress', (
       select coalesce(jsonb_agg(jsonb_build_object(
         'slot', m.slot,
         'display_first_name', m.display_first_name,
-        'paid', p.paid_at is not null,
+        'paid', (p.paid_at is not null) or m.id = v_round.recipient_member_id,
         'is_recipient', m.id = v_round.recipient_member_id
       ) order by m.slot), '[]'::jsonb)
-      from public.members m
-      left join public.payments p
-        on p.member_id = m.id and p.round_id = v_round.id
-      where m.cycle_id = v_cycle.id
+      from public.payments p
+      join public.members m on m.id = p.member_id
+      where p.round_id = v_round.id and m.cycle_id = v_cycle.id and m.removed_at is null
     ),
     'rounds', (
       select coalesce(jsonb_agg(jsonb_build_object(
@@ -416,7 +432,7 @@ begin
         'recipient_first_name', rm.display_first_name
       ) order by r.round_number), '[]'::jsonb)
       from public.rounds r
-      join public.members rm on rm.id = r.recipient_member_id
+      left join public.members rm on rm.id = r.recipient_member_id and rm.removed_at is null
       where r.cycle_id = v_cycle.id
     )
   );
@@ -516,6 +532,13 @@ begin
   loop
     if (v_row->>'kind') not in ('thursday_all', 'friday_noon', 'friday_evening') then
       raise exception 'invalid reminder window' using errcode = '22023';
+    end if;
+    if exists (
+      select 1 from public.rounds r
+      where r.id = (v_row->>'round_id')::uuid
+        and r.recipient_member_id = (v_row->>'member_id')::uuid
+    ) then
+      continue;
     end if;
     v_id := null;
     insert into public.reminder_log (
@@ -703,6 +726,35 @@ begin
       'recipient_first_name', (
         select m.display_first_name from public.members m
         where m.id = v_round.recipient_member_id and m.removed_at is null
+      ),
+      -- Money skips the recipient. paid_count still includes them, so a full round is N/N.
+      'pot', (
+        select coalesce(sum(p.amount), 0)
+        from public.payments p
+        join public.members m on m.id = p.member_id
+        where p.round_id = v_round.id and m.removed_at is null
+          and p.member_id is distinct from v_round.recipient_member_id
+      ),
+      'collected', (
+        select coalesce(sum(p.amount), 0)
+        from public.payments p
+        join public.members m on m.id = p.member_id
+        where p.round_id = v_round.id and m.removed_at is null
+          and p.paid_at is not null
+          and p.member_id is distinct from v_round.recipient_member_id
+      ),
+      'paid_count', (
+        select count(*)
+        from public.payments p
+        join public.members m on m.id = p.member_id
+        where p.round_id = v_round.id and m.removed_at is null
+          and ((p.paid_at is not null) or p.member_id = v_round.recipient_member_id)
+      ),
+      'member_count', (
+        select count(*)
+        from public.payments p
+        join public.members m on m.id = p.member_id
+        where p.round_id = v_round.id and m.removed_at is null
       )
     ) end,
     'members', (
@@ -710,8 +762,8 @@ begin
         'slot', m.slot,
         'first_name', m.display_first_name,
         'language', m.language_pref,
-        'paid', p.paid_at is not null,
-        'amount', p.amount,
+        'paid', (p.paid_at is not null) or m.id = v_round.recipient_member_id,
+        'amount', case when m.id = v_round.recipient_member_id then 0 else p.amount end,
         'is_recipient', m.id = v_round.recipient_member_id
       ) order by m.slot), '[]'::jsonb)
       from public.payments p
@@ -752,6 +804,26 @@ begin
   where cycle_id = v_cycle.id and slot = p_slot and removed_at is null;
   if not found then
     raise exception 'no member in slot %', p_slot using errcode = 'P0002';
+  end if;
+
+  -- The recipient does not owe. Marking them paid records the real bot payment
+  -- (source bot, the given time) without adding it to the pot. Clearing them is ignored,
+  -- so a waiver or a real payment cannot turn into a debt.
+  if v_member.id = v_round.recipient_member_id then
+    if not exists (
+      select 1 from public.payments
+      where round_id = v_round.id and member_id = v_member.id
+    ) then
+      raise exception '% does not pay in round %', v_member.display_first_name, v_round.round_number
+        using errcode = 'P0002';
+    end if;
+    if coalesce(p_paid, true) then
+      update public.payments
+         set paid_at = coalesce(p_paid_at, paid_at, now()),
+             source = 'bot'
+       where round_id = v_round.id and member_id = v_member.id;
+    end if;
+    return public.bot_round_status(p_key, v_round.round_number);
   end if;
 
   update public.payments
@@ -869,3 +941,119 @@ $$;
 
 revoke all on function public.import_cycle(jsonb) from public, anon;
 grant execute on function public.import_cycle(jsonb) to authenticated;
+
+-- 020: recipient waiver. The payment trigger settles the row;
+-- the round trigger moves the waiver when the recipient changes.
+create or replace function public.settle_recipient_payment()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  v_recipient uuid;
+begin
+  select recipient_member_id into v_recipient
+  from public.rounds
+  where id = new.round_id;
+
+  if v_recipient is null or new.member_id is distinct from v_recipient then
+    -- auto_recipient means "this person receives the round." It is not a payment source
+    -- for anyone else. A real source (manual, auto, bot) is left alone.
+    if new.source = 'auto_recipient' then
+      raise exception 'auto_recipient is only for the round recipient' using errcode = '23514';
+    end if;
+    return new;
+  end if;
+
+  -- Never store the recipient as unpaid.
+  if new.paid_at is null then
+    new.paid_at := case
+      when tg_op = 'UPDATE' and old.paid_at is not null then old.paid_at
+      else now()
+    end;
+    new.source := case
+      when tg_op = 'UPDATE' and old.paid_at is not null and old.source in ('manual', 'auto', 'bot') then old.source
+      else 'auto_recipient'
+    end;
+  elsif new.source is null or new.source not in ('manual', 'auto', 'bot', 'auto_recipient') then
+    new.source := 'auto_recipient';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists payments_settle_recipient on public.payments;
+create trigger payments_settle_recipient
+  before insert or update on public.payments
+  for each row execute function public.settle_recipient_payment();
+
+create or replace function public.resettle_round_recipient()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if tg_op = 'UPDATE' and old.recipient_member_id is not distinct from new.recipient_member_id then
+    return new;
+  end if;
+
+  if tg_op = 'UPDATE' and old.recipient_member_id is distinct from new.recipient_member_id then
+    -- Only the waiver moves. A real payment (manual, auto, bot) stays on the row.
+    update public.payments
+       set paid_at = null,
+           source = null
+     where round_id = new.id
+       and member_id = old.recipient_member_id
+       and source = 'auto_recipient';
+  end if;
+
+  update public.payments
+     set paid_at = coalesce(paid_at, now()),
+         source = case
+           when paid_at is not null and source in ('manual', 'auto', 'bot') then source
+           else 'auto_recipient'
+         end
+   where round_id = new.id
+     and member_id = new.recipient_member_id
+     and (
+       paid_at is null
+       or source is null
+       or source not in ('manual', 'auto', 'bot', 'auto_recipient')
+     );
+
+  return new;
+end;
+$$;
+
+drop trigger if exists rounds_resettle_recipient on public.rounds;
+create trigger rounds_resettle_recipient
+  after insert or update of recipient_member_id on public.rounds
+  for each row execute function public.resettle_round_recipient();
+
+-- Trigger functions are invoked by the statement. EXECUTE is not checked then.
+revoke all on function public.settle_recipient_payment() from public, anon;
+revoke all on function public.resettle_round_recipient() from public, anon;
+
+create or replace function public.skip_recipient_reminder()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if exists (
+    select 1 from public.rounds r
+    where r.id = new.round_id and r.recipient_member_id = new.member_id
+  ) then
+    return null;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists reminder_log_skip_recipient on public.reminder_log;
+create trigger reminder_log_skip_recipient
+  before insert on public.reminder_log
+  for each row execute function public.skip_recipient_reminder();
+
+revoke all on function public.skip_recipient_reminder() from public, anon;

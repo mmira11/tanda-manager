@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
 import { dateLocale, deadlineOnDate, formatDate, getCountdownTo } from '../../utils/rounds'
-import { avatarColor, compactCountdown, daysUntil, initials, memberRoundSteps, paymentStats } from '../../utils/presentation'
+import { avatarColor, compactCountdown, countsAsPaid, daysUntil, initials, memberRoundSteps, paymentStats } from '../../utils/presentation'
 import Logo from '../ui/Logo'
 import LangToggle from '../ui/LangToggle'
 import TabBar from '../ui/TabBar'
@@ -50,11 +50,12 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
   const round = board.current_round
   const stats = paymentStats(progress, board.cycle?.contribution)
   const rounds = memberRoundSteps(board.rounds, round?.round_number, board)
-  const paid = board.me?.paid_this_round === true
   const zelle = board.cycle?.zelle_destination?.trim() || ''
   const payoutDate = board.me?.payout_date
   const myName = board.me?.display_first_name || ''
   const myTurn = progress.some(p => p.slot === board.me?.slot && p.is_recipient === true)
+  // Receiving this round waives the contribution, so it is not an amount due.
+  const paid = board.me?.paid_this_round === true && !myTurn
   // Rounds carry first names only, so "mine" is my name on my payout date.
   const isMine = item => item.name === myName && item.payoutDate === payoutDate
   const [celebration, setCelebration] = useState(null)
@@ -138,10 +139,11 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
                 <p className="text-sm text-white/90 mt-1">
                   {t.receivingPot(formatMoney(stats.pot), formatDate(round.payout_date, locale))}
                 </p>
+                <p className="text-sm font-semibold text-white mt-2">{t.recipientNoPay}</p>
               </section>
             )}
 
-            {round && !complete && !paid && (
+            {round && !complete && !myTurn && !paid && (
               <section className="card-in bg-white rounded-3xl shadow-sm p-5" aria-labelledby="pay-title">
                 <p className="text-sm font-semibold text-stone-600">{t.yourPaymentRound(round.round_number)}</p>
                 <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1 mt-1">
@@ -173,7 +175,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
               </section>
             )}
 
-            {round && !complete && paid && (
+            {round && !complete && !myTurn && paid && (
               <section className="card-in relative overflow-hidden rounded-3xl p-5 text-white shadow-sm bg-teal">
                 <Confetti />
                 <div className="relative flex items-center gap-3">
@@ -224,7 +226,7 @@ export default function MemberExperience({ board, lang, onToggleLang, complete =
                   {progress.map(person => (
                     <li
                       key={person.slot}
-                      className={`w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center ring-2 ${person.paid ? 'ring-teal' : 'ring-white opacity-50'}`}
+                      className={`w-7 h-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center ring-2 ${countsAsPaid(person) ? 'ring-teal' : 'ring-white opacity-50'}`}
                       style={{ backgroundColor: avatarColor(person.display_first_name) }}
                     >
                       {initials(person.display_first_name)}
