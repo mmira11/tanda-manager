@@ -2,6 +2,8 @@
 // change its dates, who receives, its payments, payout and notes (RoundDetail).
 import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
+import { useLang } from '../../context/LangContext'
+import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
 import { roundPaymentStats } from '../../utils/presentation'
 import { addDays, getCurrentRound, holidayName, inRound, validateSchedule } from '../../utils/rounds'
@@ -21,6 +23,7 @@ function roundHoliday(round) {
 
 function RoundDetail({ roundNum, readOnly, onBack }) {
   const { store, togglePayment, togglePayout, updateRoundNotes, updateRoundDates, assignRecipient } = useStore()
+  const t = LABELS[useLang().lang] || LABELS.en
   const { rounds, participants, config } = store
   const round = rounds.find(r => r.round === roundNum)
   const [collect, setCollect] = useState(round.collectDate)
@@ -138,10 +141,10 @@ function RoundDetail({ roundNum, readOnly, onBack }) {
                   onClick={() => { if (!isRecipient) togglePayment(roundNum, p.slot) }}
                   disabled={readOnly || isRecipient}
                   aria-pressed={paid ? 'true' : 'false'}
-                  aria-label={isRecipient ? `${p.name}: paid, recipient` : `${p.name}: ${paid ? 'paid' : 'not paid'}`}
+                  aria-label={isRecipient ? `${p.name}: ${t.recipientNoPay}` : `${p.name}: ${paid ? 'paid' : 'not paid'}`}
                   className={`min-h-11 min-w-24 rounded-xl text-sm font-semibold disabled:opacity-60 ${focus} ${paid ? 'bg-mint/15 text-mint' : 'border border-white/15 text-stone-300'}`}
                 >
-                  {isRecipient ? 'Recipient - no payment due' : paid ? '✓ Paid' : 'Not paid'}
+                  {isRecipient ? t.recipientNoPay : paid ? '✓ Paid' : 'Not paid'}
                 </button>
               </li>
             )

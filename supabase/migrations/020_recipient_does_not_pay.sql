@@ -47,6 +47,11 @@ begin
   where id = new.round_id;
 
   if v_recipient is null or new.member_id is distinct from v_recipient then
+    -- auto_recipient means "this person receives the round." It is not a payment source
+    -- for anyone else. A real source (manual, auto, bot) is left alone.
+    if new.source = 'auto_recipient' then
+      raise exception 'auto_recipient is only for the round recipient' using errcode = '23514';
+    end if;
     return new;
   end if;
 
@@ -84,6 +89,7 @@ begin
   end if;
 
   if tg_op = 'UPDATE' and old.recipient_member_id is distinct from new.recipient_member_id then
+    -- Only the waiver moves. A real payment (manual, auto, bot) stays on the row.
     update public.payments
        set paid_at = null,
            source = null
@@ -115,12 +121,10 @@ create trigger rounds_resettle_recipient
   after insert or update of recipient_member_id on public.rounds
   for each row execute function public.resettle_round_recipient();
 
--- The admin's inserts and updates fire these. The owner runs them; authenticated still
--- needs EXECUTE or marking a payment fails with permission denied for the function.
+-- These run as table triggers. Firing a trigger does not check EXECUTE, so granting
+-- it to authenticated would not change whether a payment save succeeds.
 revoke all on function public.settle_recipient_payment() from public, anon;
 revoke all on function public.resettle_round_recipient() from public, anon;
-grant execute on function public.settle_recipient_payment() to authenticated;
-grant execute on function public.resettle_round_recipient() to authenticated;
 
 -- The cron and the manual list both insert reminder_log. Drop the recipient even if a caller forgets.
 create or replace function public.skip_recipient_reminder()
@@ -145,7 +149,6 @@ create trigger reminder_log_skip_recipient
   for each row execute function public.skip_recipient_reminder();
 
 revoke all on function public.skip_recipient_reminder() from public, anon;
-grant execute on function public.skip_recipient_reminder() to authenticated;
 
 -- Current cycles only. A second run changes nothing: settled rows no longer match.
 update public.payments p
@@ -466,7 +469,9 @@ begin
     raise exception 'no member in slot %', p_slot using errcode = 'P0002';
   end if;
 
-  -- The recipient is already settled. Do not record a second contribution, and do not clear it.
+  -- The recipient does not owe. Marking them paid records the real bot payment
+  -- (source bot, the given time) without adding it to the pot. Clearing them is ignored,
+  -- so a waiver or a real payment cannot turn into a debt.
   if v_member.id = v_round.recipient_member_id then
     if not exists (
       select 1 from public.payments
@@ -475,19 +480,12 @@ begin
       raise exception '% does not pay in round %', v_member.display_first_name, v_round.round_number
         using errcode = 'P0002';
     end if;
-    update public.payments
-       set paid_at = coalesce(paid_at, now()),
-           source = case
-             when paid_at is not null and source in ('manual', 'auto', 'bot', 'auto_recipient') then source
-             else 'auto_recipient'
-           end
-     where round_id = v_round.id
-       and member_id = v_member.id
-       and (
-         paid_at is null
-         or source is null
-         or source not in ('manual', 'auto', 'bot', 'auto_recipient')
-       );
+    if coalesce(p_paid, true) then
+      update public.payments
+         set paid_at = coalesce(p_paid_at, paid_at, now()),
+             source = 'bot'
+       where round_id = v_round.id and member_id = v_member.id;
+    end if;
     return public.bot_round_status(p_key, v_round.round_number);
   end if;
 
@@ -511,5 +509,85 @@ revoke all on function public.bot_mark_paid(text, integer, boolean, integer, tim
 revoke all on function public.bot_mark_paid(text, integer, boolean, integer, timestamptz) from anon, authenticated;
 grant execute on function public.bot_round_status(text, integer) to anon, authenticated;
 grant execute on function public.bot_mark_paid(text, integer, boolean, integer, timestamptz) to anon, authenticated;
+
+
+-- A Zelle match on the recipient records source auto and the email time.
+-- The pot still skips that member. A real source already on the row is kept.
+create or replace function public.confirm_zelle_match(p_review uuid, p_member uuid, p_round uuid default null)
+returns void
+language plpgsql
+security invoker
+set search_path = public
+as $$
+declare
+  v_review  public.pending_review%rowtype;
+  v_member  public.members%rowtype;
+  v_payment public.payments%rowtype;
+begin
+  select * into v_review from public.pending_review where id = p_review for update;
+  if not found then
+    raise exception 'Review not found' using errcode = 'P0002';
+  end if;
+  if v_review.status <> 'pending' then
+    raise exception 'This item was already handled' using errcode = '22023';
+  end if;
+  -- Archived cycles stay readable and can be unarchived. Match must not change a payment.
+  if coalesce((select status from public.cycles where id = v_review.cycle_id), '') = 'archived' then
+    raise exception 'cycle is archived' using errcode = '22023';
+  end if;
+
+  if p_round is not null then
+    if not exists (select 1 from public.rounds where id = p_round and cycle_id = v_review.cycle_id) then
+      raise exception 'That round is not in this cycle' using errcode = '22023';
+    end if;
+    update public.pending_review set round_id = p_round where id = p_review;
+    v_review.round_id := p_round;
+  end if;
+
+  if v_review.round_id is null
+     or not exists (select 1 from public.rounds where id = v_review.round_id and cycle_id = v_review.cycle_id) then
+    raise exception 'This item has no round in its cycle to apply it to' using errcode = '22023';
+  end if;
+
+  select * into v_member from public.members
+  where id = p_member and cycle_id = v_review.cycle_id and removed_at is null;
+  if not found then
+    raise exception 'That member is not in this cycle' using errcode = '22023';
+  end if;
+
+  select * into v_payment from public.payments
+  where round_id = v_review.round_id and member_id = p_member
+  for update;
+  if not found then
+    raise exception 'That member has no payment for this round' using errcode = '22023';
+  end if;
+  -- Only an exact amount can be confirmed here; partial or combined payments are marked by hand.
+  if v_review.amount is distinct from v_payment.amount then
+    raise exception 'The Zelle amount does not match this payment; mark it by hand instead' using errcode = '22023';
+  end if;
+
+  -- A waiver (auto_recipient) is not a recorded payment, so a real Zelle match
+  -- replaces it with source auto and the email time. That money still stays out of
+  -- the pot, because pot sums skip the recipient. A row already paid from a real
+  -- source (manual, auto, bot) is left as it is.
+  if v_payment.paid_at is null or v_payment.source is not distinct from 'auto_recipient' then
+    update public.payments
+    set paid_at = v_review.received_at, source = 'auto'
+    where id = v_payment.id;
+  end if;
+
+  update public.pending_review
+  set status = 'matched', suggested_member_id = p_member, resolved_at = now()
+  where id = p_review;
+
+  insert into public.payer_aliases (member_id, alias_name)
+  values (p_member, v_review.sender_name)
+  on conflict (member_id, alias_name) do nothing;
+end;
+$$;
+
+revoke all on function public.confirm_zelle_match(uuid, uuid, uuid) from public;
+revoke all on function public.confirm_zelle_match(uuid, uuid, uuid) from anon;
+grant execute on function public.confirm_zelle_match(uuid, uuid, uuid) to authenticated;
 
 commit;

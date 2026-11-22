@@ -293,8 +293,11 @@ begin
     raise exception 'The Zelle amount does not match this payment; mark it by hand instead' using errcode = '22023';
   end if;
 
-  -- Already marked paid by hand: keep that record as it is.
-  if v_payment.paid_at is null then
+  -- A waiver (auto_recipient) is not a recorded payment, so a real Zelle match
+  -- replaces it with source auto and the email time. That money still stays out of
+  -- the pot, because pot sums skip the recipient. A row already paid from a real
+  -- source (manual, auto, bot) is left as it is.
+  if v_payment.paid_at is null or v_payment.source is not distinct from 'auto_recipient' then
     update public.payments
     set paid_at = v_review.received_at, source = 'auto'
     where id = v_payment.id;
@@ -803,7 +806,9 @@ begin
     raise exception 'no member in slot %', p_slot using errcode = 'P0002';
   end if;
 
-  -- The recipient is already settled. Do not record a second contribution, and do not clear it.
+  -- The recipient does not owe. Marking them paid records the real bot payment
+  -- (source bot, the given time) without adding it to the pot. Clearing them is ignored,
+  -- so a waiver or a real payment cannot turn into a debt.
   if v_member.id = v_round.recipient_member_id then
     if not exists (
       select 1 from public.payments
@@ -812,19 +817,12 @@ begin
       raise exception '% does not pay in round %', v_member.display_first_name, v_round.round_number
         using errcode = 'P0002';
     end if;
-    update public.payments
-       set paid_at = coalesce(paid_at, now()),
-           source = case
-             when paid_at is not null and source in ('manual', 'auto', 'bot', 'auto_recipient') then source
-             else 'auto_recipient'
-           end
-     where round_id = v_round.id
-       and member_id = v_member.id
-       and (
-         paid_at is null
-         or source is null
-         or source not in ('manual', 'auto', 'bot', 'auto_recipient')
-       );
+    if coalesce(p_paid, true) then
+      update public.payments
+         set paid_at = coalesce(p_paid_at, paid_at, now()),
+             source = 'bot'
+       where round_id = v_round.id and member_id = v_member.id;
+    end if;
     return public.bot_round_status(p_key, v_round.round_number);
   end if;
 
@@ -959,6 +957,11 @@ begin
   where id = new.round_id;
 
   if v_recipient is null or new.member_id is distinct from v_recipient then
+    -- auto_recipient means "this person receives the round." It is not a payment source
+    -- for anyone else. A real source (manual, auto, bot) is left alone.
+    if new.source = 'auto_recipient' then
+      raise exception 'auto_recipient is only for the round recipient' using errcode = '23514';
+    end if;
     return new;
   end if;
 
@@ -996,6 +999,7 @@ begin
   end if;
 
   if tg_op = 'UPDATE' and old.recipient_member_id is distinct from new.recipient_member_id then
+    -- Only the waiver moves. A real payment (manual, auto, bot) stays on the row.
     update public.payments
        set paid_at = null,
            source = null
@@ -1027,10 +1031,9 @@ create trigger rounds_resettle_recipient
   after insert or update of recipient_member_id on public.rounds
   for each row execute function public.resettle_round_recipient();
 
+-- Trigger functions are invoked by the statement. EXECUTE is not checked then.
 revoke all on function public.settle_recipient_payment() from public, anon;
 revoke all on function public.resettle_round_recipient() from public, anon;
-grant execute on function public.settle_recipient_payment() to authenticated;
-grant execute on function public.resettle_round_recipient() to authenticated;
 
 create or replace function public.skip_recipient_reminder()
 returns trigger
@@ -1054,4 +1057,3 @@ create trigger reminder_log_skip_recipient
   for each row execute function public.skip_recipient_reminder();
 
 revoke all on function public.skip_recipient_reminder() from public, anon;
-grant execute on function public.skip_recipient_reminder() to authenticated;

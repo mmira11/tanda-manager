@@ -711,7 +711,14 @@ function assertZelleConfirm(database) {
       || '|' || (select status from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000001')
       || '|' || (select count(*) from public.payer_aliases where member_id = ${maria} and alias_name = 'Maria Demo');
   `).trim()
-  if (!/^auto_recipient@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\|matched\|1$/.test(after)) throw new Error(`${database}: confirm result was ${after}`)
+  if (after !== 'auto@2099-06-01T19:00|matched|1') throw new Error(`${database}: confirm result was ${after}`)
+  const pot = psqlText(database, `
+    select coalesce(sum(p.amount) filter (where p.member_id is distinct from r.recipient_member_id and p.paid_at is not null), 0)
+    from public.payments p
+    join public.rounds r on r.id = p.round_id
+    where r.id = ${round1};
+  `).trim()
+  if (pot !== '0') throw new Error(`${database}: recipient Zelle was counted in the pot (${pot})`)
 
   mustFail('matching the same item twice', `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000001', ${maria});`, /already handled/)
   psqlText(database, `
@@ -769,7 +776,7 @@ function assertZelleConfirm(database) {
       || '|' || (select source from public.payments where round_id = ${round2} and member_id = ${maria} and paid_at is not null)
       || '|' || (select count(*) from public.payments where round_id = ${round1} and member_id = ${maria} and source = 'auto');
   `).trim()
-  if (moved !== 'true|auto|0') throw new Error(`${database}: chosen round was not applied (${moved})`)
+  if (moved !== 'true|auto|1') throw new Error(`${database}: chosen round was not applied (${moved})`)
 
   psqlText(database, `
     insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, sender_name, amount)
@@ -966,6 +973,87 @@ function zelleCatalog(database) {
   return `${rows}\n-- function --\n${fn}\n`
 }
 
+// N1/N2: auto_recipient cannot be stored on anyone but the recipient, and a real
+// payment on the recipient survives a change of who receives.
+function assertRecipientGuards(database) {
+  const cycle = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+  const rosa = `(select id from public.members where access_token = 'member-token-rosa02')`
+  const maria = `(select id from public.members where access_token = 'member-token-maria1')`
+  const round1 = `(select id from public.rounds where cycle_id = '${cycle}' and round_number = 1)`
+
+  const rejected = psqlFails(database, `
+    update public.payments set source = 'auto_recipient'
+    where round_id = ${round1} and member_id = ${rosa};
+  `)
+  if (!/only for the round recipient/.test(rejected)) {
+    throw new Error(`${database}: auto_recipient on a non-recipient failed for the wrong reason: ${rejected}`)
+  }
+
+  psqlText(database, `
+    update public.payments
+       set paid_at = '2099-06-01T18:00:00Z', source = 'bot'
+     where round_id = ${round1} and member_id = ${rosa};
+    update public.rounds set recipient_member_id = ${rosa} where id = ${round1};
+    update public.rounds set recipient_member_id = ${maria} where id = ${round1};
+  `)
+  const kept = psqlText(database, `
+    select source || '|' || to_char(paid_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS')
+    from public.payments where round_id = ${round1} and member_id = ${rosa};
+  `).trim()
+  if (kept !== 'bot|2099-06-01T18:00:00') {
+    throw new Error(`${database}: changing the recipient cleared a real payment (${kept})`)
+  }
+  console.log(`${database}: auto_recipient is only the waiver; a real payment stays when the recipient changes`)
+}
+
+// schema.sql and both migrated databases must describe the same recipient-waiver objects.
+function recipientWaiverCatalog(database) {
+  return psqlText(database, `
+    select kind || '|' || detail from (
+      select 10 as ord, 'constraint' as kind, pg_get_constraintdef(c.oid) as detail
+      from pg_constraint c
+      where c.conrelid = 'public.payments'::regclass and c.contype = 'c'
+        and pg_get_constraintdef(c.oid) like '%source%'
+      union all
+      select 20, 'trigger', pg_get_triggerdef(t.oid)
+      from pg_trigger t
+      join pg_class rel on rel.oid = t.tgrelid
+      join pg_namespace n on n.oid = rel.relnamespace
+      where n.nspname = 'public' and not t.tgisinternal
+        and t.tgname in (
+          'payments_settle_recipient', 'rounds_resettle_recipient', 'reminder_log_skip_recipient'
+        )
+      union all
+      select 30, 'routine', pg_get_functiondef(p.oid)
+      from pg_proc p
+      join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname in (
+        'settle_recipient_payment', 'resettle_round_recipient', 'skip_recipient_reminder',
+        'get_member_board', 'enqueue_reminders', 'bot_round_status', 'bot_mark_paid',
+        'confirm_zelle_match'
+      )
+    ) s
+    order by ord, detail;
+  `).trim()
+}
+
+function assertRecipientWaiverMatch(schemaOnly, migratedFresh, migratedLegacy) {
+  const base = recipientWaiverCatalog(schemaOnly)
+  const freshCat = recipientWaiverCatalog(migratedFresh)
+  const legacyCat = recipientWaiverCatalog(migratedLegacy)
+  if (base !== freshCat || base !== legacyCat) {
+    const clip = text => text.split('\n').slice(0, 30).join('\n')
+    throw new Error(
+      'recipient waiver functions, triggers, or payments source check differ\n'
+      + `--- schema.sql only ---\n${clip(base)}\n--- fresh + migrations ---\n${clip(freshCat)}\n--- legacy + migrations ---\n${clip(legacyCat)}`,
+    )
+  }
+  if (!base.includes('auto_recipient') || !base.includes('payments_settle_recipient')) {
+    throw new Error('recipient waiver catalog is missing the source check or the payment trigger')
+  }
+  console.log('schema.sql matches migrations-in-order for the recipient waiver')
+}
+
 function assertZelleCatalogMatch(schemaOnly, migratedFresh, migratedLegacy) {
   const base = zelleCatalog(schemaOnly)
   const freshCat = zelleCatalog(migratedFresh)
@@ -1063,6 +1151,25 @@ function assertBotKeys(database) {
   if (!ignored.members.find(m => m.slot === recipient.slot).paid) {
     throw new Error(`${database}: bot_mark_paid cleared the recipient`)
   }
+  const recorded = JSON.parse(last(psqlText(database, `
+    set role anon;
+    select public.bot_mark_paid('${key}', ${recipient.slot}, true, null, '2099-06-01T17:30:00Z');
+  `)))
+  const recordedRecipient = recorded.members.find(m => m.slot === recipient.slot)
+  const recordedSource = psqlText(database, `
+    select p.source || '|' || to_char(p.paid_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS')
+    from public.payments p
+    join public.members m on m.id = p.member_id
+    join public.rounds r on r.id = p.round_id
+    where m.slot = ${recipient.slot} and r.round_number = ${status.round.number}
+      and m.cycle_id = (select id from public.cycles where status = 'active' order by start_date desc limit 1);
+  `).trim()
+  if (recordedSource !== 'bot|2099-06-01T17:30:00' || !recordedRecipient.paid || Number(recordedRecipient.amount) !== 0) {
+    throw new Error(`${database}: recipient bot payment was swallowed (${recordedSource}, ${JSON.stringify(recordedRecipient)})`)
+  }
+  if (Number(recorded.round.collected) !== collected) {
+    throw new Error(`${database}: recipient bot payment changed collected to ${recorded.round.collected}`)
+  }
   const marked = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${target.slot});`)))
   if (!marked.members.find(m => m.slot === target.slot).paid) throw new Error(`${database}: bot_mark_paid did not mark slot ${target.slot}`)
   const source = psqlText(database, `
@@ -1144,6 +1251,7 @@ assertZelleConfirm(fresh)
 assertArchivedZelleLock(fresh)
 assertReminderQueue(fresh)
 assertBotKeys(fresh)
+assertRecipientGuards(fresh)
 
 console.log('b) original schema (before review migrations), 003 only, 002 skipped, applied twice')
 recreate(legacy)
@@ -1164,12 +1272,14 @@ assertZelleConfirm(legacy)
 assertArchivedZelleLock(legacy)
 assertReminderQueue(legacy)
 assertBotKeys(legacy)
+assertRecipientGuards(legacy)
 
 console.log('c) schema.sql alone, compared with both migrated databases')
 const baseline = 'tanda_sql_baseline'
 recreate(baseline)
 applyFile(baseline, join(root, 'supabase', 'schema.sql'))
 assertZelleCatalogMatch(baseline, fresh, legacy)
+assertRecipientWaiverMatch(baseline, fresh, legacy)
 
 rmSync(scratch, { recursive: true, force: true })
 console.log('SQL ok: fresh schema + migrations x2, legacy schema + 003 onward (002 skipped) x2, and schema.sql matches those objects')
