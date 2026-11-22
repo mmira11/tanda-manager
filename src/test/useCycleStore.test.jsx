@@ -138,9 +138,13 @@ describe('useCycleStore', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     await act(() => result.current.togglePayment(1, 1))
+    expect(result.current.error).toBe('')
+    expect(fake.tables.payments.every(p => p.paid_at === null)).toBe(true)
+
+    await act(() => result.current.togglePayment(1, 2))
 
     expect(result.current.error).toBe('fake upsert on payments failed')
-    expect(result.current.store.rounds[0].payments[1]).toBe(false)
+    expect(result.current.store.rounds[0].payments[2]).toBe(false)
     expect(fake.tables.payments.every(p => p.paid_at === null)).toBe(true)
   })
 
@@ -152,7 +156,7 @@ describe('useCycleStore', () => {
 
     await act(() => result.current.buildReminderList(new Date('2026-06-12T19:30:00Z')))
 
-    expect(fake.tables.reminder_log.map(r => r.member_id).sort()).toEqual(['member-1', 'member-2'])
+    expect(fake.tables.reminder_log.map(r => r.member_id).sort()).toEqual(['member-2'])
     expect(fake.tables.reminder_log.every(r => r.round_id === 'round-1' && r.kind === 'friday_noon')).toBe(true)
   })
 })

@@ -79,6 +79,14 @@ describe('who gets texted', () => {
     expect(names(send)).toEqual(['Ada', 'Bea', 'Cal'])
     expect(skipped.map(s => [s.member.display_first_name, s.reason])).toEqual([['Dee', 'no_phone']])
   })
+  it('never reminds the recipient, including the day-before text', () => {
+    const receiving = { ...round, recipient_member_id: 'm2' }
+    for (const window of ['thursday_all', 'friday_noon', 'friday_evening']) {
+      const { send, skipped } = recipients({ window, round: receiving, members, payments, optedOut: new Set() })
+      expect(names(send)).not.toContain('Bea')
+      expect(skipped.map(s => [s.member.display_first_name, s.reason])).toContainEqual(['Bea', 'recipient'])
+    }
+  })
   it('Friday texts unpaid members only', () => {
     for (const window of ['friday_noon', 'friday_evening']) {
       const { send } = recipients({ window, round, members, payments, optedOut: new Set() })

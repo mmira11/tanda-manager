@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { formatMoney } from '../../utils/money'
+import { roundPaymentStats } from '../../utils/presentation'
 import { addDays, getCurrentRound, holidayName, inRound, validateSchedule } from '../../utils/rounds'
 
 const focus = 'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-mint'
@@ -34,8 +35,8 @@ function RoundDetail({ roundNum, readOnly, onBack }) {
   }, [round.collectDate, round.payoutDate, round.notes])
 
   const payers = inRound(round, participants)
-  const paidCount = payers.filter(p => round.payments[p.slot] === true).length
-  const pot = payers.length * config.contribution
+  const stats = roundPaymentStats(payers, round.payments, round.recipientSlot, config.contribution)
+  const pot = stats.pot
   const recipient = participants.find(p => p.slot === round.recipientSlot)
   const datesChanged = collect !== round.collectDate || payout !== round.payoutDate
   const notesChanged = notes !== (round.notes || '')
@@ -63,7 +64,7 @@ function RoundDetail({ roundNum, readOnly, onBack }) {
         <h1 className="text-xl font-extrabold tracking-tight text-stone-50">
           Round {round.round} · {recipient?.name || 'Needs a recipient'}
         </h1>
-        <p className="text-sm text-stone-400">{formatMoney(pot)} pot · {paidCount} of {payers.length} paid</p>
+        <p className="text-sm text-stone-400">{formatMoney(pot)} pot · {stats.paid} of {stats.total} paid</p>
       </div>
 
       {holiday && (
@@ -119,22 +120,28 @@ function RoundDetail({ roundNum, readOnly, onBack }) {
       </section>
 
       <section className="bg-panel rounded-2xl border border-white/10 p-4" aria-labelledby="payments-title">
-        <h2 id="payments-title" className="text-sm font-bold text-stone-50 mb-1">Payments · {paidCount} of {payers.length}</h2>
+        <h2 id="payments-title" className="text-sm font-bold text-stone-50 mb-1">Payments · {stats.paid} of {stats.total}</h2>
         <ul>
           {payers.map(p => {
-            const paid = round.payments[p.slot] === true
+            const isRecipient = p.slot === round.recipientSlot
+            const paid = isRecipient || round.payments[p.slot] === true
             return (
               <li key={p.slot} className="flex items-center gap-3 py-1.5 border-t border-white/5 first:border-t-0">
-                <span className="flex-1 min-w-0 truncate text-sm font-semibold text-stone-100">{p.name}</span>
+                <span className="flex-1 min-w-0 truncate text-sm font-semibold text-stone-100">
+                  {p.name}
+                  {isRecipient && (
+                    <span className="ml-2 align-middle rounded-full bg-mint/15 px-2 py-0.5 text-[11px] font-bold text-mint">Recipient</span>
+                  )}
+                </span>
                 <button
                   type="button"
-                  onClick={() => togglePayment(roundNum, p.slot)}
-                  disabled={readOnly}
+                  onClick={() => { if (!isRecipient) togglePayment(roundNum, p.slot) }}
+                  disabled={readOnly || isRecipient}
                   aria-pressed={paid ? 'true' : 'false'}
-                  aria-label={`${p.name}: ${paid ? 'paid' : 'not paid'}`}
+                  aria-label={isRecipient ? `${p.name}: paid, recipient` : `${p.name}: ${paid ? 'paid' : 'not paid'}`}
                   className={`min-h-11 min-w-24 rounded-xl text-sm font-semibold disabled:opacity-60 ${focus} ${paid ? 'bg-mint/15 text-mint' : 'border border-white/15 text-stone-300'}`}
                 >
-                  {paid ? '✓ Paid' : 'Not paid'}
+                  {isRecipient ? 'Recipient - no payment due' : paid ? '✓ Paid' : 'Not paid'}
                 </button>
               </li>
             )
@@ -174,7 +181,7 @@ export default function ScheduleView({ readOnly = false, openRound = null, onOpe
   }
 
   const current = getCurrentRound(rounds)
-  const potFor = r => inRound(r, participants).length * config.contribution
+  const potFor = r => roundPaymentStats(inRound(r, participants), r.payments, r.recipientSlot, config.contribution).pot
   const first = rounds[0]
   const last = rounds[rounds.length - 1]
 
@@ -191,7 +198,8 @@ export default function ScheduleView({ readOnly = false, openRound = null, onOpe
         {rounds.map(r => {
           const recipient = participants.find(p => p.slot === r.recipientSlot)
           const payers = inRound(r, participants)
-          const paid = payers.filter(p => r.payments[p.slot] === true).length
+          const roundStats = roundPaymentStats(payers, r.payments, r.recipientSlot, config.contribution)
+          const paid = roundStats.paid
           const isCurrent = !readOnly && r.round === current.round
           const isPast = r.round < current.round || readOnly
           const holiday = roundHoliday(r)

@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { LABELS } from '../data/labels'
 import { formatMoney } from '../utils/money'
+import { paymentStats } from '../utils/presentation'
 import MemberExperience from '../components/public/MemberExperience'
 import DashboardView from '../components/admin/DashboardView'
 import TabBar from '../components/ui/TabBar'
@@ -73,9 +74,13 @@ function MemberPreview() {
 function AdminPreview() {
   const t = LABELS.en
   const members = PEOPLE.map(([name, paid, phone], index) => ({
-    slot: index + 1, name, paid, phone,
+    slot: index + 1,
+    name,
+    phone,
+    isRecipient: index === 2,
+    paid: paid || index === 2,
   }))
-  const paid = members.filter(member => member.paid).length
+  const stats = paymentStats(members, 100)
   const queued = [
     ['Luis', '(555) 010-0103', false],
     ['Carmen', '(555) 010-0104', false],
@@ -97,10 +102,10 @@ function AdminPreview() {
           onToggleLang={() => {}}
           cycleName="Familia Demo"
           roundLabel={t.roundOf(3, members.length)}
-          collectedLabel={formatMoney(paid * 100)}
-          potLabel={formatMoney(members.length * 100)}
-          paid={paid}
-          total={members.length}
+          collectedLabel={formatMoney(stats.collected)}
+          potLabel={formatMoney(stats.pot)}
+          paid={stats.paid}
+          total={stats.total}
           payoutLine={t.payoutLine('Saturday', 'Luis')}
           countdownLabel="1d 14h"
           members={members}

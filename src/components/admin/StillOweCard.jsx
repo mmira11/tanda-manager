@@ -18,7 +18,8 @@ export default function StillOweCard({
   onSelect,
   onTogglePaid,
 }) {
-  const unpaid = members.filter(member => !member.paid)
+  // The recipient is settled automatically. They are not a person who still owes.
+  const unpaid = members.filter(member => !member.paid && member.slot !== recipientSlot)
 
   return (
     <section className="bg-panel rounded-3xl border border-white/10 px-4 pt-4 pb-2" aria-labelledby="owe-title">

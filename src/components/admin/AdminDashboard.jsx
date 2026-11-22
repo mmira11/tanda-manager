@@ -6,7 +6,7 @@ import { useStore } from '../../context/StoreContext'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
 import { getCurrentRound, getDayName, deadlineOnDate, getCountdownTo, dateLocale, inRound } from '../../utils/rounds'
-import { compactCountdown, paymentStats } from '../../utils/presentation'
+import { compactCountdown, roundPaymentStats } from '../../utils/presentation'
 import DashboardView from './DashboardView'
 import MembersView from './MembersView'
 import ScheduleView from './ScheduleView'
@@ -26,16 +26,17 @@ export default function AdminDashboard({ email, onNewCycle }) {
   const t = LABELS.en
   const current = getCurrentRound(store.rounds)
   const payers = inRound(current, store.participants)
-  const stats = paymentStats(
-    payers.map(person => current?.payments?.[person.slot] === true),
-    store.config.contribution,
-  )
-  const members = payers.map(person => ({
-    slot: person.slot,
-    name: person.name,
-    phone: person.phone,
-    paid: current?.payments?.[person.slot] === true,
-  }))
+  const stats = roundPaymentStats(payers, current?.payments, current?.recipientSlot, store.config.contribution)
+  const members = payers.map(person => {
+    const isRecipient = person.slot === current?.recipientSlot
+    return {
+      slot: person.slot,
+      name: person.name,
+      phone: person.phone,
+      paid: current?.payments?.[person.slot] === true || isRecipient,
+      isRecipient,
+    }
+  })
   const sheetMember = members.find(person => person.slot === sheetSlot) || null
   const recipient = store.participants.find(person => person.slot === current?.recipientSlot)
   const payoutDay = current ? getDayName(current.payoutDate, dateLocale(lang)) : ''

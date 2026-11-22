@@ -21,6 +21,22 @@ describe('payment progress', () => {
   it('rounds a partial percent', () => {
     expect(paymentStats([true, false, false], 40).percent).toBe(33)
   })
+
+  it('counts the recipient as paid and leaves their dollars out of the pot', () => {
+    const people = Array.from({ length: 10 }, (_, i) => ({
+      paid: i === 0 || i > 1,
+      isRecipient: i === 0,
+    }))
+    // Recipient was already marked paid. That $200 is not added again.
+    const stats = paymentStats(people, 200)
+    expect(stats).toMatchObject({ paid: 9, total: 10, collected: 1600, pot: 1800 })
+
+    const waivedOnly = people.map((person, i) => ({ ...person, paid: i !== 0 && person.paid }))
+    expect(paymentStats(waivedOnly, 200)).toMatchObject({ paid: 9, total: 10, collected: 1600, pot: 1800 })
+
+    const full = people.map(person => ({ ...person, paid: true }))
+    expect(paymentStats(full, 200)).toMatchObject({ paid: 10, total: 10, collected: 1800, pot: 1800 })
+  })
 })
 
 describe('round stepper states', () => {

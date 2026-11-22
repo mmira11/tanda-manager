@@ -4,7 +4,7 @@
 // shows the group nothing new.
 import { formatMoney } from '../../utils/money'
 import { formatDate } from '../../utils/rounds'
-import { avatarColor, initials, paymentStats } from '../../utils/presentation'
+import { avatarColor, countsAsPaid, initials, paymentStats } from '../../utils/presentation'
 
 function Avatar({ name }) {
   return (
@@ -24,7 +24,9 @@ export default function GroupView({ board, t, locale, rounds, isMine, complete =
   const stats = paymentStats(progress, board.cycle?.contribution)
   const mySlot = board.me?.slot
   // Paid people sink to the bottom so the list reads as "who's still pending".
-  const people = [...progress].sort((a, b) => (a.paid === b.paid ? a.slot - b.slot : a.paid ? 1 : -1))
+  const people = [...progress].sort((a, b) => (
+    countsAsPaid(a) === countsAsPaid(b) ? a.slot - b.slot : countsAsPaid(a) ? 1 : -1
+  ))
   const pct = stats.pot > 0 ? Math.round((stats.collected / stats.pot) * 100) : 0
 
   return (
@@ -70,14 +72,17 @@ export default function GroupView({ board, t, locale, rounds, isMine, complete =
                     <span className="ml-2 align-middle rounded-full bg-coral text-ink text-[11px] font-bold px-2 py-0.5">{t.youBadge}</span>
                   )}
                 </p>
-                {person.is_recipient && <p className="text-xs text-teal font-semibold">🎁 {t.groupReceivesThisRound}</p>}
+                {person.is_recipient && <p className="text-xs text-teal font-semibold">{t.recipientNoPay}</p>}
               </div>
+              {person.is_recipient && (
+                <span className="shrink-0 rounded-full bg-teal/10 px-2 py-1 text-[11px] font-bold text-teal">{t.recipientBadge}</span>
+              )}
               <span
                 className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
-                  person.paid ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  countsAsPaid(person) ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
                 }`}
               >
-                {person.paid ? `✓ ${t.paid}` : t.pending}
+                {countsAsPaid(person) ? `✓ ${t.paid}` : t.pending}
               </span>
             </li>
           ))}

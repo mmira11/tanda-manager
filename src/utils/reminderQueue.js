@@ -45,6 +45,8 @@ export function buildReminderView({
     .flatMap(row => {
       const person = participants.find(item => item.id === row.member_id)
       if (!person) return []
+      // A queued row for the recipient is not sent. Their contribution is waived.
+      if (storeRound?.recipientSlot != null && person.slot === storeRound.recipientSlot) return []
       return [{
         id: row.id,
         slot: person.slot,

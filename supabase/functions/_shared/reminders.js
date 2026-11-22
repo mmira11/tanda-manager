@@ -100,6 +100,11 @@ export function recipients({ window, round, members, payments, optedOut }) {
     if (member.removed_at) continue
     const row = rows.find(p => p.member_id === member.id)
     if (!row) continue
+    // The recipient's contribution is waived. Never text them, paid or not.
+    if ((round.recipient_member_id && member.id === round.recipient_member_id) || row.source === 'auto_recipient') {
+      skipped.push({ member, reason: 'recipient' })
+      continue
+    }
     if (window !== 'thursday_all' && row.paid_at) continue
     const to = toE164(member.phone)
     if (!to) skipped.push({ member, reason: 'no_phone' })

@@ -218,8 +218,19 @@ function assertAtomicImport(database) {
     name: 'Atomic Demo', dates: ['2098-01-02', '2098-01-03', '2098-01-16', '2098-01-17'], tokenPrefix: 'import-token',
   })
   const summary = JSON.parse(psqlText(database, callImport(good)).trim().split('\n').filter(Boolean).pop())
-  if (summary.members !== 2 || summary.rounds !== 2 || summary.payments !== 4 || summary.paid !== 3) {
+  if (summary.members !== 2 || summary.rounds !== 2 || summary.payments !== 4 || summary.paid !== 4) {
     throw new Error(`${database}: import summary was ${JSON.stringify(summary)}`)
+  }
+  const sources = psqlText(database, `
+    select string_agg(r.round_number || ':' || m.slot || ':' || coalesce(p.source, 'none'), ',' order by r.round_number, m.slot)
+    from public.payments p
+    join public.rounds r on r.id = p.round_id
+    join public.members m on m.id = p.member_id
+    join public.cycles c on c.id = r.cycle_id
+    where c.name = 'Atomic Demo';
+  `).trim()
+  if (sources !== '1:1:manual,1:2:manual,2:1:manual,2:2:auto_recipient') {
+    throw new Error(`${database}: recipient waiver rewrote an existing payment (${sources})`)
   }
   const status = psqlText(database, `select status from public.cycles where start_date = '2098-01-02';`).trim()
   if (status !== 'archived') throw new Error(`${database}: imported cycle status is ${status}`)
@@ -358,6 +369,9 @@ function assertSoftDeleteReorder(database) {
     where m.access_token = 'member-token-rosa02';
   `).trim()
   psqlText(database, `update public.members set removed_at = null where access_token = 'member-token-rosa02';`)
+  // Put the payout order back. Later checks use the original rounds, and the waiver follows the recipient.
+  psqlText(database, swap)
+  if (state() !== 'Maria:1:1,Rosa:2:2') throw new Error(`${database}: could not restore payout order: ${state()}`)
   console.log(`${database}: swap_payout_order is atomic; removed members leave progress, keep rows (${kept} payments)`)
 }
 
@@ -505,7 +519,7 @@ function assertNoAnonRealtime(database) {
 function assertReminderTables(database) {
   const insert = `
     insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status)
-    select r.cycle_id, r.id, r.recipient_member_id, 'friday_noon', r.collect_date, true, 'dry_run'
+    select r.cycle_id, r.id, (select id from public.members where cycle_id = r.cycle_id and slot = 2), 'friday_noon', r.collect_date, true, 'dry_run'
     from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
     on conflict (round_id, member_id, kind, dry_run) do nothing
     returning id;`
@@ -514,6 +528,12 @@ function assertReminderTables(database) {
   const first = ids(insert)
   const second = ids(insert)
   if (first !== 1 || second !== 0) throw new Error(`${database}: reminder_log dedupe failed (${first}, ${second})`)
+  const waived = ids(`
+    insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status)
+    select r.cycle_id, r.id, r.recipient_member_id, 'friday_evening', r.collect_date, true, 'dry_run'
+    from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
+    returning id;`)
+  if (waived !== 0) throw new Error(`${database}: a reminder was stored for the recipient (${waived})`)
 
   const badPhone = psqlFails(database, `insert into public.sms_opt_outs (phone_e164) values ('5550100002');`)
   if (!/check constraint/.test(badPhone)) throw new Error(`${database}: a non-E.164 opt-out was accepted: ${badPhone}`)
@@ -532,7 +552,7 @@ function assertReminderTables(database) {
 function assertReminderQueue(database) {
   const insert = `
     insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel)
-    select r.cycle_id, r.id, r.recipient_member_id, 'friday_evening', r.collect_date, false, 'queued', 'queue'
+    select r.cycle_id, r.id, (select id from public.members where cycle_id = r.cycle_id and slot = 2), 'friday_evening', r.collect_date, false, 'queued', 'queue'
     from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
     on conflict (round_id, member_id, kind, dry_run) do nothing
     returning id;`
@@ -554,13 +574,13 @@ function assertReminderQueue(database) {
 
   const badStatus = psqlFails(database, `
     insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel)
-    select r.cycle_id, r.id, r.recipient_member_id, 'thursday_all', r.collect_date, false, 'banana', 'queue'
+    select r.cycle_id, r.id, (select id from public.members where cycle_id = r.cycle_id and slot = 2), 'thursday_all', r.collect_date, false, 'banana', 'queue'
     from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1;
   `)
   if (!/check constraint/.test(badStatus)) throw new Error(`${database}: a bad reminder status was stored: ${badStatus}`)
   const badChannel = psqlFails(database, `
     insert into public.reminder_log (cycle_id, round_id, member_id, kind, local_date, dry_run, status, channel)
-    select r.cycle_id, r.id, r.recipient_member_id, 'thursday_all', r.collect_date, false, 'queued', 'sms'
+    select r.cycle_id, r.id, (select id from public.members where cycle_id = r.cycle_id and slot = 2), 'thursday_all', r.collect_date, false, 'queued', 'sms'
     from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1;
   `)
   if (!/check constraint/.test(badChannel)) throw new Error(`${database}: a bad reminder channel was stored: ${badChannel}`)
@@ -619,19 +639,25 @@ function assertReminderQueue(database) {
     select public.set_reminder_log_status('${id}'::uuid, 'sent');
     select public.enqueue_reminders((
       select jsonb_build_array(jsonb_build_object(
-        'cycle_id', r.cycle_id, 'round_id', r.id, 'member_id', r.recipient_member_id,
+        'cycle_id', r.cycle_id, 'round_id', r.id, 'member_id', (select id from public.members where cycle_id = r.cycle_id and slot = 2),
+        'kind', 'thursday_all', 'local_date', r.collect_date))
+      from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
+    ));
+    select public.enqueue_reminders((
+      select jsonb_build_array(jsonb_build_object(
+        'cycle_id', r.cycle_id, 'round_id', r.id, 'member_id', (select id from public.members where cycle_id = r.cycle_id and slot = 2),
         'kind', 'thursday_all', 'local_date', r.collect_date))
       from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
     ));
     select public.enqueue_reminders((
       select jsonb_build_array(jsonb_build_object(
         'cycle_id', r.cycle_id, 'round_id', r.id, 'member_id', r.recipient_member_id,
-        'kind', 'thursday_all', 'local_date', r.collect_date))
+        'kind', 'friday_noon', 'local_date', r.collect_date))
       from public.rounds r where r.cycle_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and r.round_number = 1
     ));
   `).trim().split('\n').filter(line => line.trim() !== '')
   const enqueued = marked.filter(line => /^\d+$/.test(line.trim())).map(line => line.trim())
-  if (enqueued.join(',') !== '1,0') throw new Error(`${database}: admin enqueue dedupe returned ${enqueued.join(',')}`)
+  if (enqueued.join(',') !== '1,0,0') throw new Error(`${database}: admin enqueue dedupe returned ${enqueued.join(',')}`)
   psqlText(database, `
     reset role;
     create or replace function auth.uid() returns uuid language sql stable as $$ select null::uuid $$;
@@ -660,6 +686,13 @@ function assertZelleConfirm(database) {
   `).trim()
   if (grants !== 'falsetrue,1') throw new Error(`${database}: confirm_zelle_match grants are ${grants}`)
 
+  const paymentSnap = () => psqlText(database, `
+    select coalesce(string_agg(coalesce(p.source, 'none') || ':' || coalesce(p.paid_at::text, 'unpaid'), ',' order by m.slot), '')
+    from public.payments p
+    join public.members m on m.id = p.member_id
+    where p.round_id = ${round1};
+  `).trim()
+  const beforeReview = paymentSnap()
   psqlText(database, `
     insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, received_at, sender_name, amount, raw_subject, suggested_member_id, match_reason)
     values ('eeeeeeee-0000-0000-0000-000000000001', '${cycle}', ${round1}, 'gmail-fake-001', '2099-06-01T19:00:00Z',
@@ -669,8 +702,7 @@ function assertZelleConfirm(database) {
     insert into public.pending_review (cycle_id, gmail_message_id, sender_name) values ('${cycle}', 'gmail-fake-001', 'Maria Demo');
   `, /pending_review_gmail_message_id/)
 
-  const paidBefore = psqlText(database, `select count(*) from public.payments where round_id = ${round1} and paid_at is not null;`).trim()
-  if (paidBefore !== '0') throw new Error(`${database}: queueing a review paid someone (${paidBefore})`)
+  if (paymentSnap() !== beforeReview) throw new Error(`${database}: queueing a review changed payments`)
 
   psqlText(database, `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000001', ${maria});`)
   const after = psqlText(database, `
@@ -679,7 +711,7 @@ function assertZelleConfirm(database) {
       || '|' || (select status from public.pending_review where id = 'eeeeeeee-0000-0000-0000-000000000001')
       || '|' || (select count(*) from public.payer_aliases where member_id = ${maria} and alias_name = 'Maria Demo');
   `).trim()
-  if (after !== 'auto@2099-06-01T19:00|matched|1') throw new Error(`${database}: confirm result was ${after}`)
+  if (!/^auto_recipient@\d{4}-\d{2}-\d{2}T\d{2}:\d{2}\|matched\|1$/.test(after)) throw new Error(`${database}: confirm result was ${after}`)
 
   mustFail('matching the same item twice', `select public.confirm_zelle_match('eeeeeeee-0000-0000-0000-000000000001', ${maria});`, /already handled/)
   psqlText(database, `
@@ -737,7 +769,7 @@ function assertZelleConfirm(database) {
       || '|' || (select source from public.payments where round_id = ${round2} and member_id = ${maria} and paid_at is not null)
       || '|' || (select count(*) from public.payments where round_id = ${round1} and member_id = ${maria} and source = 'auto');
   `).trim()
-  if (moved !== 'true|auto|1') throw new Error(`${database}: chosen round was not applied (${moved})`)
+  if (moved !== 'true|auto|0') throw new Error(`${database}: chosen round was not applied (${moved})`)
 
   psqlText(database, `
     insert into public.pending_review (id, cycle_id, round_id, gmail_message_id, sender_name, amount)
@@ -1010,8 +1042,27 @@ function assertBotKeys(database) {
       throw new Error(`${database}: bot member is missing a name, paid flag, or amount`)
     }
   }
+  const recipient = status.members.find(member => member.is_recipient)
+  const others = status.members.filter(member => !member.is_recipient)
+  const owed = others.reduce((sum, member) => sum + Number(member.amount), 0)
+  const collected = others.filter(member => member.paid).reduce((sum, member) => sum + Number(member.amount), 0)
+  if (!recipient || recipient.paid !== true || Number(recipient.amount) !== 0) {
+    throw new Error(`${database}: recipient should be settled with no amount: ${JSON.stringify(recipient)}`)
+  }
+  if (Number(status.round.pot) !== owed || Number(status.round.collected) !== collected) {
+    throw new Error(`${database}: pot/collected were ${status.round.pot}/${status.round.collected}, expected ${owed}/${collected}`)
+  }
+  if (Number(status.round.paid_count) !== status.members.filter(member => member.paid).length
+      || Number(status.round.member_count) !== status.members.length) {
+    throw new Error(`${database}: paid_count ${status.round.paid_count} of ${status.round.member_count}`)
+  }
   if (status.round.number == null) throw new Error(`${database}: bot_round_status is missing the round`)
-  const target = status.members.find(m => !m.paid) || status.members[0]
+  const target = status.members.find(m => !m.is_recipient)
+  if (!target) throw new Error(`${database}: bot mark test needs someone who is not receiving`)
+  const ignored = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${recipient.slot}, false);`)))
+  if (!ignored.members.find(m => m.slot === recipient.slot).paid) {
+    throw new Error(`${database}: bot_mark_paid cleared the recipient`)
+  }
   const marked = JSON.parse(last(psqlText(database, `set role anon; select public.bot_mark_paid('${key}', ${target.slot});`)))
   if (!marked.members.find(m => m.slot === target.slot).paid) throw new Error(`${database}: bot_mark_paid did not mark slot ${target.slot}`)
   const source = psqlText(database, `

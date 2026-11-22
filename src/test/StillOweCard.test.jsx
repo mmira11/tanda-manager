@@ -43,13 +43,13 @@ describe('still owe list (Today)', () => {
   it('lists only unpaid people, each with Nudge (valid phone only) and Mark paid', async () => {
     const user = userEvent.setup()
     const { onTogglePaid, onSelect } = renderCard()
-    expect(screen.getByRole('heading', { name: 'Still owe · 3' })).toBeTruthy()
-    const owe = screen.getByRole('list', { name: 'Still owe · 3' })
+    expect(screen.getByRole('heading', { name: 'Still owe · 2' })).toBeTruthy()
+    const owe = screen.getByRole('list', { name: 'Still owe · 2' })
     expect(within(owe).getAllByRole('listitem').map(li => li.textContent)).toEqual([
       'BEBeaNudgeMark paid',
       'CACalNo phone on fileMark paid',
-      'DEDeeReceives this roundMark paid',
     ])
+    expect(within(owe).queryByText('Dee')).toBeNull()
     await user.click(within(owe).getAllByRole('button', { name: 'Mark paid' })[0])
     expect(onTogglePaid).toHaveBeenCalledWith(members[1])
     await user.click(within(owe).getByRole('button', { name: 'Bea' }))
@@ -97,7 +97,7 @@ describe('Today', () => {
     expect(onTogglePayout).toHaveBeenCalled()
     const grid = screen.getByRole('list', { name: 'Who has paid this round' })
     expect(within(grid).queryByRole('link')).toBeNull()
-    const owe = screen.getByRole('heading', { name: 'Still owe · 3' })
+    const owe = screen.getByRole('heading', { name: 'Still owe · 2' })
     expect(grid.compareDocumentPosition(owe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByText(/Needs review/)).toBeNull()
     expect(screen.queryByRole('button', { name: /reminder list/i })).toBeNull()
@@ -183,7 +183,7 @@ describe('avatar row with nudges', () => {
       payoutLine="Payout Saturday → Dee" members={members} recipientSlot={4} recipientName="Dee" contribution={100}
       zelle="z" collectDate="2099-06-12" reviews={[]} readOnly={false} onSelectMember={() => {}} reminderItems={[]} />)
     const grid = screen.getByRole('list', { name: 'Who has paid this round' })
-    const owe = screen.getByRole('heading', { name: 'Still owe · 3' })
+    const owe = screen.getByRole('heading', { name: 'Still owe · 2' })
     expect(grid.compareDocumentPosition(owe) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })

@@ -74,11 +74,11 @@ describe('first run: create a cycle', () => {
     await user.type(screen.getByLabelText('Member 3 first name'), 'Cata')
     await user.click(screen.getByLabelText('Move member 3 up')) // Cata now pays out before Beto
 
-    expect(screen.getByText(/3 rounds · \$450 pot each round/)).toBeTruthy()
+    expect(screen.getByText(/3 rounds · \$300 pot each round/)).toBeTruthy()
     await user.click(screen.getByText('Create cycle'))
 
     expect(await screen.findByText('Round 1 of 3')).toBeTruthy()
-    expect(screen.getByText(/of \$450/)).toBeTruthy()
+    expect(screen.getByText(/of \$300/)).toBeTruthy()
 
     const [cycle] = fake.tables.cycles
     expect(cycle).toMatchObject({ name: 'Tanda 2027', start_date: '2027-01-08', interval_days: 7, contribution: 150, status: 'active' })
@@ -119,7 +119,7 @@ describe('paste a member list', () => {
     expect(screen.getByLabelText('Member 10 first name').value).toBe('Cata')
     expect(screen.queryByLabelText('Member 11 first name')).toBeNull()
     expect(screen.getAllByText('Check this number: it needs 10 digits.')).toHaveLength(1)
-    expect(screen.getByText(/10 rounds · \$1,000 pot each round/)).toBeTruthy()
+    expect(screen.getByText(/10 rounds · \$900 pot each round/)).toBeTruthy()
 
     await user.click(screen.getByText('Create cycle'))
     expect(await screen.findByText('Round 1 of 10')).toBeTruthy()

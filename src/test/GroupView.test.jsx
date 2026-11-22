@@ -29,14 +29,15 @@ describe('group tab', () => {
   it('shows everyone in this round, pending first, with the pot collected', async () => {
     await openGroup()
     expect(screen.getByText('Round 1 of 3')).toBeTruthy()
-    expect(screen.getByText('$200 of $300 collected')).toBeTruthy()
-    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('67')
+    expect(screen.getByText('$100 of $200 collected')).toBeTruthy()
+    expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('50')
 
     const list = screen.getByRole('list', { name: 'Who has paid this round' })
     const rows = within(list).getAllByRole('listitem').map(li => li.textContent)
     expect(rows[0]).toMatch(/^RORosaYouPending$/)
     expect(rows.slice(1).every(r => r.endsWith('✓ Paid'))).toBe(true)
-    expect(within(list).getByText(/Receives this round/)).toBeTruthy()
+    expect(within(list).getByText('Recipient - no payment due')).toBeTruthy()
+    expect(within(list).getByText('Recipient')).toBeTruthy()
   })
 
   it('lists the payout order and marks my turn', async () => {
@@ -49,7 +50,8 @@ describe('group tab', () => {
 
   it('is translated', async () => {
     await openGroup('es')
-    expect(screen.getByText('$200 de $300 reunidos')).toBeTruthy()
+    expect(screen.getByText('$100 de $200 reunidos')).toBeTruthy()
+    expect(screen.getByText('Recibe este turno - no paga')).toBeTruthy()
     expect(screen.getByText('Orden de pagos')).toBeTruthy()
   })
 })
@@ -65,6 +67,23 @@ describe('member home, action first', () => {
     expect(screen.getByText('2 of 3 paid')).toBeTruthy()
     await user.click(screen.getByRole('button', { name: 'See group' }))
     expect(screen.getByRole('heading', { name: 'Payout order' })).toBeTruthy()
+  })
+
+  it('the recipient is settled and is not asked to pay', () => {
+    const mine = {
+      ...board,
+      me: { ...board.me, slot: 1, display_first_name: 'Ana', paid_this_round: true },
+      current_round: { ...board.current_round, recipient_first_name: 'Ana' },
+      progress: board.progress.map(person => (
+        person.slot === 1 ? { ...person, paid: true, is_recipient: true } : { ...person, is_recipient: false }
+      )),
+    }
+    render(<MemberExperience board={mine} lang="en" onToggleLang={() => {}} preview />)
+    expect(screen.getByText('Recipient - no payment due')).toBeTruthy()
+    expect(screen.getByText(/\$200 · payout/)).toBeTruthy()
+    expect(screen.getByText('2 of 3 paid')).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: /due/ })).toBeNull()
+    expect(screen.queryByRole('heading', { name: "You're paid" })).toBeNull()
   })
 
   it('paid: confirms and shows the next payment instead of the pay button', () => {
