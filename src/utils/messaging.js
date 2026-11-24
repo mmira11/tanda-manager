@@ -1,4 +1,5 @@
 import { formatMoney } from './money'
+import { COLLECT_CUTOFF } from './rounds'
 
 function stripPhone(phone) {
   return phone.replace(/\D/g, '')
@@ -92,13 +93,13 @@ function timedReminderBody(name, orgPhone, type, amount) {
   const money = formatMoney(amount)
   if (type === '12pm') {
     return bilingual(
-      `Hi ${name}, friendly reminder that Tanda collection closes TODAY at 6 PM. Please send ${money} via Zelle to ${org} before the cutoff. Thank you! 🙏`,
-      `Hola ${name}, te recordamos que el cobro de la tanda cierra HOY a las 6 PM. Por favor envía ${money} por Zelle a ${org} antes de la hora. ¡Gracias! 🙏`,
+      `Hi ${name}, friendly reminder that Tanda collection closes TODAY at ${COLLECT_CUTOFF.short}. Please send ${money} via Zelle to ${org} before the cutoff. Thank you! 🙏`,
+      `Hola ${name}, te recordamos que el cobro de la tanda cierra HOY a las ${COLLECT_CUTOFF.short}. Por favor envía ${money} por Zelle a ${org} antes de la hora. ¡Gracias! 🙏`,
     )
   }
   return bilingual(
-    `Hi ${name}, last call — Tanda collection closes at 6 PM tonight. Please send ${money} via Zelle to ${org} now. Thank you! 🙏`,
-    `Hola ${name}, último aviso — el cobro de la tanda cierra hoy a las 6 PM. Por favor envía ${money} por Zelle a ${org} ahora. ¡Gracias! 🙏`,
+    `Hi ${name}, last call — Tanda collection closes at ${COLLECT_CUTOFF.short} tonight. Please send ${money} via Zelle to ${org} now. Thank you! 🙏`,
+    `Hola ${name}, último aviso — el cobro de la tanda cierra hoy a las ${COLLECT_CUTOFF.short}. Por favor envía ${money} por Zelle a ${org} ahora. ¡Gracias! 🙏`,
   )
 }
 

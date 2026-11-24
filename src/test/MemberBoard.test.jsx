@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, act, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import MemberBoard from '../components/public/MemberBoard'
 import MemberLinkNotice from '../components/public/MemberLinkNotice'
 import { supabase } from '../lib/supabase'

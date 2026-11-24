@@ -1,4 +1,6 @@
 // src/data/labels.js — public board strings, EN/ES
+import { COLLECT_CUTOFF } from '../utils/rounds'
+
 export const LABELS = {
   en: {
     recipient:     "This round's recipient",
@@ -71,7 +73,7 @@ export const LABELS = {
     yourPaymentRound: n => `Round ${n} · your payment`,
     amountDue:        amount => `${amount} due`,
     timeLeft:         text => `${text} left`,
-    closesAt:         date => `Closes ${date} at 6:00 PM`,
+    closesAt:         date => `Closes ${date} at ${COLLECT_CUTOFF.long}`,
     copyZellePay:     'Copy Zelle and pay',
     alreadySent:      'Already sent it? It turns green once the organizer confirms.',
     youArePaid:       "You're paid",
@@ -247,7 +249,7 @@ export const LABELS = {
     yourPaymentRound: n => `Ronda ${n} · tu pago`,
     amountDue:        amount => `Debes ${amount}`,
     timeLeft:         text => `Faltan ${text}`,
-    closesAt:         date => `Cierra el ${date} a las 6:00 PM`,
+    closesAt:         date => `Cierra el ${date} a las ${COLLECT_CUTOFF.long}`,
     copyZellePay:     'Copiar Zelle y pagar',
     alreadySent:      '¿Ya lo enviaste? Se pone verde cuando el organizador lo confirme.',
     youArePaid:       '¡Ya pagaste!',

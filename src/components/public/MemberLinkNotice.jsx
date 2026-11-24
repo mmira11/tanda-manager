@@ -1,6 +1,6 @@
 // Landing page. The old public roster lived here; members now open /m/:token.
 import { useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router'
 import { LABELS } from '../../data/labels'
 import { savedMemberToken } from '../../utils/memberLink'
 

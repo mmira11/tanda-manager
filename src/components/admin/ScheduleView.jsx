@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../../context/StoreContext'
 import { useLang } from '../../context/LangContext'
+import { COLLECT_CUTOFF } from '../../utils/rounds'
 import { LABELS } from '../../data/labels'
 import { formatMoney } from '../../utils/money'
 import { roundPaymentStats } from '../../utils/presentation'
@@ -80,7 +81,7 @@ function RoundDetail({ roundNum, readOnly, onBack }) {
       <section className="bg-panel rounded-2xl border border-white/10 p-4 space-y-3" aria-label="Dates">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="collect-date" className="block text-xs font-semibold text-stone-400 mb-1">Collect by 6 PM</label>
+            <label htmlFor="collect-date" className="block text-xs font-semibold text-stone-400 mb-1">Collect by {COLLECT_CUTOFF.short}</label>
             <input id="collect-date" type="date" className={field} value={collect} disabled={readOnly}
               onChange={e => { setCollect(e.target.value); setSaved('') }} />
           </div>

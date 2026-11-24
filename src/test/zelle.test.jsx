@@ -1,7 +1,6 @@
 // Phase 5 Zelle detection. Every email, sender, and amount here is made up.
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen, renderHook, waitFor, act } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { renderHook, waitFor, act } from '@testing-library/react'
 import {
   parseZelleEmail, normalizeName, matchMember, assignRound, scanEmails, verifySender, senderDomain, googleAuthResults,
   gmailSearchRange, gmailQuery, pickCycle,
@@ -51,7 +50,6 @@ describe('verifySender (anyone can send "Ana sent you $150")', () => {
       .toMatchObject({ ok: false, reason: 'not_authenticated' })
   })
 })
-import { LABELS } from '../data/labels'
 import { installFakeSupabase, seedCycle } from './fakeSupabase'
 import { useCycleStore } from '../hooks/useCycleStore'
 
@@ -254,13 +252,6 @@ describe('scanEmails', () => {
 })
 
 describe('confirmMatch and dismissReview in the store', () => {
-  const t = LABELS.en
-  const participants = [{ id: 'm1', slot: 1, name: 'Ana' }, { id: 'm2', slot: 2, name: 'Beto' }]
-  const rounds = [{ id: 'r1', round: 1 }, { id: 'r2', round: 2 }]
-  const item = {
-    id: 'rv1', sender_name: 'Ana Prueba', amount: 150, suggested_member_id: 'm1', round_id: 'r1',
-    round_timing: 'late', received_at: '2026-06-13T06:30:00.000Z',
-  }
 
   it('confirmMatch marks only that member paid, closes the review, and saves the alias', async () => {
     const db = seedCycle({ names: ['Ana', 'Beto'], contribution: 150 })

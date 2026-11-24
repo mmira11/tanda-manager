@@ -9,6 +9,10 @@
 // still have time to send. pg_cron runs at :00 and :30 UTC; this check matches the local
 // hour and minute, so daylight saving needs no special handling.
 
+// Collection closes at this local time on the collect date. Keep it equal to
+// COLLECT_CUTOFF in src/utils/rounds.js and public.collect_cutoff() in SQL.
+export const COLLECT_CUTOFF = { hour: 18, minute: 0, short: '6 PM', long: '6:00 PM' }
+
 export const WINDOWS = ['thursday_all', 'friday_noon', 'friday_evening']
 
 export const DEFAULT_SETTINGS = {
@@ -26,12 +30,12 @@ export const DEFAULT_TEMPLATES = {
     es: 'Hola {{firstName}}, te recordamos que el cobro de la tanda es mañana. Por favor envía {{amount}} {{toZelleEs}} por Zelle. ¡Gracias!',
   },
   friday_noon: {
-    en: 'Hi {{firstName}}, friendly reminder that Tanda collection is today and closes at 6 PM. Please send {{amount}} to {{zelle}} via Zelle. Thank you!',
-    es: 'Hola {{firstName}}, te recordamos que el cobro de la tanda es hoy y cierra a las 6 PM. Por favor envía {{amount}} {{toZelleEs}} por Zelle. ¡Gracias!',
+    en: `Hi {{firstName}}, friendly reminder that Tanda collection is today and closes at ${COLLECT_CUTOFF.short}. Please send {{amount}} to {{zelle}} via Zelle. Thank you!`,
+    es: `Hola {{firstName}}, te recordamos que el cobro de la tanda es hoy y cierra a las ${COLLECT_CUTOFF.short}. Por favor envía {{amount}} {{toZelleEs}} por Zelle. ¡Gracias!`,
   },
   friday_evening: {
-    en: 'Hi {{firstName}}, last friendly reminder that Tanda collection closes at 6 PM today. Please send {{amount}} to {{zelle}} via Zelle as soon as you can. Thank you!',
-    es: 'Hola {{firstName}}, último recordatorio: el cobro de la tanda cierra hoy a las 6 PM. Por favor envía {{amount}} {{toZelleEs}} por Zelle lo antes posible. ¡Gracias!',
+    en: `Hi {{firstName}}, last friendly reminder that Tanda collection closes at ${COLLECT_CUTOFF.short} today. Please send {{amount}} to {{zelle}} via Zelle as soon as you can. Thank you!`,
+    es: `Hola {{firstName}}, último recordatorio: el cobro de la tanda cierra hoy a las ${COLLECT_CUTOFF.short}. Por favor envía {{amount}} {{toZelleEs}} por Zelle lo antes posible. ¡Gracias!`,
   },
 }
 

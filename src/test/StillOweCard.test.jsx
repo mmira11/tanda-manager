@@ -9,11 +9,7 @@ import TabBar from '../components/ui/TabBar'
 import { buildReminderView } from '../utils/reminderQueue'
 
 const t = LABELS.en
-const message = name => `Hi ${name}, send $100 to org@example.com.\n\nHola ${name}, envía $100 a org@example.com.`
 
-const bea = { id: 'row-bea', slot: 2, name: 'Bea', phone: '(555) 010-0002', paid: false, message: message('Bea') }
-const cal = { id: 'row-cal', slot: 3, name: 'Cal', phone: '12345', paid: false, message: message('Cal') }
-const ada = { id: 'row-ada', slot: 1, name: 'Ada', phone: '(555) 010-0001', paid: true, message: message('Ada') }
 
 const members = [
   { slot: 1, name: 'Ada', paid: true, phone: '(555) 010-0001' },

@@ -1,16 +1,22 @@
 import { lazy, Suspense } from 'react'
-import { Routes, Route } from 'react-router-dom'
-import AdminGate from './components/admin/AdminGate'
+import { Routes, Route } from 'react-router'
 import MemberBoard from './components/public/MemberBoard'
 import MemberLinkNotice from './components/public/MemberLinkNotice'
 
+// Members are most visitors. The organizer app loads only on /admin, so their phones
+// never download it.
+const AdminGate = lazy(() => import('./components/admin/AdminGate'))
 const Preview = import.meta.env.DEV ? lazy(() => import('./preview/MockGallery')) : null
+
+function Loading() {
+  return <div className="min-h-screen bg-cream" aria-busy="true" />
+}
 
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<MemberLinkNotice />} />
-      <Route path="/admin" element={<AdminGate />} />
+      <Route path="/admin" element={<Suspense fallback={<Loading />}><AdminGate /></Suspense>} />
       <Route path="/m/:token" element={<MemberBoard />} />
       {Preview && (
         <Route
