@@ -6,9 +6,11 @@ export default function PaymentSheet({ member, t, readOnly, onClose, onToggle })
   const dialogRef = useRef(null)
   const closeRef = useRef(onClose)
   closeRef.current = onClose
+  // The focus trap resets when a different member's sheet opens, not on every save.
+  const openSlot = member?.slot
 
   useEffect(() => {
-    if (!member) return undefined
+    if (openSlot == null) return undefined
     const node = dialogRef.current
     if (!node) return undefined
     const previous = document.activeElement
@@ -44,7 +46,7 @@ export default function PaymentSheet({ member, t, readOnly, onClose, onToggle })
       document.removeEventListener('keydown', onKey)
       if (previous instanceof HTMLElement) previous.focus()
     }
-  }, [member?.slot])
+  }, [openSlot])
 
   if (!member) return null
   const recipient = member.isRecipient === true

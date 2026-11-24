@@ -49,6 +49,11 @@ export function getDayName(iso, locale = 'en-US') {
 
 export const DEFAULT_TIME_ZONE = 'America/Los_Angeles'
 
+// When collection closes on a round's collect date, in the cycle's time zone.
+// The same cutoff lives in SQL (public.collect_cutoff(), migration 021) and in
+// supabase/functions/_shared/reminders.js; a test keeps the JS copies equal.
+export const COLLECT_CUTOFF = { hour: 18, minute: 0, short: '6 PM', long: '6:00 PM' }
+
 // Wall-clock time on a calendar date in an IANA zone, as a UTC instant.
 // Two passes so a DST gap or overlap does not leave the offset one hour off.
 export function zonedWallTime(isoDate, hour, minute, second, timeZone = DEFAULT_TIME_ZONE) {
@@ -78,14 +83,14 @@ export function zonedWallTime(isoDate, hour, minute, second, timeZone = DEFAULT_
 }
 
 export function deadlineOnDate(isoDate, timeZone = DEFAULT_TIME_ZONE) {
-  return zonedWallTime(isoDate, 18, 0, 0, timeZone)
+  return zonedWallTime(isoDate, COLLECT_CUTOFF.hour, COLLECT_CUTOFF.minute, 0, timeZone)
 }
 
 export function formatCollectionCountdown(time) {
-  if (time.done) return 'Closed at 6:00 PM'
+  if (time.done) return `Closed at ${COLLECT_CUTOFF.long}`
   const clock = `${time.hours}h ${time.minutes}m`
   const span = time.days > 0 ? `${time.days}d ${clock}` : clock
-  return `Closes in ${span} · 6:00 PM`
+  return `Closes in ${span} · ${COLLECT_CUTOFF.long}`
 }
 
 export function getCountdownTo(deadline, now = new Date()) {

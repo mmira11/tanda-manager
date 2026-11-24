@@ -317,6 +317,32 @@ $$;
 -- Returns only: their status, their payout date, current/last round, first names
 -- and paid/unpaid for group progress. No phones, no tokens, no aliases, no notes
 -- unless you later choose to add a safe public note field.
+-- The collection cutoff lives here and nowhere else in SQL. Change it in one place
+-- (and COLLECT_CUTOFF in src/utils/rounds.js + supabase/functions/_shared/reminders.js).
+create or replace function public.collect_cutoff()
+returns time
+language sql
+immutable
+set search_path = public
+as $$
+  select time '18:00';
+$$;
+
+-- The moment collection closes for a round, in the cycle's time zone.
+create or replace function public.collect_deadline(p_collect_date date, p_zone text)
+returns timestamptz
+language sql
+stable
+set search_path = public
+as $$
+  select (p_collect_date + public.collect_cutoff()) at time zone p_zone;
+$$;
+
+revoke all on function public.collect_cutoff() from public;
+revoke all on function public.collect_deadline(date, text) from public;
+grant execute on function public.collect_cutoff() to anon, authenticated;
+grant execute on function public.collect_deadline(date, text) to anon, authenticated;
+
 create or replace function public.get_member_board(p_token text)
 returns jsonb
 language plpgsql
@@ -367,7 +393,7 @@ begin
   end if;
 
   if v_round.id is not null then
-    v_deadline := (v_round.collect_date + time '18:00') at time zone v_zone;
+    v_deadline := public.collect_deadline(v_round.collect_date, v_zone);
   end if;
 
   return jsonb_build_object(
@@ -721,7 +747,7 @@ begin
       'number', v_round.round_number,
       'collect_date', v_round.collect_date,
       'payout_date', v_round.payout_date,
-      'collect_deadline', (v_round.collect_date + time '18:00') at time zone v_zone,
+      'collect_deadline', public.collect_deadline(v_round.collect_date, v_zone),
       'payout_sent', v_round.payout_sent,
       'recipient_first_name', (
         select m.display_first_name from public.members m

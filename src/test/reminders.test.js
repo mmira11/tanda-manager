@@ -3,8 +3,18 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   localClock, dueWindow, activeReminderWindow, recipients, renderMessage, isDryRun, optOutAction, toE164,
   twilioSignature, verifyTwilioSignature, runReminders, timingSafeEqual,
-  resolveChannel, reminderAction, dispatchReminder, planReminderQueue,
+  resolveChannel, reminderAction, dispatchReminder, planReminderQueue, COLLECT_CUTOFF as EDGE_CUTOFF,
+  DEFAULT_TEMPLATES,
 } from '../../supabase/functions/_shared/reminders.js'
+import { COLLECT_CUTOFF } from '../utils/rounds'
+
+describe('collection cutoff', () => {
+  it('is the same in the app and the edge functions, and fills the reminder text', () => {
+    expect(EDGE_CUTOFF).toEqual(COLLECT_CUTOFF)
+    expect(DEFAULT_TEMPLATES.friday_noon.en).toContain(`closes at ${COLLECT_CUTOFF.short}.`)
+    expect(DEFAULT_TEMPLATES.friday_evening.es).toContain(`a las ${COLLECT_CUTOFF.short}.`)
+  })
+})
 
 describe('timingSafeEqual (cron secret and Twilio signature)', () => {
   it('matches only identical strings, including different lengths and empties', () => {

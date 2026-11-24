@@ -112,6 +112,13 @@ function assertArchiveLock(database) {
   if (!deadline.includes('collect_deadline') || !deadline.includes('v_cycle.timezone')) {
     throw new Error(`${database}: get_member_board is missing the cycle-timezone deadline`)
   }
+  const cutoff = psqlText(database, `
+    select to_char(public.collect_deadline(date '2099-06-05', 'America/Los_Angeles') at time zone 'UTC',
+                   'YYYY-MM-DD HH24:MI');
+  `).trim()
+  if (cutoff !== '2099-06-06 01:00') {
+    throw new Error(`${database}: collect_deadline should be 6 PM Pacific (01:00 UTC next day), got ${cutoff}`)
+  }
   if (!deadline.includes('zelle_destination')) {
     throw new Error(`${database}: get_member_board is missing the organizer Zelle destination`)
   }
@@ -1029,7 +1036,7 @@ function recipientWaiverCatalog(database) {
       join pg_namespace n on n.oid = p.pronamespace
       where n.nspname = 'public' and p.proname in (
         'settle_recipient_payment', 'resettle_round_recipient', 'skip_recipient_reminder',
-        'get_member_board', 'enqueue_reminders', 'bot_round_status', 'bot_mark_paid',
+        'get_member_board', 'collect_cutoff', 'collect_deadline', 'enqueue_reminders', 'bot_round_status', 'bot_mark_paid',
         'confirm_zelle_match'
       )
     ) s
