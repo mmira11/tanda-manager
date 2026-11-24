@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { useParams } from 'react-router'
 import { LABELS } from '../data/labels'
 import { formatMoney } from '../utils/money'
 import { paymentStats } from '../utils/presentation'

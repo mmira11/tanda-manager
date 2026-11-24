@@ -43,7 +43,7 @@ A few decisions mattered more than they might look:
 
 ## Tech stack
 
-React 18 · Vite 7 · React Router v6 (v7 flags on) · Tailwind CSS · Supabase (Postgres, Auth, RLS) · Vitest 4 + React Testing Library · ESLint 10 · vite-plugin-pwa · gh-pages
+React 18 · Vite 7 · React Router 7 · Tailwind CSS · Supabase (Postgres, Auth, RLS) · Vitest 4 + React Testing Library · ESLint 10 · vite-plugin-pwa · gh-pages
 
 ## What's next
 

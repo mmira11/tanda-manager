@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, act, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router'
 import MemberBoard from '../components/public/MemberBoard'
 import MemberLinkNotice from '../components/public/MemberLinkNotice'
-import { ROUTER_FUTURE } from '../App'
 import { supabase } from '../lib/supabase'
 import { LABELS } from '../data/labels'
 
@@ -49,7 +48,7 @@ function board({ paid = false, status = 'active' } = {}) {
 
 function renderBoard(token = TOKEN) {
   return render(
-    <MemoryRouter future={ROUTER_FUTURE} initialEntries={[`/m/${token}`]}>
+    <MemoryRouter initialEntries={[`/m/${token}`]}>
       <Routes>
         <Route path="/m/:token" element={<MemberBoard />} />
       </Routes>
@@ -60,7 +59,7 @@ function renderBoard(token = TOKEN) {
 describe('home-screen icon opens the member board', () => {
   function renderApp(path) {
     return render(
-      <MemoryRouter future={ROUTER_FUTURE} initialEntries={[path]}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/" element={<MemberLinkNotice />} />
           <Route path="/m/:token" element={<MemberBoard />} />
@@ -234,7 +233,7 @@ describe('member board', () => {
 describe('landing page', () => {
   it('points members at their texted link and organizers at sign in', () => {
     render(
-      <MemoryRouter future={ROUTER_FUTURE} basename="/tanda-manager" initialEntries={['/tanda-manager/']}>
+      <MemoryRouter basename="/tanda-manager" initialEntries={['/tanda-manager/']}>
         <MemberLinkNotice />
       </MemoryRouter>,
     )
@@ -288,7 +287,7 @@ describe('member page highlights', () => {
     supabase.rpc.mockResolvedValue({ data: board({ paid: true }), error: null })
     const user = userEvent.setup()
     render(
-      <MemoryRouter future={ROUTER_FUTURE} initialEntries={[`/m/${TOKEN}?preview=1`]}>
+      <MemoryRouter initialEntries={[`/m/${TOKEN}?preview=1`]}>
         <Routes>
           <Route path="/m/:token" element={<MemberBoard />} />
         </Routes>
