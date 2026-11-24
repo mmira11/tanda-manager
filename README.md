@@ -43,7 +43,7 @@ A few decisions mattered more than they might look:
 
 ## Tech stack
 
-React 18 · Vite 5 · React Router v6 · Tailwind CSS · Supabase (Postgres, Auth, RLS) · Vitest + React Testing Library · vite-plugin-pwa · gh-pages
+React 18 · Vite 7 · React Router v6 (v7 flags on) · Tailwind CSS · Supabase (Postgres, Auth, RLS) · Vitest 4 + React Testing Library · ESLint 10 · vite-plugin-pwa · gh-pages
 
 ## What's next
 
@@ -51,7 +51,7 @@ Nudges on the dashboard still open the phone's SMS app. The reminder queue below
 
 ## Supabase setup
 
-1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `019`). Each migration is safe to run more than once.
+1. **Create a Supabase project.** In the SQL editor, run `supabase/schema.sql`, then each file in `supabase/migrations/` in order (`002` → `021`). Each migration is safe to run more than once.
    - `013` — reminder log and SMS opt-outs
    - `014` — Zelle `pending_review` rows and `confirm_zelle_match`
    - `015` — the round the admin picked, an optional dismiss reason, and `round_timing` (`early`, `on_time`, `after_deadline`, `late`)
@@ -59,8 +59,10 @@ Nudges on the dashboard still open the phone's SMS app. The reminder queue below
    - `017` — reminder queue (`channel`, `queued` / `skipped`, admin RPCs). Queue mode needs this.
    - `018` — when a member link was sent, and one narrow bot key
    - `019` — bot status drops phone numbers; `bot_mark_paid` takes an optional `paid_at` and records `source = 'bot'`. The last-call reminder default moves to 4:30 PM Pacific.
+   - `020` — the round's recipient doesn't pay in. Their payment row is settled automatically (`source = 'auto_recipient'`) and left out of the pot, reminders skip them, and the waiver moves if the recipient changes. Draft and active cycles are backfilled; archived cycles are left as stored.
+   - `021` — the 6 PM collection cutoff lives in one SQL function, `collect_cutoff()`. `get_member_board` and `bot_round_status` read it through `collect_deadline()`. No visible change.
 
-Apply `014`, then `015`, then `016`, then `017`, then `018`, then `019`. `015` replaces the two-argument `confirm_zelle_match` from `014`. `016` replaces it again. If `014` through `018` are already applied, run `019` next. Run `019` in the SQL editor before relying on the bot status payload.
+Apply `014` through `021` in order. `015` replaces the two-argument `confirm_zelle_match` from `014`, and `016` and `020` replace it again. If `014` through `019` are already applied, run `020`, then `021`. Run `019` before relying on the bot status payload, and `020` before relying on the recipient waiver.
 2. **Turn on email sign-in.** Under Authentication → Providers, enable Email. The app sends magic links only and won't create new users (`shouldCreateUser: false`), so create your own user under Authentication → Users.
 3. **Allow the redirect URLs.** Under Authentication → URL Configuration, add every address you'll sign in from, including the `/tanda-manager/` base path:
    - `http://localhost:5173/tanda-manager/admin`
@@ -165,10 +167,13 @@ Schedule it by running `supabase/cron/schedule_scan_zelle_email.sql` in the SQL 
 
 ## Running it locally
 
+**The collection cutoff (6 PM)** is set in three places that have to agree: `public.collect_cutoff()` in SQL (migration `021`), `COLLECT_CUTOFF` in `src/utils/rounds.js`, and `COLLECT_CUTOFF` in `supabase/functions/_shared/reminders.js`. A test fails if the two JavaScript copies differ. Reminder templates already saved in `reminder_templates` keep their own wording.
+
 ```bash
 npm install
 npm run dev        # localhost:5173/tanda-manager/
 npm test           # Vitest suite (uses a mocked Supabase client)
+npm run lint       # ESLint
 npm run test:sql   # schema + migrations against a local Postgres (needs psql)
 npm run deploy     # build + publish dist/ to gh-pages
 ```

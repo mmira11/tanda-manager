@@ -12,6 +12,9 @@ export default defineConfig({
       workbox: {
         // Default patterns skip fonts. Latin woff2 only, so the precache stays small.
         globPatterns: ['**/*.{js,css,html,woff2}'],
+        // The organizer app needs the network anyway. Leaving it out keeps members'
+        // phones from downloading it in the background.
+        globIgnores: ['**/AdminGate-*.js'],
       },
       manifest: {
         name: 'Tanda Manager',
@@ -30,9 +33,24 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        // Libraries change less often than the app. Separate files stay cached across deploys.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (id.includes('@supabase')) return 'supabase'
+          if (/[\\/]node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'react'
+          return undefined
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
     globals: true,
+    // Vitest 4 runs with base '/'. Keep BASE_URL the same as the deployed site.
+    env: { BASE_URL: '/tanda-manager/' },
   },
 })
